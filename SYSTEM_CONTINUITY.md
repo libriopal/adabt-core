@@ -28,7 +28,10 @@ Seed
 Backend endpoints:
 
 - `GET /api/replay/verify`: verifies deterministic demand and reinforcement replay.
+- `GET /api/replay/verify?persist=false`: verifies replay without appending recovery events.
 - `GET /api/replay/history`: returns replay events, replay checkpoints, and stored-history verification.
+- `GET /api/replay/monitor`: returns replay-history degradation status and alerts.
+- `GET /api/replay/checkpoints/diff`: returns server-side checkpoint comparisons.
 - `GET /api/continuity/export`: exports replay-checkpoint-anchored continuity state for recovery.
 - `GET /api/diagnostics`: returns runtime, replay, database, continuity, demand, and reinforcement diagnostics.
 - `GET /api/continuity/status`: returns websocket clients, interrupted run IDs, and recent continuity events.
@@ -56,6 +59,8 @@ Backend continuity is preserved through:
 - reinforcement replay checksums
 - replay event history and replay checkpoints
 - continuity exports anchored to replay checkpoints
+- recovery-mode replay verification without persistence
+- server-side checkpoint diffs and replay monitor alerts
 - demand cache records
 - structured request IDs
 

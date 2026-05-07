@@ -4,6 +4,8 @@ import {
   ContinuityExportBundle,
   EventLogEntry,
   ReplayCheckpoint,
+  ReplayCheckpointDiff,
+  ReplayHistoryMonitorReport,
   ReplayHistoryResult,
 } from '../lib/types';
 
@@ -15,13 +17,25 @@ export const ReplayOperationsPanel: React.FC = () => {
   const [history, setHistory] = useState<ReplayHistoryResult | null>(null);
   const [baseId, setBaseId] = useState('');
   const [targetId, setTargetId] = useState('');
+  const [serverDiff, setServerDiff] = useState<ReplayCheckpointDiff | null>(null);
+  const [monitor, setMonitor] = useState<ReplayHistoryMonitorReport | null>(null);
   const [continuityExport, setContinuityExport] = useState<ContinuityExportBundle | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { getReplayHistory, getContinuityExport, runReplayVerify, loading } = useBackend({ onError: setError });
+  const {
+    getReplayHistory,
+    getReplayMonitor,
+    getReplayCheckpointDiff,
+    getContinuityExport,
+    runReplayVerify,
+    loading,
+  } = useBackend({ onError: setError });
 
   const loadHistory = async () => {
     setError(null);
-    const data = await getReplayHistory({ stream, limit }) as any;
+    const [data, monitorData] = await Promise.all([
+      getReplayHistory({ stream, limit }) as any,
+      getReplayMonitor({ stream }) as any,
+    ]);
     if (data?.history) {
       const nextHistory = data.history as ReplayHistoryResult;
       setHistory(nextHistory);
@@ -36,6 +50,7 @@ export const ReplayOperationsPanel: React.FC = () => {
           : nextHistory.checkpoints[0]?.id || ''
       ));
     }
+    if (monitorData?.monitor) setMonitor(monitorData.monitor);
   };
 
   useEffect(() => {
@@ -51,8 +66,21 @@ export const ReplayOperationsPanel: React.FC = () => {
 
   const handleRunReplay = async () => {
     setError(null);
+    await runReplayVerify({ persist: false });
+    await loadHistory();
+  };
+
+  const handleAppendReplay = async () => {
+    setError(null);
     await runReplayVerify();
     await loadHistory();
+  };
+
+  const handleCompare = async () => {
+    if (!baseId || !targetId) return;
+    setError(null);
+    const data = await getReplayCheckpointDiff({ stream, baseId, targetId }) as any;
+    if (data?.diff) setServerDiff(data.diff);
   };
 
   const handleExport = async () => {
@@ -62,19 +90,32 @@ export const ReplayOperationsPanel: React.FC = () => {
     if (data?.export) setContinuityExport(data.export);
   };
 
+  const handleDownload = () => {
+    if (!continuityExport) return;
+    const blob = new Blob([JSON.stringify(continuityExport, null, 2)], { type: 'application/json' });
+    const href = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = href;
+    anchor.download = `${continuityExport.stream}-${continuityExport.anchor?.id || 'latest'}-continuity.json`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(href);
+  };
+
   return (
     <div style={{ background: '#12172B', borderRadius: 8, padding: 24, border: '1px solid #1E293B', marginBottom: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', marginBottom: 18 }}>
         <div>
-          <h2 style={{ color: '#94A3B8', fontSize: 14, marginTop: 0, marginBottom: 6 }}>Phase 4 Replay Operations</h2>
+          <h2 style={{ color: '#94A3B8', fontSize: 14, marginTop: 0, marginBottom: 6 }}>Phase 5 Replay Recovery</h2>
           <div style={{ color: '#64748B', fontSize: 12 }}>
-            Replay history filters, checkpoint comparison, and continuity export anchors.
+            Recovery-mode replay, server checkpoint diffs, export downloads, and degradation monitoring.
           </div>
         </div>
-        <StatusBadge stable={history?.verification.stable} />
+        <StatusBadge stable={monitor ? monitor.status === 'ready' : history?.verification.stable} />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10, marginBottom: 18 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(118px, 1fr))', gap: 10, marginBottom: 18 }}>
         <input
           value={stream}
           onChange={event => setStream(event.target.value)}
@@ -93,10 +134,16 @@ export const ReplayOperationsPanel: React.FC = () => {
           Filter
         </button>
         <button onClick={handleRunReplay} disabled={loading} style={buttonStyle('#10B981', loading)}>
-          Run Replay
+          Recovery Verify
+        </button>
+        <button onClick={handleAppendReplay} disabled={loading} style={buttonStyle('#6366F1', loading)}>
+          Append Replay
         </button>
         <button onClick={handleExport} disabled={loading || !history?.checkpoints.length} style={buttonStyle('#F59E0B', loading || !history?.checkpoints.length)}>
           Export Anchor
+        </button>
+        <button onClick={handleDownload} disabled={!continuityExport} style={buttonStyle('#E2E8F0', !continuityExport)}>
+          Download
         </button>
       </div>
 
@@ -110,7 +157,7 @@ export const ReplayOperationsPanel: React.FC = () => {
         <Metric label="Events" value={String(history?.verification.eventCount ?? '-')} color="#22D3EE" />
         <Metric label="Checkpoints" value={String(history?.verification.checkpointCount ?? '-')} color="#6366F1" />
         <Metric label="Latest" value={history?.verification.latestChecksum || '-'} color="#10B981" />
-        <Metric label="Export" value={continuityExport?.exportChecksum || '-'} color="#F59E0B" />
+        <Metric label="Monitor" value={monitor?.status || '-'} color={monitor?.status === 'degraded' ? '#F59E0B' : '#10B981'} />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 0.9fr', gap: 12 }}>
@@ -132,12 +179,16 @@ export const ReplayOperationsPanel: React.FC = () => {
             <CheckpointSelect label="Base" value={baseId} onChange={setBaseId} checkpoints={history?.checkpoints || []} />
             <CheckpointSelect label="Target" value={targetId} onChange={setTargetId} checkpoints={history?.checkpoints || []} />
           </div>
+          <button onClick={handleCompare} disabled={loading || !baseId || !targetId} style={{ ...buttonStyle('#22D3EE', loading || !baseId || !targetId), width: '100%', marginBottom: 12 }}>
+            Server Diff
+          </button>
           {comparison ? (
             <div style={{ display: 'grid', gap: 8 }}>
-              <Line label="Events" value={`${comparison.eventDelta >= 0 ? '+' : ''}${comparison.eventDelta}`} />
-              <Line label="Checksum" value={comparison.sameChecksum ? 'unchanged' : 'changed'} />
-              <Line label="State" value={comparison.stateStable ? 'stable' : 'degraded'} />
+              <Line label="Events" value={`${(serverDiff?.eventDelta ?? comparison.eventDelta) >= 0 ? '+' : ''}${serverDiff?.eventDelta ?? comparison.eventDelta}`} />
+              <Line label="Checksum" value={(serverDiff?.checksumChanged ?? !comparison.sameChecksum) ? 'changed' : 'unchanged'} />
+              <Line label="State" value={(serverDiff?.stateStable ?? comparison.stateStable) ? 'stable' : 'degraded'} />
               <Line label="Anchor" value={target?.id || '-'} />
+              <Line label="Degraded" value={serverDiff?.degradedChecks.join(', ') || 'none'} />
             </div>
           ) : (
             <div style={{ color: '#64748B', fontSize: 12 }}>Select two checkpoints to compare.</div>
@@ -151,7 +202,18 @@ export const ReplayOperationsPanel: React.FC = () => {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
             <Line label="Anchor" value={continuityExport.anchor?.id || 'none'} />
             <Line label="Events" value={String(continuityExport.continuity.events.length)} />
-            <Line label="Runs" value={String(continuityExport.continuity.interruptedRuns.length)} />
+            <Line label="Checksum" value={continuityExport.exportChecksum} />
+          </div>
+        </div>
+      )}
+
+      {monitor && monitor.alerts.length > 0 && (
+        <div style={{ ...panelStyle, marginTop: 12, borderColor: 'rgba(245,158,11,0.65)' }}>
+          <div style={panelTitleStyle}>Replay Monitor Alerts</div>
+          <div style={{ display: 'grid', gap: 6 }}>
+            {monitor.alerts.map(alert => (
+              <div key={alert} style={{ color: '#F59E0B', fontSize: 12 }}>{alert}</div>
+            ))}
           </div>
         </div>
       )}

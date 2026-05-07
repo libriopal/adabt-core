@@ -41,6 +41,35 @@ export interface ReplayHistoryResult {
   verification: ReplayHistoryVerification;
 }
 
+export interface ReplayCheckpointDiff {
+  stream: string;
+  base: ReplayCheckpoint;
+  target: ReplayCheckpoint;
+  eventDelta: number;
+  checksumChanged: boolean;
+  stateStable: boolean;
+  checkDeltas: Array<{
+    name: string;
+    baseStable?: boolean;
+    targetStable?: boolean;
+    baseChecksum?: string | null;
+    targetChecksum?: string | null;
+    changed: boolean;
+  }>;
+  degradedChecks: string[];
+}
+
+export interface ReplayHistoryMonitorReport {
+  status: 'ready' | 'degraded';
+  stream: string;
+  checkedAt: number;
+  verification: ReplayHistoryVerification;
+  latestCheckpoint?: ReplayCheckpoint;
+  previousCheckpoint?: ReplayCheckpoint;
+  latestDiff?: ReplayCheckpointDiff;
+  alerts: string[];
+}
+
 function stableNormalize(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(stableNormalize);
@@ -201,6 +230,110 @@ export async function verifyReplayHistory(stream = DEFAULT_REPLAY_STREAM): Promi
     latestChecksum: previousChecksum,
     latestCheckpointId: latestCheckpoint?.id,
     failures,
+  };
+}
+
+function checkpointChecks(checkpoint: ReplayCheckpoint): Array<{
+  name: string;
+  stable?: boolean;
+  checksum?: string | null;
+}> {
+  const checks = (checkpoint.state as { checks?: unknown }).checks;
+  return Array.isArray(checks)
+    ? checks.filter((check): check is { name: string; stable?: boolean; checksum?: string | null } => (
+      typeof check === 'object' && check !== null && typeof (check as { name?: unknown }).name === 'string'
+    ))
+    : [];
+}
+
+export async function diffReplayCheckpoints(
+  baseId: string,
+  targetId: string,
+  stream = DEFAULT_REPLAY_STREAM,
+): Promise<ReplayCheckpointDiff> {
+  const repository = getStorageRepository();
+  const [base, target] = await Promise.all([
+    repository.replayCheckpoints.getById(baseId),
+    repository.replayCheckpoints.getById(targetId),
+  ]);
+
+  if (!base) throw new Error(`Replay checkpoint not found: ${baseId}`);
+  if (!target) throw new Error(`Replay checkpoint not found: ${targetId}`);
+  if (base.stream !== stream) throw new Error(`Replay checkpoint ${base.id} belongs to stream ${base.stream}`);
+  if (target.stream !== stream) throw new Error(`Replay checkpoint ${target.id} belongs to stream ${target.stream}`);
+
+  const baseChecks = new Map(checkpointChecks(base).map(check => [check.name, check]));
+  const targetChecks = new Map(checkpointChecks(target).map(check => [check.name, check]));
+  const names = Array.from(new Set([...baseChecks.keys(), ...targetChecks.keys()])).sort();
+  const checkDeltas = names.map(name => {
+    const baseCheck = baseChecks.get(name);
+    const targetCheck = targetChecks.get(name);
+    const baseChecksum = baseCheck?.checksum ?? null;
+    const targetChecksum = targetCheck?.checksum ?? null;
+    const changed = baseCheck?.stable !== targetCheck?.stable || baseChecksum !== targetChecksum;
+    return {
+      name,
+      baseStable: baseCheck?.stable,
+      targetStable: targetCheck?.stable,
+      baseChecksum,
+      targetChecksum,
+      changed,
+    };
+  });
+
+  return {
+    stream,
+    base,
+    target,
+    eventDelta: target.eventCount - base.eventCount,
+    checksumChanged: base.replayChecksum !== target.replayChecksum,
+    stateStable: Boolean((base.state as { stable?: unknown }).stable)
+      && Boolean((target.state as { stable?: unknown }).stable),
+    checkDeltas,
+    degradedChecks: checkDeltas
+      .filter(delta => delta.targetStable === false)
+      .map(delta => delta.name),
+  };
+}
+
+export async function monitorReplayHistory(
+  stream = DEFAULT_REPLAY_STREAM,
+): Promise<ReplayHistoryMonitorReport> {
+  const repository = getStorageRepository();
+  const [verification, checkpoints] = await Promise.all([
+    verifyReplayHistory(stream),
+    repository.replayCheckpoints.getLatest(stream, 2),
+  ]);
+  const [latestCheckpoint, previousCheckpoint] = checkpoints;
+  const alerts: string[] = [];
+
+  if (!verification.stable) {
+    alerts.push(...verification.failures);
+  }
+  if (!latestCheckpoint) {
+    alerts.push('no replay checkpoint is available');
+  }
+  if (latestCheckpoint && !Boolean((latestCheckpoint.state as { stable?: unknown }).stable)) {
+    alerts.push(`latest checkpoint ${latestCheckpoint.id} is degraded`);
+  }
+
+  let latestDiff: ReplayCheckpointDiff | undefined;
+  if (latestCheckpoint && previousCheckpoint) {
+    latestDiff = await diffReplayCheckpoints(previousCheckpoint.id, latestCheckpoint.id, stream);
+    if (latestDiff.degradedChecks.length > 0) {
+      alerts.push(`degraded checks: ${latestDiff.degradedChecks.join(', ')}`);
+    }
+  }
+
+  return {
+    status: alerts.length === 0 ? 'ready' : 'degraded',
+    stream,
+    checkedAt: Date.now(),
+    verification,
+    latestCheckpoint,
+    previousCheckpoint,
+    latestDiff,
+    alerts,
   };
 }
 

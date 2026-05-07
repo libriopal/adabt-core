@@ -9,7 +9,12 @@ import { Design } from '../types';
 import { continuityHub } from '../diagnostics/continuityHub';
 import { createContinuityExport } from '../diagnostics/continuityExport';
 import { logger } from '../diagnostics/logger';
-import { DEFAULT_REPLAY_STREAM, getReplayHistory } from '../diagnostics/replayHistory';
+import {
+  DEFAULT_REPLAY_STREAM,
+  diffReplayCheckpoints,
+  getReplayHistory,
+  monitorReplayHistory,
+} from '../diagnostics/replayHistory';
 import { runReplaySuite } from '../diagnostics/replaySuite';
 import { collectSystemDiagnostics } from '../diagnostics/systemDiagnostics';
 import { RequestWithContext, validateRuntimeEnvironment } from '../diagnostics/runtimeValidation';
@@ -54,6 +59,18 @@ const ImportSchema = z.object({
 const ReplayHistoryQuerySchema = z.object({
   stream: z.string().min(1).default(DEFAULT_REPLAY_STREAM),
   limit: z.coerce.number().int().min(1).max(500).default(50),
+});
+
+const ReplayVerifyQuerySchema = z.object({
+  persist: z.preprocess(value => (
+    value === undefined ? true : !['false', '0', 'no'].includes(String(value).toLowerCase())
+  ), z.boolean()).default(true),
+});
+
+const ReplayDiffQuerySchema = z.object({
+  stream: z.string().min(1).default(DEFAULT_REPLAY_STREAM),
+  baseId: z.string().min(1),
+  targetId: z.string().min(1),
 });
 
 const ContinuityExportQuerySchema = ReplayHistoryQuerySchema.extend({
@@ -232,11 +249,26 @@ router.get('/reinforcement/replay', async (req: RequestWithContext, res) => {
 
 router.get('/replay/verify', async (req: RequestWithContext, res) => {
   try {
-    const replay = await runReplaySuite();
+    const query = ReplayVerifyQuerySchema.parse(req.query);
+    const replay = await runReplaySuite({ persist: query.persist });
     res.status(replay.stable ? 200 : 503).json({ success: replay.stable, replay });
   } catch (error) {
     const id = logRouteError('RPY', req, error);
     res.status(500).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/replay/monitor', async (req: RequestWithContext, res) => {
+  try {
+    const query = z.object({ stream: z.string().min(1).default(DEFAULT_REPLAY_STREAM) }).parse(req.query);
+    const monitor = await monitorReplayHistory(query.stream);
+    res.status(monitor.status === 'ready' ? 200 : 503).json({
+      success: true,
+      monitor,
+    });
+  } catch (error) {
+    const id = logRouteError('RPM', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
   }
 });
 
@@ -250,6 +282,17 @@ router.get('/replay/history', async (req: RequestWithContext, res) => {
     });
   } catch (error) {
     const id = logRouteError('RPH', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/replay/checkpoints/diff', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReplayDiffQuerySchema.parse(req.query);
+    const diff = await diffReplayCheckpoints(query.baseId, query.targetId, query.stream);
+    res.json({ success: true, diff });
+  } catch (error) {
+    const id = logRouteError('RPD', req, error);
     res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
   }
 });

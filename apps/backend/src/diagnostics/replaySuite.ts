@@ -13,7 +13,11 @@ export interface ReplaySuiteResult {
   persistence?: ReplayPersistenceResult;
 }
 
-export async function runReplaySuite(): Promise<ReplaySuiteResult> {
+export interface ReplaySuiteOptions {
+  persist?: boolean;
+}
+
+export async function runReplaySuite(options: ReplaySuiteOptions = {}): Promise<ReplaySuiteResult> {
   const demandA = await demandEngine.updateDemand('mythic bonus volatility');
   const demandB = await demandEngine.updateDemand('mythic bonus volatility');
   const reinforcement = await reinforcementEngine.verifyReplay();
@@ -42,7 +46,9 @@ export async function runReplaySuite(): Promise<ReplaySuiteResult> {
     checks,
   };
 
-  result.persistence = await persistReplaySuiteResult(result);
+  if (options.persist !== false) {
+    result.persistence = await persistReplaySuiteResult(result);
+  }
 
   return result;
 }

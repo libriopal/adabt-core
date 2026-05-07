@@ -40,13 +40,25 @@
    curl 'http://localhost:3001/api/replay/history?stream=agros-replay-suite&limit=20'
    ```
 
-6. Export continuity anchored to the latest replay checkpoint:
+6. Check replay monitor status:
+
+   ```bash
+   curl 'http://localhost:3001/api/replay/monitor?stream=agros-replay-suite'
+   ```
+
+7. Compare replay checkpoints when degradation is suspected:
+
+   ```bash
+   curl 'http://localhost:3001/api/replay/checkpoints/diff?baseId=<baseCheckpoint>&targetId=<targetCheckpoint>'
+   ```
+
+8. Export continuity anchored to the latest replay checkpoint:
 
    ```bash
    curl 'http://localhost:3001/api/continuity/export?stream=agros-replay-suite&limit=20'
    ```
 
-7. Pause a runaway evolution:
+9. Pause a runaway evolution:
 
    ```bash
    curl -X POST http://localhost:3001/api/continuity/<runId>/interrupt \
@@ -54,7 +66,7 @@
      -d '{"reason":"operator recovery"}'
    ```
 
-8. Resume after validation:
+10. Resume after validation:
 
    ```bash
    curl -X POST http://localhost:3001/api/continuity/<runId>/resume \
@@ -78,11 +90,13 @@ If replay verification fails:
 
 1. Stop workers by setting `ENABLE_WORKERS=false`.
 2. Capture `/api/diagnostics`.
-3. Capture `/api/replay/history` and compare the latest two replay checkpoints.
-4. Export `/api/continuity/export` with the degraded checkpoint ID.
-5. Check recent code changes touching PRNG, demand weighting, reinforcement gates, cocoon serialization, replay history, or manifest order.
-6. Run `node scripts/validate-production.mjs`.
-7. Repair checksum instability before re-enabling workers.
+3. Run recovery verification with `/api/replay/verify?persist=false` to avoid appending diagnostic events.
+4. Capture `/api/replay/monitor` and `/api/replay/history`.
+5. Compare the latest stable and degraded checkpoints with `/api/replay/checkpoints/diff`.
+6. Export `/api/continuity/export` with the degraded checkpoint ID.
+7. Check recent code changes touching PRNG, demand weighting, reinforcement gates, cocoon serialization, replay history, or manifest order.
+8. Run `node scripts/validate-production.mjs`.
+9. Repair checksum instability before re-enabling workers.
 
 ## Continuity Failure Response
 

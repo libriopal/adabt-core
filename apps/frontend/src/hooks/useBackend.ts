@@ -75,7 +75,10 @@ export function useBackend({ onError }: UseBackendOptions = {}) {
 
   const getReinforcementReplay = useCallback(() => request('/reinforcement/replay'), [request]);
 
-  const runReplayVerify = useCallback(() => request('/replay/verify'), [request]);
+  const runReplayVerify = useCallback((params?: { persist?: boolean }) => {
+    const qs = params?.persist === false ? '?persist=false' : '';
+    return request(`/replay/verify${qs}`);
+  }, [request]);
 
   const getReplayHistory = useCallback((params?: { stream?: string; limit?: number }) => {
     const qs = params ? new URLSearchParams(
@@ -84,6 +87,24 @@ export function useBackend({ onError }: UseBackendOptions = {}) {
         .map(([key, value]) => [key, String(value)]),
     ).toString() : '';
     return request(`/replay/history${qs ? `?${qs}` : ''}`);
+  }, [request]);
+
+  const getReplayMonitor = useCallback((params?: { stream?: string }) => {
+    const qs = params?.stream ? `?${new URLSearchParams({ stream: params.stream }).toString()}` : '';
+    return request(`/replay/monitor${qs}`);
+  }, [request]);
+
+  const getReplayCheckpointDiff = useCallback((params: {
+    stream?: string;
+    baseId: string;
+    targetId: string;
+  }) => {
+    const qs = new URLSearchParams(
+      Object.entries(params)
+        .filter(([, value]) => value !== undefined && value !== '')
+        .map(([key, value]) => [key, String(value)]),
+    ).toString();
+    return request(`/replay/checkpoints/diff?${qs}`);
   }, [request]);
 
   const getContinuityExport = useCallback((params?: {
@@ -112,6 +133,8 @@ export function useBackend({ onError }: UseBackendOptions = {}) {
     getReinforcementReplay,
     runReplayVerify,
     getReplayHistory,
+    getReplayMonitor,
+    getReplayCheckpointDiff,
     getContinuityExport,
   };
 }

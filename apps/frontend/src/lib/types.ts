@@ -196,6 +196,35 @@ export interface ReplayHistoryResult {
   verification: ReplayHistoryVerification;
 }
 
+export interface ReplayCheckpointDiff {
+  stream: string;
+  base: ReplayCheckpoint;
+  target: ReplayCheckpoint;
+  eventDelta: number;
+  checksumChanged: boolean;
+  stateStable: boolean;
+  checkDeltas: Array<{
+    name: string;
+    baseStable?: boolean;
+    targetStable?: boolean;
+    baseChecksum?: string | null;
+    targetChecksum?: string | null;
+    changed: boolean;
+  }>;
+  degradedChecks: string[];
+}
+
+export interface ReplayHistoryMonitorReport {
+  status: 'ready' | 'degraded';
+  stream: string;
+  checkedAt: number;
+  verification: ReplayHistoryVerification;
+  latestCheckpoint?: ReplayCheckpoint;
+  previousCheckpoint?: ReplayCheckpoint;
+  latestDiff?: ReplayCheckpointDiff;
+  alerts: string[];
+}
+
 export interface ContinuityEvent {
   type: string;
   timestamp: number;
