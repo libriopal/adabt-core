@@ -2,6 +2,10 @@
 
 AGROS is a deterministic adaptive research system for slot-design simulation, semantic compression, replayable evolution, reinforcement scoring, and continuity recovery.
 
+## App Behavior
+
+AGROS runs as a two-part dashboard and API that turns research prompts into repeatable design experiments. The frontend lets operators generate batches, launch evolution runs, inspect demand and reinforcement signals, monitor replay health, supervise releases, and export incident handoff packets. The backend persists designs, replay checkpoints, release evidence, promotion timelines, rollback records, and diagnostics through SQLite or Postgres. Every operational path favors deterministic checksums, replay verification, and explicit operator gates so teams can pause, resume, audit, and recover long-running work. Local development uses deterministic defaults; production deployments wire the same behavior through Vercel, Railway, Render, Docker, or CI automation workflows.
+
 ## Applications
 
 - `apps/frontend`: Vite React dashboard for evolution, demand, reinforcement, cocoon topology, replay, and STRUTHIO-SEC debugging.
