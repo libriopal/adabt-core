@@ -71,9 +71,9 @@ const AGROS_LAYERS: Omit<LayerManifest, 'status'>[] = [
     name: 'Evolution Layer',
     order: 4,
     components: [
-      { name: 'EvolutionEngine', path: 'engine/evolution.ts', type: 'core', status: 'evolving', dependencies: ['DeterministicPRNG', 'IndexedDBPersistence'] },
-      { name: 'MutationEngine', path: 'engine/mutation.ts', type: 'service', status: 'evolving', dependencies: ['EvolutionEngine'] },
-      { name: 'SelectionPipeline', path: 'engine/selection.ts', type: 'service', status: 'evolving', dependencies: ['EvolutionEngine'] },
+      { name: 'EvolutionSimulator', path: 'evolution/simulator.ts', type: 'core', status: 'stable', dependencies: ['DeterministicPRNG'] },
+      { name: 'MutationEngine', path: 'evolution/mutation.ts', type: 'service', status: 'stable', dependencies: ['EvolutionSimulator'] },
+      { name: 'SelectionPipeline', path: 'evolution/selection.ts', type: 'service', status: 'stable', dependencies: ['EvolutionSimulator'] },
     ],
     dependencies: ['Deterministic Core', 'Persistence Layer'],
   },
@@ -132,6 +132,7 @@ const AGROS_LAYERS: Omit<LayerManifest, 'status'>[] = [
     order: 10,
     components: [
       { name: 'EvolutionVisualizer', path: 'components/EvolutionVisualizer.tsx', type: 'ui', status: 'stable', dependencies: ['EvolutionEngine'] },
+      { name: 'EvolutionSimulatorPanel', path: 'components/EvolutionSimulatorPanel.tsx', type: 'ui', status: 'stable', dependencies: ['EvolutionSimulator'] },
       { name: 'MemoryInspector', path: 'components/MemoryInspector.tsx', type: 'ui', status: 'evolving', dependencies: ['MemoryGraph'] },
       { name: 'DebugPanel', path: 'components/DebugPanel.tsx', type: 'ui', status: 'evolving', dependencies: ['MetricsCollector', 'TraceLogger'] },
     ],

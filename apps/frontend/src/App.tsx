@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { EvolutionVisualizer } from './components/EvolutionVisualizer';
 import { DebugPanel } from './components/DebugPanel';
+import { EvolutionSimulatorPanel } from './components/EvolutionSimulatorPanel';
 import { useBackend } from './hooks/useBackend';
 import { agros, AGROSState } from './agros/init';
 
@@ -80,6 +81,8 @@ const App: React.FC = () => {
         <div style={{ marginBottom: 32 }} />
 
         {error && <ErrorBanner error={error} onDismiss={() => setError(null)} />}
+
+        <EvolutionSimulatorPanel />
 
         <div style={{ background: '#12172B', borderRadius: 8, padding: 24, border: '1px solid #1E293B', marginBottom: 24 }}>
           <h2 style={{ color: '#94A3B8', fontSize: 14, marginTop: 0, marginBottom: 16 }}>Generate Designs</h2>
