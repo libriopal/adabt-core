@@ -1,12 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { useBackend } from '../hooks/useBackend';
 import {
+  ReleaseBundleSummary,
   ReleaseDecisionOutcome,
   ReleaseDecisionRecord,
+  ReleaseDriftReport,
   ReleaseEvidenceComparison,
   ReleaseEvidenceRecord,
   ReleaseGateReport,
   ReleaseReadinessReport,
+  ReleaseRetentionReport,
 } from '../lib/types';
 
 const DEFAULT_STREAM = 'agros-replay-suite';
@@ -19,15 +22,26 @@ export const ReleaseReadinessPanel: React.FC = () => {
   const [evidenceHistory, setEvidenceHistory] = useState<ReleaseEvidenceRecord[]>([]);
   const [decisions, setDecisions] = useState<ReleaseDecisionRecord[]>([]);
   const [comparison, setComparison] = useState<ReleaseEvidenceComparison | null>(null);
+  const [bundle, setBundle] = useState<ReleaseBundleSummary | null>(null);
+  const [drift, setDrift] = useState<ReleaseDriftReport | null>(null);
+  const [retention, setRetention] = useState<ReleaseRetentionReport | null>(null);
   const [historyStatus, setHistoryStatus] = useState('');
   const [historyRollbackStatus, setHistoryRollbackStatus] = useState('');
   const [decision, setDecision] = useState<ReleaseDecisionOutcome>('go');
   const [decisionReason, setDecisionReason] = useState('operator accepted release evidence');
+  const [commitSha, setCommitSha] = useState('');
+  const [branchName, setBranchName] = useState('');
+  const [pullRequestUrl, setPullRequestUrl] = useState('');
+  const [retainLatest, setRetainLatest] = useState(20);
   const [evidenceExportId, setEvidenceExportId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const {
+    applyReleaseEvidenceRetention,
     compareReleaseEvidence,
     createReleaseDecision,
+    createReleaseReconciliation,
+    getReleaseBundleSummary,
+    getReleaseDrift,
     getReleaseEvidenceExport,
     getReleaseEvidenceHistory,
     getReleaseDecisions,
@@ -93,6 +107,67 @@ export const ReleaseReadinessPanel: React.FC = () => {
     if (data?.decision) setDecisions([data.decision, ...decisions].slice(0, 4));
   };
 
+  const reconcileDecision = async () => {
+    const latestDecision = decisions[0];
+    if (!latestDecision) {
+      setError('Record a release decision before reconciling commit metadata.');
+      return;
+    }
+    if (!commitSha.trim() || !branchName.trim()) {
+      setError('Commit SHA and branch are required for release reconciliation.');
+      return;
+    }
+    setError(null);
+    const data = await createReleaseReconciliation({
+      decisionId: latestDecision.id,
+      commitSha: commitSha.trim(),
+      branch: branchName.trim(),
+      pullRequestUrl: pullRequestUrl.trim() || undefined,
+      initiatedBy: 'operator',
+    }) as any;
+    if (data?.reconciliation) {
+      const summary = await getReleaseBundleSummary({ decisionId: latestDecision.id, limit: 8 }) as any;
+      if (summary?.bundle) setBundle(summary.bundle);
+    }
+  };
+
+  const loadBundleSummary = async () => {
+    setError(null);
+    const latestDecision = decisions[0];
+    const data = await getReleaseBundleSummary({
+      decisionId: latestDecision?.id,
+      stream,
+      provider,
+      limit: 8,
+    }) as any;
+    if (data?.bundle) {
+      setBundle(data.bundle);
+      setDrift(data.bundle.drift);
+    }
+  };
+
+  const checkDrift = async () => {
+    const latestDecision = decisions[0];
+    if (!latestDecision) {
+      setError('Record a release decision before checking post-release drift.');
+      return;
+    }
+    setError(null);
+    const data = await getReleaseDrift({ decisionId: latestDecision.id }) as any;
+    if (data?.drift) setDrift(data.drift);
+  };
+
+  const planRetention = async () => {
+    setError(null);
+    const data = await applyReleaseEvidenceRetention({
+      stream,
+      provider,
+      retainLatest,
+      dryRun: true,
+    }) as any;
+    if (data?.retention) setRetention(data.retention);
+  };
+
   useEffect(() => {
     loadReleaseReadiness();
   }, []);
@@ -101,9 +176,9 @@ export const ReleaseReadinessPanel: React.FC = () => {
     <div style={{ background: '#12172B', borderRadius: 8, padding: 24, border: '1px solid #1E293B', marginBottom: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', marginBottom: 18 }}>
         <div>
-          <h2 style={{ color: '#94A3B8', fontSize: 14, marginTop: 0, marginBottom: 6 }}>Phase 8 Release Evidence</h2>
+          <h2 style={{ color: '#94A3B8', fontSize: 14, marginTop: 0, marginBottom: 6 }}>Phase 10 Release Closure</h2>
           <div style={{ color: '#64748B', fontSize: 12 }}>
-            Runtime gates, replay alerts, rollback preflight, and provider-tagged release evidence.
+            Runtime gates, decision reconciliation, bundle summary, retention planning, and post-release drift.
           </div>
         </div>
         <StatusBadge status={release?.status} />
@@ -142,6 +217,9 @@ export const ReleaseReadinessPanel: React.FC = () => {
         </button>
         <button onClick={compareProviders} disabled={loading || !stream.trim()} style={buttonStyle(loading || !stream.trim())}>
           Compare
+        </button>
+        <button onClick={loadBundleSummary} disabled={loading || !stream.trim()} style={buttonStyle(loading || !stream.trim())}>
+          Bundle
         </button>
       </div>
 
@@ -241,6 +319,71 @@ export const ReleaseReadinessPanel: React.FC = () => {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {decisions.length > 0 && (
+        <div style={{ ...panelStyle, marginTop: 12 }}>
+          <div style={panelTitleStyle}>Decision Reconciliation</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(138px, 1fr))', gap: 10 }}>
+            <input value={commitSha} onChange={event => setCommitSha(event.target.value)} placeholder="Commit SHA" style={inputStyle} />
+            <input value={branchName} onChange={event => setBranchName(event.target.value)} placeholder="Branch" style={inputStyle} />
+            <input value={pullRequestUrl} onChange={event => setPullRequestUrl(event.target.value)} placeholder="PR URL" style={inputStyle} />
+            <button onClick={reconcileDecision} disabled={loading || !commitSha.trim() || !branchName.trim()} style={buttonStyle(loading || !commitSha.trim() || !branchName.trim())}>
+              Reconcile
+            </button>
+            <button onClick={checkDrift} disabled={loading} style={buttonStyle(loading)}>
+              Drift
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div style={{ ...panelStyle, marginTop: 12 }}>
+        <div style={panelTitleStyle}>Evidence Retention</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 10 }}>
+          <input
+            type="number"
+            min={1}
+            max={500}
+            value={retainLatest}
+            onChange={event => setRetainLatest(Number(event.target.value))}
+            style={inputStyle}
+          />
+          <button onClick={planRetention} disabled={loading || !stream.trim()} style={buttonStyle(loading || !stream.trim())}>
+            Plan Retention
+          </button>
+        </div>
+        {retention && (
+          <div style={{ color: '#CBD5E1', fontSize: 11, marginTop: 10 }}>
+            Retaining {retention.retainLatest}; {retention.candidateCount} candidate records; checksum {retention.retentionChecksum}.
+          </div>
+        )}
+      </div>
+
+      {bundle && (
+        <div style={{ ...panelStyle, marginTop: 12 }}>
+          <div style={panelTitleStyle}>Release Bundle Summary</div>
+          <div style={{ color: bundle.summary.releaseReady ? '#A3E635' : '#FDBA74', fontSize: 12, marginBottom: 8 }}>
+            {bundle.summary.recommendation}
+          </div>
+          <div style={{ display: 'grid', gap: 6, color: '#CBD5E1', fontSize: 11 }}>
+            <div>Decision: {bundle.decision.decision} | Reconciliation: {bundle.summary.reconciliationState}</div>
+            <div>Drift: {bundle.drift.status} | Evidence retained: {bundle.summary.evidenceRetained}</div>
+            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Bundle checksum: {bundle.bundleChecksum}</div>
+          </div>
+        </div>
+      )}
+
+      {drift && (
+        <div style={{ ...panelStyle, marginTop: 12, borderColor: statusColor(drift.status === 'ready' ? 'ready' : 'degraded') }}>
+          <div style={panelTitleStyle}>Post-Release Drift</div>
+          <div style={{ color: drift.status === 'ready' ? '#A3E635' : '#FDBA74', fontSize: 12 }}>
+            {drift.status === 'ready' ? 'Accepted decision signature still matches current monitor evidence.' : drift.alerts.join(' ')}
+          </div>
+          <div style={{ color: '#64748B', fontSize: 11, marginTop: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            Drift checksum: {drift.driftChecksum}
+          </div>
         </div>
       )}
     </div>

@@ -39,7 +39,11 @@ Backend endpoints:
 - `GET /api/release/readiness`: returns release go/no-go gates for runtime, replay monitor, and alert acknowledgement state.
 - `GET /api/release/evidence/export`: persists provider-tagged release readiness evidence with rollback preflight checks.
 - `GET /api/release/evidence/compare`: compares signed release evidence checksums across providers.
+- `POST /api/release/evidence/retention`: plans or applies release evidence retention against long-running archives.
 - `POST /api/release/decisions`: records immutable go/no-go/exception decisions for release evidence.
+- `POST /api/release/reconciliations`: records the commit, branch, PR, and source-thread metadata for an accepted release decision.
+- `GET /api/release/bundle-summary`: returns the operator-facing release bundle summary for a decision.
+- `GET /api/release/drift`: checks current monitor evidence against the accepted decision signature.
 - `GET /api/diagnostics`: returns runtime, replay, database, continuity, demand, and reinforcement diagnostics.
 - `GET /api/continuity/status`: returns websocket clients, interrupted run IDs, and recent continuity events.
 - `POST /api/continuity/:runId/interrupt`: pauses a run when possible and broadcasts a continuity interrupt event.

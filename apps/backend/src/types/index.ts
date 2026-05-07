@@ -174,6 +174,24 @@ export interface ReleaseDecisionRecord {
   createdAt: number;
 }
 
+export interface ReleaseReconciliationRecord {
+  id: string;
+  decisionId: string;
+  evidenceId: string;
+  stream: string;
+  provider: string;
+  commitSha: string;
+  branch: string;
+  pullRequestUrl?: string;
+  sourceThread?: string;
+  initiatedBy?: string;
+  decisionSignature: string;
+  evidenceChecksum: string;
+  providerSignature: string;
+  reconciliationSignature: string;
+  createdAt: number;
+}
+
 export interface Design {
   id: string;
   seed: string;

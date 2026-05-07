@@ -21,9 +21,14 @@ import { runReplaySuite } from '../diagnostics/replaySuite';
 import {
   compareReleaseEvidenceByProvider,
   collectReleaseReadiness,
+  collectPostReleaseDrift,
+  createReleaseBundleSummary,
   createReleaseEvidenceExport,
+  applyReleaseEvidenceRetention,
   getReleaseDecisionHistory,
   getReleaseEvidenceHistory,
+  getReleaseReconciliationHistory,
+  reconcileReleaseDecision,
   recordReleaseDecision,
 } from '../diagnostics/releaseReadiness';
 import { collectSystemDiagnostics } from '../diagnostics/systemDiagnostics';
@@ -148,6 +153,42 @@ const ReleaseDecisionSchema = z.object({
 const ReleaseDecisionHistoryQuerySchema = ReplayHistoryQuerySchema.extend({
   provider: z.string().min(1).optional(),
   decision: z.enum(['go', 'no-go', 'exception']).optional(),
+});
+
+const ReleaseReconciliationSchema = z.object({
+  decisionId: z.string().min(1),
+  commitSha: z.string().min(1),
+  branch: z.string().min(1),
+  pullRequestUrl: z.string().min(1).optional(),
+  sourceThread: z.string().min(1).optional(),
+  initiatedBy: z.string().min(1).optional(),
+});
+
+const ReleaseReconciliationHistoryQuerySchema = ReplayHistoryQuerySchema.extend({
+  provider: z.string().min(1).optional(),
+  decisionId: z.string().min(1).optional(),
+  commitSha: z.string().min(1).optional(),
+});
+
+const ReleaseBundleSummaryQuerySchema = z.object({
+  decisionId: z.string().min(1).optional(),
+  stream: z.string().min(1).default(DEFAULT_REPLAY_STREAM),
+  provider: z.string().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(8),
+});
+
+const ReleaseDriftQuerySchema = z.object({
+  decisionId: z.string().min(1),
+  persistMonitor: z.preprocess(value => (
+    value === undefined ? false : !['false', '0', 'no'].includes(String(value).toLowerCase())
+  ), z.boolean()).default(false),
+});
+
+const ReleaseRetentionSchema = z.object({
+  stream: z.string().min(1).default(DEFAULT_REPLAY_STREAM),
+  provider: z.string().min(1).optional(),
+  retainLatest: z.number().int().min(1).max(500).default(50),
+  dryRun: z.boolean().default(true),
 });
 
 router.post('/generate-batch', async (req: RequestWithContext, res) => {
@@ -489,6 +530,17 @@ router.get('/release/evidence/compare', async (req: RequestWithContext, res) => 
   }
 });
 
+router.post('/release/evidence/retention', async (req: RequestWithContext, res) => {
+  try {
+    const body = ReleaseRetentionSchema.parse(req.body ?? {});
+    const retention = await applyReleaseEvidenceRetention(body);
+    res.json({ success: true, retention });
+  } catch (error) {
+    const id = logRouteError('RER', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
 router.get('/release/evidence/:evidenceId', async (req: RequestWithContext, res) => {
   try {
     const evidence = await getStorageRepository().releaseEvidence.getById(req.params.evidenceId);
@@ -524,6 +576,59 @@ router.get('/release/decisions', async (req: RequestWithContext, res) => {
     res.json({ success: true, decisions });
   } catch (error) {
     const id = logRouteError('RDH', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.post('/release/reconciliations', async (req: RequestWithContext, res) => {
+  try {
+    const body = ReleaseReconciliationSchema.parse(req.body);
+    const reconciliation = await reconcileReleaseDecision(body);
+    res.status(201).json({ success: true, reconciliation });
+  } catch (error) {
+    const id = logRouteError('RRC', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/reconciliations', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReleaseReconciliationHistoryQuerySchema.parse(req.query);
+    const reconciliations = await getReleaseReconciliationHistory(query.stream, query.limit, {
+      provider: query.provider,
+      decisionId: query.decisionId,
+      commitSha: query.commitSha,
+    });
+    res.json({ success: true, reconciliations });
+  } catch (error) {
+    const id = logRouteError('RRH', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/bundle-summary', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReleaseBundleSummaryQuerySchema.parse(req.query);
+    const bundle = await createReleaseBundleSummary({
+      decisionId: query.decisionId,
+      stream: query.stream,
+      provider: query.provider,
+      limit: query.limit,
+    });
+    res.json({ success: true, bundle });
+  } catch (error) {
+    const id = logRouteError('RBS', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/drift', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReleaseDriftQuerySchema.parse(req.query);
+    const drift = await collectPostReleaseDrift(query.decisionId, { persistMonitor: query.persistMonitor });
+    res.status(drift.status === 'ready' ? 200 : 409).json({ success: true, drift });
+  } catch (error) {
+    const id = logRouteError('RDR', req, error);
     res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
   }
 });

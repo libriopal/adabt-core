@@ -1,4 +1,9 @@
-import { ReleaseDecisionRecord, ReleaseEvidenceRecord, ReplayMonitorSnapshot } from '../types';
+import {
+  ReleaseDecisionRecord,
+  ReleaseEvidenceRecord,
+  ReleaseReconciliationRecord,
+  ReplayMonitorSnapshot,
+} from '../types';
 import { createDegradedReplayExport, DegradedReplayExportBundle } from './continuityExport';
 import { DEFAULT_REPLAY_STREAM, getReplayMonitorHistory, monitorReplayHistory, stableStringify } from './replayHistory';
 import { RuntimeValidationReport, validateRuntimeEnvironment } from './runtimeValidation';
@@ -78,6 +83,15 @@ export interface ReleaseDecisionInput {
   decidedBy?: string;
 }
 
+export interface ReleaseReconciliationInput {
+  decisionId: string;
+  commitSha: string;
+  branch: string;
+  pullRequestUrl?: string;
+  sourceThread?: string;
+  initiatedBy?: string;
+}
+
 export interface ReleaseEvidenceComparison {
   stream: string;
   providers: string[];
@@ -94,6 +108,72 @@ export interface ReleaseEvidenceComparison {
     providerSignature?: string;
     missing: boolean;
   }>;
+}
+
+export interface ReleaseRetentionInput {
+  stream?: string;
+  provider?: string;
+  retainLatest?: number;
+  dryRun?: boolean;
+}
+
+export interface ReleaseRetentionReport {
+  version: 'agros-release-retention-v1';
+  stream: string;
+  provider?: string;
+  retainLatest: number;
+  dryRun: boolean;
+  evaluatedCount: number;
+  candidateCount: number;
+  deletedCount: number;
+  candidates: Array<{
+    evidenceId: string;
+    provider: string;
+    status: ReleaseGateStatus;
+    rollbackStatus: ReleaseGateStatus;
+    checkedAt: number;
+    evidenceChecksum: string;
+  }>;
+  retentionChecksum: string;
+}
+
+export interface ReleaseDriftReport {
+  version: 'agros-post-release-drift-v1';
+  decisionId: string;
+  decisionSignature: string;
+  stream: string;
+  provider: string;
+  checkedAt: number;
+  status: 'ready' | 'degraded';
+  drifted: boolean;
+  baselineEvidenceChecksum: string;
+  currentEvidenceChecksum: string;
+  baselineEvidenceId: string;
+  currentMonitorSnapshotId?: string;
+  alerts: string[];
+  driftChecksum: string;
+}
+
+export interface ReleaseBundleSummary {
+  version: 'agros-release-bundle-summary-v1';
+  generatedAt: number;
+  stream: string;
+  provider: string;
+  decision: ReleaseDecisionRecord;
+  evidence: ReleaseEvidenceRecord;
+  reconciliation?: ReleaseReconciliationRecord;
+  comparison: ReleaseEvidenceComparison;
+  drift: ReleaseDriftReport;
+  history: ReleaseEvidenceRecord[];
+  summary: {
+    decisionAccepted: boolean;
+    releaseReady: boolean;
+    evidenceRetained: number;
+    reconciliationState: 'reconciled' | 'missing';
+    driftState: ReleaseDriftReport['status'];
+    recommendation: string;
+  };
+  bundleChecksum: string;
 }
 
 const PROVIDERS = new Set(['local-docker', 'railway', 'render', 'custom']);
@@ -257,8 +337,12 @@ function releaseEvidenceId(report: ReleaseReadinessReport): string {
 export async function persistReleaseEvidence(
   report: ReleaseReadinessReport,
 ): Promise<ReleaseEvidenceRecord> {
+  return getStorageRepository().releaseEvidence.save(toReleaseEvidenceRecord(report));
+}
+
+function toReleaseEvidenceRecord(report: ReleaseReadinessReport): Omit<ReleaseEvidenceRecord, 'createdAt'> {
   const gates = report.gates;
-  return getStorageRepository().releaseEvidence.save({
+  return {
     id: releaseEvidenceId(report),
     stream: report.stream,
     provider: report.provider,
@@ -272,7 +356,7 @@ export async function persistReleaseEvidence(
     rollbackStatus: report.rollbackPreflight.status,
     latestDegradedExportChecksum: report.rollbackPreflight.degradedExportChecksum,
     report: report as unknown as Record<string, unknown>,
-  });
+  };
 }
 
 export async function collectReleaseReadiness(
@@ -487,4 +571,236 @@ export async function getReleaseDecisionHistory(
   filters: { provider?: string; decision?: ReleaseDecisionOutcome } = {},
 ): Promise<ReleaseDecisionRecord[]> {
   return getStorageRepository().releaseDecisions.getLatest(stream, limit, filters);
+}
+
+export async function reconcileReleaseDecision(
+  input: ReleaseReconciliationInput,
+): Promise<ReleaseReconciliationRecord> {
+  const decision = await getStorageRepository().releaseDecisions.getById(input.decisionId);
+  if (!decision) {
+    throw new Error(`Release decision not found: ${input.decisionId}`);
+  }
+  const evidence = await getStorageRepository().releaseEvidence.getById(decision.evidenceId);
+  if (!evidence) {
+    throw new Error(`Release evidence not found: ${decision.evidenceId}`);
+  }
+
+  const signed = signReleaseEvidence(evidence);
+  if (signed.evidenceChecksum !== decision.evidenceChecksum) {
+    throw new Error(`Release decision ${decision.id} does not match evidence checksum ${evidence.id}`);
+  }
+
+  const createdAt = Date.now();
+  const reconciliationSignature = hashString(stableStringify({
+    branch: input.branch,
+    commitSha: input.commitSha,
+    decisionSignature: decision.decisionSignature,
+    evidenceChecksum: signed.evidenceChecksum,
+    initiatedBy: input.initiatedBy ?? null,
+    pullRequestUrl: input.pullRequestUrl ?? null,
+    sourceThread: input.sourceThread ?? null,
+  }));
+
+  return getStorageRepository().releaseReconciliations.save({
+    id: `reconciliation_${reconciliationSignature}`,
+    decisionId: decision.id,
+    evidenceId: evidence.id,
+    stream: evidence.stream,
+    provider: evidence.provider,
+    commitSha: input.commitSha,
+    branch: input.branch,
+    pullRequestUrl: input.pullRequestUrl,
+    sourceThread: input.sourceThread,
+    initiatedBy: input.initiatedBy,
+    decisionSignature: decision.decisionSignature,
+    evidenceChecksum: signed.evidenceChecksum,
+    providerSignature: signed.providerSignature,
+    reconciliationSignature,
+    createdAt,
+  });
+}
+
+export async function getReleaseReconciliationHistory(
+  stream?: string,
+  limit = 20,
+  filters: { provider?: string; decisionId?: string; commitSha?: string } = {},
+): Promise<ReleaseReconciliationRecord[]> {
+  return getStorageRepository().releaseReconciliations.getLatest(stream, limit, filters);
+}
+
+export async function collectPostReleaseDrift(
+  decisionId: string,
+  options: { persistMonitor?: boolean } = {},
+): Promise<ReleaseDriftReport> {
+  const decision = await getStorageRepository().releaseDecisions.getById(decisionId);
+  if (!decision) {
+    throw new Error(`Release decision not found: ${decisionId}`);
+  }
+  const baselineEvidence = await getStorageRepository().releaseEvidence.getById(decision.evidenceId);
+  if (!baselineEvidence) {
+    throw new Error(`Release evidence not found: ${decision.evidenceId}`);
+  }
+
+  const currentRelease = await collectReleaseReadiness({
+    stream: baselineEvidence.stream,
+    provider: baselineEvidence.provider,
+    persistEvidence: false,
+    persistMonitor: options.persistMonitor ?? false,
+    includeRollbackPreflight: true,
+  });
+  const currentEvidence = toReleaseEvidenceRecord(currentRelease);
+  const signed = signReleaseEvidence({
+    ...currentEvidence,
+    createdAt: currentRelease.checkedAt,
+  });
+  const alerts: string[] = [];
+  const drifted = signed.evidenceChecksum !== decision.evidenceChecksum;
+
+  if (drifted) {
+    alerts.push('Current release evidence checksum differs from the accepted decision signature.');
+  }
+  if (currentRelease.status !== 'ready') {
+    alerts.push(`Current release gate is ${currentRelease.status}.`);
+  }
+  if (currentRelease.rollbackPreflight.status !== 'ready') {
+    alerts.push(`Current rollback preflight is ${currentRelease.rollbackPreflight.status}.`);
+  }
+
+  const checkedAt = Date.now();
+  const status = alerts.length ? 'degraded' : 'ready';
+  const driftChecksum = hashString(stableStringify({
+    alerts,
+    baselineEvidenceChecksum: decision.evidenceChecksum,
+    currentEvidenceChecksum: signed.evidenceChecksum,
+    decisionSignature: decision.decisionSignature,
+    status,
+  }));
+
+  return {
+    version: 'agros-post-release-drift-v1',
+    decisionId: decision.id,
+    decisionSignature: decision.decisionSignature,
+    stream: baselineEvidence.stream,
+    provider: baselineEvidence.provider,
+    checkedAt,
+    status,
+    drifted,
+    baselineEvidenceChecksum: decision.evidenceChecksum,
+    currentEvidenceChecksum: signed.evidenceChecksum,
+    baselineEvidenceId: baselineEvidence.id,
+    currentMonitorSnapshotId: currentRelease.latestMonitorSnapshot?.id,
+    alerts,
+    driftChecksum,
+  };
+}
+
+export async function applyReleaseEvidenceRetention(
+  input: ReleaseRetentionInput = {},
+): Promise<ReleaseRetentionReport> {
+  const stream = input.stream ?? DEFAULT_REPLAY_STREAM;
+  const retainLatest = Math.max(1, Math.min(input.retainLatest ?? 50, 500));
+  const dryRun = input.dryRun !== false;
+  const records = await getReleaseEvidenceHistory(stream, 500, { provider: input.provider });
+  const candidates = records.slice(retainLatest);
+  const candidateIds = candidates.map(record => record.id);
+  const deletedCount = dryRun ? 0 : await getStorageRepository().releaseEvidence.deleteByIds(candidateIds);
+  const normalizedCandidates = candidates.map(record => ({
+    evidenceId: record.id,
+    provider: record.provider,
+    status: record.status,
+    rollbackStatus: record.rollbackStatus,
+    checkedAt: record.checkedAt,
+    evidenceChecksum: signReleaseEvidence(record).evidenceChecksum,
+  }));
+  const retentionChecksum = hashString(stableStringify({
+    candidates: normalizedCandidates,
+    deletedCount,
+    dryRun,
+    provider: input.provider ?? null,
+    retainLatest,
+    stream,
+  }));
+
+  return {
+    version: 'agros-release-retention-v1',
+    stream,
+    provider: input.provider,
+    retainLatest,
+    dryRun,
+    evaluatedCount: records.length,
+    candidateCount: candidates.length,
+    deletedCount,
+    candidates: normalizedCandidates,
+    retentionChecksum,
+  };
+}
+
+export async function createReleaseBundleSummary(options: {
+  decisionId?: string;
+  stream?: string;
+  provider?: string;
+  limit?: number;
+} = {}): Promise<ReleaseBundleSummary> {
+  const decision = options.decisionId
+    ? await getStorageRepository().releaseDecisions.getById(options.decisionId)
+    : (await getReleaseDecisionHistory(options.stream, 1, { provider: options.provider }))[0];
+
+  if (!decision) {
+    throw new Error('Release decision is required before creating a bundle summary.');
+  }
+
+  const evidence = await getStorageRepository().releaseEvidence.getById(decision.evidenceId);
+  if (!evidence) {
+    throw new Error(`Release evidence not found: ${decision.evidenceId}`);
+  }
+
+  const reconciliation = (await getReleaseReconciliationHistory(evidence.stream, 1, {
+    decisionId: decision.id,
+    provider: evidence.provider,
+  }))[0];
+  const comparison = await compareReleaseEvidenceByProvider(evidence.stream, [
+    evidence.provider,
+    'railway',
+    'render',
+  ]);
+  const drift = await collectPostReleaseDrift(decision.id, { persistMonitor: false });
+  const history = await getReleaseEvidenceHistory(evidence.stream, options.limit ?? 8, {
+    provider: evidence.provider,
+  });
+  const releaseReady = decision.decision === 'go' && evidence.status === 'ready' && drift.status === 'ready';
+  const recommendation = releaseReady
+    ? 'Release decision, baseline evidence, and post-release monitor drift are aligned.'
+    : 'Review the release decision, reconciliation metadata, or current drift alerts before promotion.';
+  const generatedAt = Date.now();
+  const summary = {
+    decisionAccepted: decision.decision === 'go',
+    releaseReady,
+    evidenceRetained: history.length,
+    reconciliationState: reconciliation ? 'reconciled' as const : 'missing' as const,
+    driftState: drift.status,
+    recommendation,
+  };
+  const bundleChecksum = hashString(stableStringify({
+    decisionSignature: decision.decisionSignature,
+    driftChecksum: drift.driftChecksum,
+    evidenceChecksum: decision.evidenceChecksum,
+    generatedAt,
+    reconciliationSignature: reconciliation?.reconciliationSignature ?? null,
+    summary,
+  }));
+
+  return {
+    version: 'agros-release-bundle-summary-v1',
+    generatedAt,
+    stream: evidence.stream,
+    provider: evidence.provider,
+    decision,
+    evidence,
+    reconciliation,
+    comparison,
+    drift,
+    history,
+    summary,
+    bundleChecksum,
+  };
 }

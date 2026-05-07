@@ -166,6 +166,10 @@ Before a release promotion:
 7. If release status is `degraded` or `blocked`, confirm the release evidence export includes a degraded replay bundle checksum before rollback or exception handling.
 8. Record the final go/no-go/exception outcome with `POST /api/release/decisions`.
 9. For multi-provider promotions, compare `/api/release/evidence/compare?providers=railway,render,local-docker` before final handoff.
+10. Reconcile the accepted decision with commit, branch, PR, and source-thread metadata using `POST /api/release/reconciliations`.
+11. Capture `/api/release/bundle-summary?decisionId=<decision-id>` as the operator handoff record.
+12. Run `/api/release/drift?decisionId=<decision-id>` after promotion and treat degraded drift as a rollback or exception review trigger.
+13. Use `POST /api/release/evidence/retention` with `dryRun: true` before deleting old release evidence records.
 
 ## Continuity Failure Response
 

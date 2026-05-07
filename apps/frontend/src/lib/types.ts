@@ -357,6 +357,24 @@ export interface ReleaseDecisionRecord {
   createdAt: number;
 }
 
+export interface ReleaseReconciliationRecord {
+  id: string;
+  decisionId: string;
+  evidenceId: string;
+  stream: string;
+  provider: string;
+  commitSha: string;
+  branch: string;
+  pullRequestUrl?: string;
+  sourceThread?: string;
+  initiatedBy?: string;
+  decisionSignature: string;
+  evidenceChecksum: string;
+  providerSignature: string;
+  reconciliationSignature: string;
+  createdAt: number;
+}
+
 export interface ReleaseEvidenceComparison {
   stream: string;
   providers: string[];
@@ -373,6 +391,65 @@ export interface ReleaseEvidenceComparison {
     providerSignature?: string;
     missing: boolean;
   }>;
+}
+
+export interface ReleaseRetentionReport {
+  version: 'agros-release-retention-v1';
+  stream: string;
+  provider?: string;
+  retainLatest: number;
+  dryRun: boolean;
+  evaluatedCount: number;
+  candidateCount: number;
+  deletedCount: number;
+  candidates: Array<{
+    evidenceId: string;
+    provider: string;
+    status: ReleaseGateStatus;
+    rollbackStatus: ReleaseGateStatus;
+    checkedAt: number;
+    evidenceChecksum: string;
+  }>;
+  retentionChecksum: string;
+}
+
+export interface ReleaseDriftReport {
+  version: 'agros-post-release-drift-v1';
+  decisionId: string;
+  decisionSignature: string;
+  stream: string;
+  provider: string;
+  checkedAt: number;
+  status: 'ready' | 'degraded';
+  drifted: boolean;
+  baselineEvidenceChecksum: string;
+  currentEvidenceChecksum: string;
+  baselineEvidenceId: string;
+  currentMonitorSnapshotId?: string;
+  alerts: string[];
+  driftChecksum: string;
+}
+
+export interface ReleaseBundleSummary {
+  version: 'agros-release-bundle-summary-v1';
+  generatedAt: number;
+  stream: string;
+  provider: string;
+  decision: ReleaseDecisionRecord;
+  evidence: ReleaseEvidenceRecord;
+  reconciliation?: ReleaseReconciliationRecord;
+  comparison: ReleaseEvidenceComparison;
+  drift: ReleaseDriftReport;
+  history: ReleaseEvidenceRecord[];
+  summary: {
+    decisionAccepted: boolean;
+    releaseReady: boolean;
+    evidenceRetained: number;
+    reconciliationState: 'reconciled' | 'missing';
+    driftState: 'ready' | 'degraded';
+    recommendation: string;
+  };
+  bundleChecksum: string;
 }
 
 export interface SlotGPTOutput {

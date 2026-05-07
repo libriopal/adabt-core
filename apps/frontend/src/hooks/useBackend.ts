@@ -223,6 +223,48 @@ export function useBackend({ onError }: UseBackendOptions = {}) {
     return request(`/release/decisions${qs ? `?${qs}` : ''}`);
   }, [request]);
 
+  const createReleaseReconciliation = useCallback((params: {
+    decisionId: string;
+    commitSha: string;
+    branch: string;
+    pullRequestUrl?: string;
+    sourceThread?: string;
+    initiatedBy?: string;
+  }) => request('/release/reconciliations', { method: 'POST', body: JSON.stringify(params) }), [request]);
+
+  const getReleaseBundleSummary = useCallback((params?: {
+    decisionId?: string;
+    stream?: string;
+    provider?: string;
+    limit?: number;
+  }) => {
+    const qs = params ? new URLSearchParams(
+      Object.entries(params)
+        .filter(([, value]) => value !== undefined && value !== '')
+        .map(([key, value]) => [key, String(value)]),
+    ).toString() : '';
+    return request(`/release/bundle-summary${qs ? `?${qs}` : ''}`);
+  }, [request]);
+
+  const getReleaseDrift = useCallback((params: {
+    decisionId: string;
+    persistMonitor?: boolean;
+  }) => {
+    const qs = new URLSearchParams(
+      Object.entries(params)
+        .filter(([, value]) => value !== undefined && value !== '')
+        .map(([key, value]) => [key, String(value)]),
+    ).toString();
+    return request(`/release/drift?${qs}`);
+  }, [request]);
+
+  const applyReleaseEvidenceRetention = useCallback((params: {
+    stream?: string;
+    provider?: string;
+    retainLatest?: number;
+    dryRun?: boolean;
+  }) => request('/release/evidence/retention', { method: 'POST', body: JSON.stringify(params) }), [request]);
+
   return {
     loading,
     generateBatch,
@@ -248,5 +290,9 @@ export function useBackend({ onError }: UseBackendOptions = {}) {
     getReleaseEvidenceExport,
     createReleaseDecision,
     getReleaseDecisions,
+    createReleaseReconciliation,
+    getReleaseBundleSummary,
+    getReleaseDrift,
+    applyReleaseEvidenceRetention,
   };
 }

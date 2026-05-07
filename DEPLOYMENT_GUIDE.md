@@ -164,3 +164,5 @@ This validates:
 `deploy/github-actions-ci.yml` contains the GitHub Actions workflow template for repository maintainers to install under `.github/workflows/ci.yml`. It is kept under `deploy/` because GitHub App credentials without workflow permission cannot push directly to `.github/workflows`.
 
 Set `AGROS_API_URL` and optionally `AGROS_RELEASE_PROVIDER` in CI to upload a release evidence artifact after validation.
+
+After promotion, record the final decision with `/api/release/decisions`, reconcile it with the deployed commit using `/api/release/reconciliations`, capture `/api/release/bundle-summary`, and run `/api/release/drift` against the accepted decision signature.

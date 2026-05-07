@@ -8,6 +8,7 @@ import {
   EvolutionState,
   ReleaseEvidenceRecord,
   ReleaseDecisionRecord,
+  ReleaseReconciliationRecord,
   ReinforcementDecision,
   ReplayCheckpoint,
   ReplayMonitorSnapshot,
@@ -54,6 +55,10 @@ export type ReleaseDecisionInput = Omit<ReleaseDecisionRecord, 'createdAt'> & {
   createdAt?: number;
 };
 
+export type ReleaseReconciliationInput = Omit<ReleaseReconciliationRecord, 'createdAt'> & {
+  createdAt?: number;
+};
+
 export interface ReleaseEvidenceFilters {
   provider?: string;
   status?: ReleaseEvidenceRecord['status'];
@@ -63,6 +68,12 @@ export interface ReleaseEvidenceFilters {
 export interface ReleaseDecisionFilters {
   provider?: string;
   decision?: ReleaseDecisionRecord['decision'];
+}
+
+export interface ReleaseReconciliationFilters {
+  provider?: string;
+  decisionId?: string;
+  commitSha?: string;
 }
 
 export interface StorageRepository {
@@ -106,11 +117,17 @@ export interface StorageRepository {
     save(evidence: ReleaseEvidenceInput): Promise<ReleaseEvidenceRecord>;
     getLatest(stream?: string, limit?: number, filters?: ReleaseEvidenceFilters): Promise<ReleaseEvidenceRecord[]>;
     getById(id: string): Promise<ReleaseEvidenceRecord | null>;
+    deleteByIds(ids: string[]): Promise<number>;
   };
   releaseDecisions: {
     save(decision: ReleaseDecisionInput): Promise<ReleaseDecisionRecord>;
     getLatest(stream?: string, limit?: number, filters?: ReleaseDecisionFilters): Promise<ReleaseDecisionRecord[]>;
     getById(id: string): Promise<ReleaseDecisionRecord | null>;
+  };
+  releaseReconciliations: {
+    save(reconciliation: ReleaseReconciliationInput): Promise<ReleaseReconciliationRecord>;
+    getLatest(stream?: string, limit?: number, filters?: ReleaseReconciliationFilters): Promise<ReleaseReconciliationRecord[]>;
+    getById(id: string): Promise<ReleaseReconciliationRecord | null>;
   };
   close(): Promise<void>;
 }
@@ -277,6 +294,26 @@ function rowToReleaseDecision(row: any): ReleaseDecisionRecord {
     evidenceChecksum: row.evidence_checksum,
     providerSignature: row.provider_signature,
     decisionSignature: row.decision_signature,
+    createdAt: Number(row.created_at),
+  };
+}
+
+function rowToReleaseReconciliation(row: any): ReleaseReconciliationRecord {
+  return {
+    id: row.id,
+    decisionId: row.decision_id,
+    evidenceId: row.evidence_id,
+    stream: row.stream,
+    provider: row.provider,
+    commitSha: row.commit_sha,
+    branch: row.branch,
+    pullRequestUrl: row.pull_request_url ?? undefined,
+    sourceThread: row.source_thread ?? undefined,
+    initiatedBy: row.initiated_by ?? undefined,
+    decisionSignature: row.decision_signature,
+    evidenceChecksum: row.evidence_checksum,
+    providerSignature: row.provider_signature,
+    reconciliationSignature: row.reconciliation_signature,
     createdAt: Number(row.created_at),
   };
 }
@@ -637,6 +674,14 @@ export class SqliteStorageRepository implements StorageRepository {
       const row = getDB().prepare('SELECT * FROM release_evidence WHERE id = ?').get(id) as any;
       return row ? rowToReleaseEvidence(row) : null;
     },
+    deleteByIds: async (ids: string[]): Promise<number> => {
+      if (!ids.length) return 0;
+      const placeholders = ids.map(() => '?').join(', ');
+      const result = getDB()
+        .prepare(`DELETE FROM release_evidence WHERE id IN (${placeholders})`)
+        .run(...ids);
+      return Number(result.changes ?? 0);
+    },
   };
 
   releaseDecisions = {
@@ -698,6 +743,77 @@ export class SqliteStorageRepository implements StorageRepository {
     getById: async (id: string): Promise<ReleaseDecisionRecord | null> => {
       const row = getDB().prepare('SELECT * FROM release_decisions WHERE id = ?').get(id) as any;
       return row ? rowToReleaseDecision(row) : null;
+    },
+  };
+
+  releaseReconciliations = {
+    save: async (reconciliation: ReleaseReconciliationInput): Promise<ReleaseReconciliationRecord> => {
+      const existing = getDB().prepare('SELECT id FROM release_reconciliations WHERE id = ?').get(reconciliation.id);
+      if (existing) {
+        throw new Error(`Release reconciliation already exists: ${reconciliation.id}`);
+      }
+      const createdAt = reconciliation.createdAt ?? Date.now();
+      getDB().prepare(`
+        INSERT INTO release_reconciliations
+          (id, decision_id, evidence_id, stream, provider, commit_sha, branch,
+           pull_request_url, source_thread, initiated_by, decision_signature,
+           evidence_checksum, provider_signature, reconciliation_signature, created_at)
+        VALUES
+          (@id, @decision_id, @evidence_id, @stream, @provider, @commit_sha, @branch,
+           @pull_request_url, @source_thread, @initiated_by, @decision_signature,
+           @evidence_checksum, @provider_signature, @reconciliation_signature, @created_at)
+      `).run({
+        id: reconciliation.id,
+        decision_id: reconciliation.decisionId,
+        evidence_id: reconciliation.evidenceId,
+        stream: reconciliation.stream,
+        provider: reconciliation.provider,
+        commit_sha: reconciliation.commitSha,
+        branch: reconciliation.branch,
+        pull_request_url: reconciliation.pullRequestUrl ?? null,
+        source_thread: reconciliation.sourceThread ?? null,
+        initiated_by: reconciliation.initiatedBy ?? null,
+        decision_signature: reconciliation.decisionSignature,
+        evidence_checksum: reconciliation.evidenceChecksum,
+        provider_signature: reconciliation.providerSignature,
+        reconciliation_signature: reconciliation.reconciliationSignature,
+        created_at: createdAt,
+      });
+
+      return { ...reconciliation, createdAt };
+    },
+    getLatest: async (
+      stream?: string,
+      limit = 20,
+      filters: ReleaseReconciliationFilters = {},
+    ): Promise<ReleaseReconciliationRecord[]> => {
+      const conditions: string[] = [];
+      const params: Record<string, unknown> = { limit };
+      if (stream) {
+        conditions.push('stream = @stream');
+        params.stream = stream;
+      }
+      if (filters.provider) {
+        conditions.push('provider = @provider');
+        params.provider = filters.provider;
+      }
+      if (filters.decisionId) {
+        conditions.push('decision_id = @decisionId');
+        params.decisionId = filters.decisionId;
+      }
+      if (filters.commitSha) {
+        conditions.push('commit_sha = @commitSha');
+        params.commitSha = filters.commitSha;
+      }
+      const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+      const rows = getDB()
+        .prepare(`SELECT * FROM release_reconciliations ${where} ORDER BY created_at DESC LIMIT @limit`)
+        .all(params) as any[];
+      return rows.map(rowToReleaseReconciliation);
+    },
+    getById: async (id: string): Promise<ReleaseReconciliationRecord | null> => {
+      const row = getDB().prepare('SELECT * FROM release_reconciliations WHERE id = ?').get(id) as any;
+      return row ? rowToReleaseReconciliation(row) : null;
     },
   };
 
@@ -1159,6 +1275,11 @@ export class PostgresStorageRepository implements StorageRepository {
       const result = await this.pool.query('SELECT * FROM release_evidence WHERE id = $1', [id]);
       return result.rows[0] ? rowToReleaseEvidence(result.rows[0]) : null;
     },
+    deleteByIds: async (ids: string[]): Promise<number> => {
+      if (!ids.length) return 0;
+      const result = await this.pool.query('DELETE FROM release_evidence WHERE id = ANY($1::text[])', [ids]);
+      return Number(result.rowCount ?? 0);
+    },
   };
 
   releaseDecisions = {
@@ -1221,6 +1342,77 @@ export class PostgresStorageRepository implements StorageRepository {
     getById: async (id: string): Promise<ReleaseDecisionRecord | null> => {
       const result = await this.pool.query('SELECT * FROM release_decisions WHERE id = $1', [id]);
       return result.rows[0] ? rowToReleaseDecision(result.rows[0]) : null;
+    },
+  };
+
+  releaseReconciliations = {
+    save: async (reconciliation: ReleaseReconciliationInput): Promise<ReleaseReconciliationRecord> => {
+      const existing = await this.pool.query('SELECT id FROM release_reconciliations WHERE id = $1', [reconciliation.id]);
+      if (existing.rows[0]) {
+        throw new Error(`Release reconciliation already exists: ${reconciliation.id}`);
+      }
+      const createdAt = reconciliation.createdAt ?? Date.now();
+      await this.pool.query(`
+        INSERT INTO release_reconciliations
+          (id, decision_id, evidence_id, stream, provider, commit_sha, branch,
+           pull_request_url, source_thread, initiated_by, decision_signature,
+           evidence_checksum, provider_signature, reconciliation_signature, created_at)
+        VALUES
+          ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      `, [
+        reconciliation.id,
+        reconciliation.decisionId,
+        reconciliation.evidenceId,
+        reconciliation.stream,
+        reconciliation.provider,
+        reconciliation.commitSha,
+        reconciliation.branch,
+        reconciliation.pullRequestUrl ?? null,
+        reconciliation.sourceThread ?? null,
+        reconciliation.initiatedBy ?? null,
+        reconciliation.decisionSignature,
+        reconciliation.evidenceChecksum,
+        reconciliation.providerSignature,
+        reconciliation.reconciliationSignature,
+        createdAt,
+      ]);
+
+      return { ...reconciliation, createdAt };
+    },
+    getLatest: async (
+      stream?: string,
+      limit = 20,
+      filters: ReleaseReconciliationFilters = {},
+    ): Promise<ReleaseReconciliationRecord[]> => {
+      const conditions: string[] = [];
+      const values: unknown[] = [];
+      if (stream) {
+        values.push(stream);
+        conditions.push(`stream = $${values.length}`);
+      }
+      if (filters.provider) {
+        values.push(filters.provider);
+        conditions.push(`provider = $${values.length}`);
+      }
+      if (filters.decisionId) {
+        values.push(filters.decisionId);
+        conditions.push(`decision_id = $${values.length}`);
+      }
+      if (filters.commitSha) {
+        values.push(filters.commitSha);
+        conditions.push(`commit_sha = $${values.length}`);
+      }
+      values.push(limit);
+      const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+      const result = await this.pool.query(
+        `SELECT * FROM release_reconciliations ${where} ORDER BY created_at DESC LIMIT $${values.length}`,
+        values,
+      );
+      return result.rows.map(rowToReleaseReconciliation);
+    },
+    getById: async (id: string): Promise<ReleaseReconciliationRecord | null> => {
+      const result = await this.pool.query('SELECT * FROM release_reconciliations WHERE id = $1', [id]);
+      return result.rows[0] ? rowToReleaseReconciliation(result.rows[0]) : null;
     },
   };
 

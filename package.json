@@ -22,6 +22,7 @@
     "validate:phase7": "node scripts/validate-phase7.mjs",
     "validate:phase8": "node scripts/validate-phase8.mjs",
     "validate:phase9": "node scripts/validate-phase9.mjs",
+    "validate:phase10": "node scripts/validate-phase10.mjs",
     "artifact:release-evidence": "node scripts/generate-release-evidence-artifact.mjs",
     "preflight:release": "node scripts/release-preflight.mjs",
     "preflight:railway": "node scripts/release-preflight.mjs --provider=railway",
