@@ -149,13 +149,42 @@ export function useBackend({ onError }: UseBackendOptions = {}) {
     return request(`/replay/degraded-export${qs ? `?${qs}` : ''}`);
   }, [request]);
 
-  const getReleaseReadiness = useCallback((params?: { stream?: string; persistMonitor?: boolean }) => {
+  const getReleaseReadiness = useCallback((params?: {
+    stream?: string;
+    provider?: string;
+    persistMonitor?: boolean;
+    persistEvidence?: boolean;
+    includeRollbackPreflight?: boolean;
+  }) => {
     const qs = params ? new URLSearchParams(
       Object.entries(params)
         .filter(([, value]) => value !== undefined && value !== '')
         .map(([key, value]) => [key, String(value)]),
     ).toString() : '';
     return request(`/release/readiness${qs ? `?${qs}` : ''}`);
+  }, [request]);
+
+  const getReleaseEvidenceHistory = useCallback((params?: { stream?: string; limit?: number }) => {
+    const qs = params ? new URLSearchParams(
+      Object.entries(params)
+        .filter(([, value]) => value !== undefined && value !== '')
+        .map(([key, value]) => [key, String(value)]),
+    ).toString() : '';
+    return request(`/release/evidence${qs ? `?${qs}` : ''}`);
+  }, [request]);
+
+  const getReleaseEvidenceExport = useCallback((params?: {
+    stream?: string;
+    provider?: string;
+    limit?: number;
+    includeRollbackPreflight?: boolean;
+  }) => {
+    const qs = params ? new URLSearchParams(
+      Object.entries(params)
+        .filter(([, value]) => value !== undefined && value !== '')
+        .map(([key, value]) => [key, String(value)]),
+    ).toString() : '';
+    return request(`/release/evidence/export${qs ? `?${qs}` : ''}`);
   }, [request]);
 
   return {
@@ -178,5 +207,7 @@ export function useBackend({ onError }: UseBackendOptions = {}) {
     getContinuityExport,
     getDegradedReplayExport,
     getReleaseReadiness,
+    getReleaseEvidenceHistory,
+    getReleaseEvidenceExport,
   };
 }

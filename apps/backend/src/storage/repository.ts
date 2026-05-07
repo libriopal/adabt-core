@@ -6,6 +6,7 @@ import {
   Design,
   EventLogEntry,
   EvolutionState,
+  ReleaseEvidenceRecord,
   ReinforcementDecision,
   ReplayCheckpoint,
   ReplayMonitorSnapshot,
@@ -44,6 +45,10 @@ export type ReplayMonitorSnapshotInput = Omit<ReplayMonitorSnapshot, 'acknowledg
   acknowledgedBy?: string;
 };
 
+export type ReleaseEvidenceInput = Omit<ReleaseEvidenceRecord, 'createdAt'> & {
+  createdAt?: number;
+};
+
 export interface StorageRepository {
   provider: DatabaseProvider;
   designs: {
@@ -80,6 +85,11 @@ export interface StorageRepository {
     save(snapshot: ReplayMonitorSnapshotInput): Promise<ReplayMonitorSnapshot>;
     getLatest(stream?: string, limit?: number): Promise<ReplayMonitorSnapshot[]>;
     acknowledge(id: string, acknowledgedBy?: string): Promise<ReplayMonitorSnapshot | null>;
+  };
+  releaseEvidence: {
+    save(evidence: ReleaseEvidenceInput): Promise<ReleaseEvidenceRecord>;
+    getLatest(stream?: string, limit?: number): Promise<ReleaseEvidenceRecord[]>;
+    getById(id: string): Promise<ReleaseEvidenceRecord | null>;
   };
   close(): Promise<void>;
 }
@@ -211,6 +221,25 @@ function rowToReplayMonitorSnapshot(row: any): ReplayMonitorSnapshot {
       ? undefined
       : Number(row.acknowledged_at),
     acknowledgedBy: row.acknowledged_by ?? undefined,
+  };
+}
+
+function rowToReleaseEvidence(row: any): ReleaseEvidenceRecord {
+  return {
+    id: row.id,
+    stream: row.stream,
+    provider: row.provider,
+    status: row.status,
+    checkedAt: Number(row.checked_at),
+    gateCount: Number(row.gate_count),
+    blockedGateCount: Number(row.blocked_gate_count),
+    degradedGateCount: Number(row.degraded_gate_count),
+    latestMonitorSnapshotId: row.latest_monitor_snapshot_id ?? undefined,
+    latestAlertSnapshotId: row.latest_alert_snapshot_id ?? undefined,
+    rollbackStatus: row.rollback_status,
+    latestDegradedExportChecksum: row.latest_degraded_export_checksum ?? undefined,
+    report: JSON.parse(row.report),
+    createdAt: Number(row.created_at),
   };
 }
 
@@ -503,6 +532,53 @@ export class SqliteStorageRepository implements StorageRepository {
         .run(acknowledgedAt, acknowledgedBy, id);
       const row = getDB().prepare('SELECT * FROM replay_monitor_snapshots WHERE id = ?').get(id) as any;
       return row ? rowToReplayMonitorSnapshot(row) : null;
+    },
+  };
+
+  releaseEvidence = {
+    save: async (evidence: ReleaseEvidenceInput): Promise<ReleaseEvidenceRecord> => {
+      const createdAt = evidence.createdAt ?? Date.now();
+      getDB().prepare(`
+        INSERT OR REPLACE INTO release_evidence
+          (id, stream, provider, status, checked_at, gate_count, blocked_gate_count,
+           degraded_gate_count, latest_monitor_snapshot_id, latest_alert_snapshot_id,
+           rollback_status, latest_degraded_export_checksum, report, created_at)
+        VALUES
+          (@id, @stream, @provider, @status, @checked_at, @gate_count, @blocked_gate_count,
+           @degraded_gate_count, @latest_monitor_snapshot_id, @latest_alert_snapshot_id,
+           @rollback_status, @latest_degraded_export_checksum, @report, @created_at)
+      `).run({
+        id: evidence.id,
+        stream: evidence.stream,
+        provider: evidence.provider,
+        status: evidence.status,
+        checked_at: evidence.checkedAt,
+        gate_count: evidence.gateCount,
+        blocked_gate_count: evidence.blockedGateCount,
+        degraded_gate_count: evidence.degradedGateCount,
+        latest_monitor_snapshot_id: evidence.latestMonitorSnapshotId ?? null,
+        latest_alert_snapshot_id: evidence.latestAlertSnapshotId ?? null,
+        rollback_status: evidence.rollbackStatus,
+        latest_degraded_export_checksum: evidence.latestDegradedExportChecksum ?? null,
+        report: JSON.stringify(evidence.report),
+        created_at: createdAt,
+      });
+
+      return { ...evidence, createdAt };
+    },
+    getLatest: async (stream?: string, limit = 20): Promise<ReleaseEvidenceRecord[]> => {
+      const rows = stream
+        ? getDB()
+          .prepare('SELECT * FROM release_evidence WHERE stream = ? ORDER BY checked_at DESC LIMIT ?')
+          .all(stream, limit) as any[]
+        : getDB()
+          .prepare('SELECT * FROM release_evidence ORDER BY checked_at DESC LIMIT ?')
+          .all(limit) as any[];
+      return rows.map(rowToReleaseEvidence);
+    },
+    getById: async (id: string): Promise<ReleaseEvidenceRecord | null> => {
+      const row = getDB().prepare('SELECT * FROM release_evidence WHERE id = ?').get(id) as any;
+      return row ? rowToReleaseEvidence(row) : null;
     },
   };
 
@@ -883,6 +959,67 @@ export class PostgresStorageRepository implements StorageRepository {
         RETURNING *
       `, [acknowledgedAt, acknowledgedBy, id]);
       return result.rows[0] ? rowToReplayMonitorSnapshot(result.rows[0]) : null;
+    },
+  };
+
+  releaseEvidence = {
+    save: async (evidence: ReleaseEvidenceInput): Promise<ReleaseEvidenceRecord> => {
+      const createdAt = evidence.createdAt ?? Date.now();
+      await this.pool.query(`
+        INSERT INTO release_evidence
+          (id, stream, provider, status, checked_at, gate_count, blocked_gate_count,
+           degraded_gate_count, latest_monitor_snapshot_id, latest_alert_snapshot_id,
+           rollback_status, latest_degraded_export_checksum, report, created_at)
+        VALUES
+          ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        ON CONFLICT (id) DO UPDATE SET
+          stream = EXCLUDED.stream,
+          provider = EXCLUDED.provider,
+          status = EXCLUDED.status,
+          checked_at = EXCLUDED.checked_at,
+          gate_count = EXCLUDED.gate_count,
+          blocked_gate_count = EXCLUDED.blocked_gate_count,
+          degraded_gate_count = EXCLUDED.degraded_gate_count,
+          latest_monitor_snapshot_id = EXCLUDED.latest_monitor_snapshot_id,
+          latest_alert_snapshot_id = EXCLUDED.latest_alert_snapshot_id,
+          rollback_status = EXCLUDED.rollback_status,
+          latest_degraded_export_checksum = EXCLUDED.latest_degraded_export_checksum,
+          report = EXCLUDED.report,
+          created_at = EXCLUDED.created_at
+      `, [
+        evidence.id,
+        evidence.stream,
+        evidence.provider,
+        evidence.status,
+        evidence.checkedAt,
+        evidence.gateCount,
+        evidence.blockedGateCount,
+        evidence.degradedGateCount,
+        evidence.latestMonitorSnapshotId ?? null,
+        evidence.latestAlertSnapshotId ?? null,
+        evidence.rollbackStatus,
+        evidence.latestDegradedExportChecksum ?? null,
+        JSON.stringify(evidence.report),
+        createdAt,
+      ]);
+
+      return { ...evidence, createdAt };
+    },
+    getLatest: async (stream?: string, limit = 20): Promise<ReleaseEvidenceRecord[]> => {
+      const result = stream
+        ? await this.pool.query(
+          'SELECT * FROM release_evidence WHERE stream = $1 ORDER BY checked_at DESC LIMIT $2',
+          [stream, limit],
+        )
+        : await this.pool.query(
+          'SELECT * FROM release_evidence ORDER BY checked_at DESC LIMIT $1',
+          [limit],
+        );
+      return result.rows.map(rowToReleaseEvidence);
+    },
+    getById: async (id: string): Promise<ReleaseEvidenceRecord | null> => {
+      const result = await this.pool.query('SELECT * FROM release_evidence WHERE id = $1', [id]);
+      return result.rows[0] ? rowToReleaseEvidence(result.rows[0]) : null;
     },
   };
 

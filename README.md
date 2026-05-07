@@ -104,6 +104,9 @@ See `DEPLOYMENT_GUIDE.md` for environment variables and provider-specific setup.
 - `GET /api/ready`
 - `GET /api/diagnostics`
 - `GET /api/release/readiness`
+- `GET /api/release/evidence`
+- `GET /api/release/evidence/export`
+- `GET /api/release/evidence/:evidenceId`
 - `GET /api/replay/verify`
 - `GET /api/replay/history`
 - `GET /api/replay/monitor`
@@ -119,4 +122,11 @@ See `DEPLOYMENT_GUIDE.md` for environment variables and provider-specific setup.
 
 ## State
 
-Backend SQLite runtime files are intentionally ignored. Local runtime defaults to `DATABASE_PROVIDER=sqlite` and `DATABASE_PATH=./data/slotgpt.db`. Phase 7 routes request-time storage, replay event history, replay checkpoints, monitor snapshots, continuity exports, checkpoint diffs, degraded replay exports, and release readiness gates through the operational replay path. Use `DATABASE_PROVIDER=postgres` plus `DATABASE_URL` for Postgres-backed request storage.
+Backend SQLite runtime files are intentionally ignored. Local runtime defaults to `DATABASE_PROVIDER=sqlite` and `DATABASE_PATH=./data/slotgpt.db`. Phase 8 routes request-time storage, replay event history, replay checkpoints, monitor snapshots, continuity exports, checkpoint diffs, degraded replay exports, release readiness gates, and release evidence archives through the operational replay path. Use `DATABASE_PROVIDER=postgres` plus `DATABASE_URL` for Postgres-backed request storage.
+
+## Phase 8 Validation
+
+```bash
+npm run validate:phase8
+npm run preflight:docker -- --api-url=http://localhost:3001/api --rollback-check=true
+```

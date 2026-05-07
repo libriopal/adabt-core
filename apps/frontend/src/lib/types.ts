@@ -288,6 +288,7 @@ export interface ReleaseReadinessReport {
   status: ReleaseGateStatus;
   checkedAt: number;
   stream: string;
+  provider: string;
   runtime: {
     status: 'ready' | 'degraded';
     environment: string;
@@ -299,7 +300,44 @@ export interface ReleaseReadinessReport {
   latestAlertSnapshot?: ReplayMonitorSnapshot;
   latestAcknowledgedAlertSnapshot?: ReplayMonitorSnapshot;
   gates: ReleaseGateReport[];
+  rollbackPreflight: {
+    status: ReleaseGateStatus;
+    detail: string;
+    degradedExportChecksum?: string;
+    monitorSnapshotId?: string;
+    recommendations: string[];
+  };
   recommendations: string[];
+}
+
+export interface ReleaseEvidenceRecord {
+  id: string;
+  stream: string;
+  provider: string;
+  status: ReleaseGateStatus;
+  checkedAt: number;
+  gateCount: number;
+  blockedGateCount: number;
+  degradedGateCount: number;
+  latestMonitorSnapshotId?: string;
+  latestAlertSnapshotId?: string;
+  rollbackStatus: ReleaseGateStatus;
+  latestDegradedExportChecksum?: string;
+  report: Record<string, unknown>;
+  createdAt: number;
+}
+
+export interface ReleaseEvidenceExportBundle {
+  version: 'agros-release-evidence-v1';
+  id: string;
+  exportedAt: number;
+  stream: string;
+  provider: string;
+  release: ReleaseReadinessReport;
+  evidenceRecord: ReleaseEvidenceRecord;
+  history: ReleaseEvidenceRecord[];
+  degradedReplayExport: DegradedReplayExportBundle | null;
+  exportChecksum: string;
 }
 
 export interface SlotGPTOutput {

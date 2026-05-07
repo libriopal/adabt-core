@@ -142,6 +142,23 @@ export interface ReplayMonitorSnapshot {
   acknowledgedBy?: string;
 }
 
+export interface ReleaseEvidenceRecord {
+  id: string;
+  stream: string;
+  provider: string;
+  status: 'ready' | 'degraded' | 'blocked';
+  checkedAt: number;
+  gateCount: number;
+  blockedGateCount: number;
+  degradedGateCount: number;
+  latestMonitorSnapshotId?: string;
+  latestAlertSnapshotId?: string;
+  rollbackStatus: 'ready' | 'degraded' | 'blocked';
+  latestDegradedExportChecksum?: string;
+  report: Record<string, unknown>;
+  createdAt: number;
+}
+
 export interface Design {
   id: string;
   seed: string;

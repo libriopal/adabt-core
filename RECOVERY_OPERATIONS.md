@@ -154,13 +154,16 @@ Before a release promotion:
 2. Proceed only when the release status is `ready`.
 3. Treat `blocked` as a hard stop until the latest replay alert is acknowledged or resolved.
 4. Treat `degraded` as an operator exception path that requires a written release note.
-5. Run the provider preflight command:
+5. Export `/api/release/evidence/export` and attach the JSON to the release record.
+6. Run the provider preflight command with rollback evidence enabled:
 
    ```bash
-   npm run preflight:railway -- --api-url=https://<railway-backend>/api
-   npm run preflight:render -- --api-url=https://<render-backend>/api
-   npm run preflight:docker -- --api-url=http://localhost:3001/api
+   npm run preflight:railway -- --api-url=https://<railway-backend>/api --rollback-check=true
+   npm run preflight:render -- --api-url=https://<render-backend>/api --rollback-check=true
+   npm run preflight:docker -- --api-url=http://localhost:3001/api --rollback-check=true
    ```
+
+7. If release status is `degraded` or `blocked`, confirm the release evidence export includes a degraded replay bundle checksum before rollback or exception handling.
 
 ## Continuity Failure Response
 

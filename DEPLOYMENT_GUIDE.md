@@ -34,6 +34,7 @@ Important variables:
 ```bash
 docker compose up --build
 npm run preflight:docker -- --api-url=http://localhost:3001/api
+npm run preflight:docker -- --api-url=http://localhost:3001/api --rollback-check=true
 ```
 
 Services:
@@ -102,6 +103,7 @@ After deployment, run:
 
 ```bash
 npm run preflight:railway -- --api-url=https://<railway-backend>/api
+npm run preflight:railway -- --api-url=https://<railway-backend>/api --rollback-check=true
 ```
 
 ## Render Backend
@@ -114,6 +116,7 @@ After deployment, run:
 
 ```bash
 npm run preflight:render -- --api-url=https://<render-backend>/api
+npm run preflight:render -- --api-url=https://<render-backend>/api --rollback-check=true
 ```
 
 ## Android Termux Development
@@ -142,6 +145,7 @@ Provider release preflight:
 
 ```bash
 npm run preflight:release -- --provider=railway --api-url=https://<backend>/api
+npm run preflight:release -- --provider=railway --api-url=https://<backend>/api --rollback-check=true
 ```
 
 This validates:

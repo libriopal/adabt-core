@@ -18,7 +18,11 @@ import {
   monitorReplayHistory,
 } from '../diagnostics/replayHistory';
 import { runReplaySuite } from '../diagnostics/replaySuite';
-import { collectReleaseReadiness } from '../diagnostics/releaseReadiness';
+import {
+  collectReleaseReadiness,
+  createReleaseEvidenceExport,
+  getReleaseEvidenceHistory,
+} from '../diagnostics/releaseReadiness';
 import { collectSystemDiagnostics } from '../diagnostics/systemDiagnostics';
 import { RequestWithContext, validateRuntimeEnvironment } from '../diagnostics/runtimeValidation';
 
@@ -99,7 +103,21 @@ const DegradedReplayExportQuerySchema = ContinuityExportQuerySchema.extend({
 
 const ReleaseReadinessQuerySchema = z.object({
   stream: z.string().min(1).default(DEFAULT_REPLAY_STREAM),
+  provider: z.string().min(1).default('local-docker'),
   persistMonitor: z.preprocess(value => (
+    value === undefined ? true : !['false', '0', 'no'].includes(String(value).toLowerCase())
+  ), z.boolean()).default(true),
+  persistEvidence: z.preprocess(value => (
+    value === undefined ? true : !['false', '0', 'no'].includes(String(value).toLowerCase())
+  ), z.boolean()).default(true),
+  includeRollbackPreflight: z.preprocess(value => (
+    value === undefined ? false : !['false', '0', 'no'].includes(String(value).toLowerCase())
+  ), z.boolean()).default(false),
+});
+
+const ReleaseEvidenceQuerySchema = ReplayHistoryQuerySchema.extend({
+  provider: z.string().min(1).default('local-docker'),
+  includeRollbackPreflight: z.preprocess(value => (
     value === undefined ? true : !['false', '0', 'no'].includes(String(value).toLowerCase())
   ), z.boolean()).default(true),
 });
@@ -380,7 +398,10 @@ router.get('/release/readiness', async (req: RequestWithContext, res) => {
     const query = ReleaseReadinessQuerySchema.parse(req.query);
     const release = await collectReleaseReadiness({
       stream: query.stream,
+      provider: query.provider,
       persistMonitor: query.persistMonitor,
+      persistEvidence: query.persistEvidence,
+      includeRollbackPreflight: query.includeRollbackPreflight,
     });
     res.status(release.status === 'ready' ? 200 : 503).json({
       success: true,
@@ -388,6 +409,50 @@ router.get('/release/readiness', async (req: RequestWithContext, res) => {
     });
   } catch (error) {
     const id = logRouteError('REL', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/evidence', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReplayHistoryQuerySchema.parse(req.query);
+    const evidence = await getReleaseEvidenceHistory(query.stream, query.limit);
+    res.json({ success: true, evidence });
+  } catch (error) {
+    const id = logRouteError('REV', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/evidence/export', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReleaseEvidenceQuerySchema.parse(req.query);
+    const evidenceExport = await createReleaseEvidenceExport({
+      stream: query.stream,
+      provider: query.provider,
+      limit: query.limit,
+      includeRollbackPreflight: query.includeRollbackPreflight,
+    });
+    res.status(evidenceExport.release.status === 'ready' ? 200 : 503).json({
+      success: true,
+      export: evidenceExport,
+    });
+  } catch (error) {
+    const id = logRouteError('REE', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/evidence/:evidenceId', async (req: RequestWithContext, res) => {
+  try {
+    const evidence = await getStorageRepository().releaseEvidence.getById(req.params.evidenceId);
+    if (!evidence) {
+      res.status(404).json({ success: false, error: `Release evidence not found: ${req.params.evidenceId}` });
+      return;
+    }
+    res.json({ success: true, evidence });
+  } catch (error) {
+    const id = logRouteError('REI', req, error);
     res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
   }
 });
