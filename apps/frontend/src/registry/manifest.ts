@@ -113,19 +113,33 @@ const AGROS_LAYERS: Omit<LayerManifest, 'status'>[] = [
     dependencies: ['Intent Processing', 'Demand Intelligence'],
   },
   {
-    name: 'STRUTHIO-SEC Mesh',
+    name: 'Context Collapse Compression',
     order: 8,
+    components: [
+      { name: 'SemanticGraphAbstraction', path: 'cocoon/semanticGraph.ts', type: 'core', status: 'stable', dependencies: ['MemoryGraph', 'ReinforcementEngine'] },
+      { name: 'ManifoldEncoder', path: 'cocoon/manifoldEncoder.ts', type: 'service', status: 'stable', dependencies: ['SemanticGraphAbstraction'] },
+      { name: 'CocoonStateSerializer', path: 'cocoon/serializer.ts', type: 'service', status: 'stable', dependencies: ['ManifoldEncoder'] },
+      { name: 'CompressionMetadataRegistry', path: 'cocoon/metadata.ts', type: 'service', status: 'stable', dependencies: ['CocoonStateSerializer'] },
+      { name: 'ContinuityScorer', path: 'cocoon/metadata.ts', type: 'service', status: 'stable', dependencies: ['SemanticGraphAbstraction'] },
+      { name: 'ReconstructionVerifier', path: 'cocoon/verifier.ts', type: 'service', status: 'stable', dependencies: ['CocoonStateSerializer', 'CompressionMetadataRegistry'] },
+      { name: 'TopologyInspector', path: 'cocoon/verifier.ts', type: 'service', status: 'stable', dependencies: ['ManifoldEncoder'] },
+    ],
+    dependencies: ['Memory Layer', 'Reinforcement Layer'],
+  },
+  {
+    name: 'STRUTHIO-SEC Mesh',
+    order: 9,
     components: [
       { name: 'IntegrityLoop', path: 'struthio/integrity.ts', type: 'core', status: 'evolving', dependencies: [] },
       { name: 'DriftDetector', path: 'struthio/drift.ts', type: 'service', status: 'evolving', dependencies: ['IntegrityLoop'] },
       { name: 'RecoveryEngine', path: 'struthio/recovery.ts', type: 'service', status: 'evolving', dependencies: ['IntegrityLoop', 'IndexedDBPersistence'] },
       { name: 'ConsensusValidator', path: 'struthio/consensus.ts', type: 'service', status: 'evolving', dependencies: ['IntegrityLoop'] },
     ],
-    dependencies: ['Persistence Layer'],
+    dependencies: ['Persistence Layer', 'Context Collapse Compression'],
   },
   {
     name: 'Debug Layer',
-    order: 9,
+    order: 10,
     components: [
       { name: 'MetricsCollector', path: 'debug/metrics.ts', type: 'service', status: 'stable', dependencies: ['IndexedDBPersistence'] },
       { name: 'TraceLogger', path: 'debug/trace.ts', type: 'service', status: 'stable', dependencies: [] },
@@ -135,16 +149,17 @@ const AGROS_LAYERS: Omit<LayerManifest, 'status'>[] = [
   },
   {
     name: 'Visualization Layer',
-    order: 10,
+    order: 11,
     components: [
       { name: 'EvolutionVisualizer', path: 'components/EvolutionVisualizer.tsx', type: 'ui', status: 'stable', dependencies: ['EvolutionEngine'] },
       { name: 'EvolutionSimulatorPanel', path: 'components/EvolutionSimulatorPanel.tsx', type: 'ui', status: 'stable', dependencies: ['EvolutionSimulator'] },
       { name: 'DemandIntelligencePanel', path: 'components/DemandIntelligencePanel.tsx', type: 'ui', status: 'stable', dependencies: ['DemandEngine'] },
       { name: 'ReinforcementOptimizerPanel', path: 'components/ReinforcementOptimizerPanel.tsx', type: 'ui', status: 'stable', dependencies: ['ReinforcementEngine'] },
+      { name: 'CocoonDebugPanel', path: 'components/CocoonDebugPanel.tsx', type: 'ui', status: 'stable', dependencies: ['ReconstructionVerifier', 'TopologyInspector'] },
       { name: 'MemoryInspector', path: 'components/MemoryInspector.tsx', type: 'ui', status: 'evolving', dependencies: ['MemoryGraph'] },
       { name: 'DebugPanel', path: 'components/DebugPanel.tsx', type: 'ui', status: 'evolving', dependencies: ['MetricsCollector', 'TraceLogger'] },
     ],
-    dependencies: ['Debug Layer', 'Evolution Layer', 'Memory Layer'],
+    dependencies: ['Debug Layer', 'Evolution Layer', 'Memory Layer', 'Context Collapse Compression'],
   },
 ];
 
@@ -251,6 +266,7 @@ class ArchitectureRegistry {
     if (path.includes('utils/') || path.includes('crypto')) return 'Deterministic Core';
     if (path.includes('storage/') || path.includes('cache/')) return 'Persistence Layer';
     if (path.includes('memory/')) return 'Memory Layer';
+    if (path.includes('cocoon/') || path.includes('compression/')) return 'Context Collapse Compression';
     if (path.includes('evolution') || path.includes('mutation') || path.includes('selection')) return 'Evolution Layer';
     if (path.includes('intent') || path.includes('mechanic') || path.includes('content') || path.includes('scoring')) return 'Intent Processing';
     if (path.includes('reinforcement') || path.includes('reward')) return 'Reinforcement Layer';

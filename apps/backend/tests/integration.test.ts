@@ -4,6 +4,7 @@ import { demandEngine } from '../src/services/demandEngine';
 import { evolutionEngine } from '../src/services/evolutionEngine';
 import { reinforcementEngine } from '../src/services/reinforcementEngine';
 import { initDatabase } from '../src/storage/db';
+import { verifyCocoonReplay } from '../../frontend/src/cocoon/verifier';
 
 beforeAll(() => {
   initDatabase(':memory:');
@@ -75,5 +76,16 @@ describe('Integration Tests', () => {
     expect(replay.firstChecksum).toBe(replay.secondChecksum);
     expect(replay.decisionCount).toBe(3);
     expect(Object.values(replay.gateStatuses).reduce((sum, count) => sum + count, 0)).toBe(3);
+  });
+
+  it('should verify deterministic cocoon reconstruction replay', () => {
+    const replay = verifyCocoonReplay();
+
+    expect(replay.stable).toBe(true);
+    expect(replay.firstChecksum).toBe(replay.secondChecksum);
+    expect(replay.reconstruction.accuracy).toBe(1);
+    expect(replay.continuity.overall).toBeGreaterThanOrEqual(0.82);
+    expect(replay.metrics.entropyAfter).toBeLessThanOrEqual(replay.metrics.entropyBefore);
+    expect(replay.topology.connectedComponents).toBe(1);
   });
 });
