@@ -1,22 +1,28 @@
 import { Queue, Worker } from 'bullmq';
 import { demandEngine } from '../services/demandEngine';
+import { logger } from '../diagnostics/logger';
+import { createLocalQueue, createLocalWorker, resolveQueueRuntime } from './queueRuntime';
 
-const connection = {
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
-};
+const queueRuntime = resolveQueueRuntime();
+const connection = queueRuntime.mode === 'redis'
+  ? { host: queueRuntime.host ?? 'localhost', port: queueRuntime.port ?? 6379 }
+  : null;
 
-export const scraperQueue = new Queue('scraper', { connection });
+export const scraperQueue = connection
+  ? new Queue('scraper', { connection })
+  : createLocalQueue('scraper');
 
-export const scraperWorker = new Worker(
-  'scraper',
-  async () => {
-    console.log('[Worker] Running demand update');
-    const result = await demandEngine.updateDemand();
-    return { score: result.demandScore, keywords: result.keywordClusters };
-  },
-  { concurrency: 1, connection },
-);
+export const scraperWorker = connection
+  ? new Worker(
+    'scraper',
+    async () => {
+      logger.info('scraper_worker_demand_update');
+      const result = await demandEngine.updateDemand();
+      return { score: result.demandScore, keywords: result.keywordClusters };
+    },
+    { concurrency: 1, connection },
+  )
+  : createLocalWorker('scraper');
 
 export async function scheduleScraping(): Promise<void> {
   await scraperQueue.add(

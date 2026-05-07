@@ -3,13 +3,71 @@ import { z } from 'zod';
 import { batchGenerator } from '../services/batchGenerator';
 import { evolutionEngine } from '../services/evolutionEngine';
 import { demandEngine } from '../services/demandEngine';
-import { DesignDB, EvolutionDB } from '../storage/db';
+import { reinforcementEngine } from '../services/reinforcementEngine';
+import { getStorageRepository } from '../storage/repository';
 import { Design } from '../types';
+import { continuityHub } from '../diagnostics/continuityHub';
+import { createContinuityExport, createDegradedReplayExport } from '../diagnostics/continuityExport';
+import { logger } from '../diagnostics/logger';
+import {
+  DEFAULT_REPLAY_STREAM,
+  acknowledgeReplayMonitorSnapshot,
+  diffReplayCheckpoints,
+  getReplayMonitorHistory,
+  getReplayHistory,
+  monitorReplayHistory,
+} from '../diagnostics/replayHistory';
+import { runReplaySuite } from '../diagnostics/replaySuite';
+import {
+  compareReleaseEvidenceByProvider,
+  attachReleaseRollbackCiCheck,
+  attachReleasePromotionCiCheck,
+  collectReleaseReadiness,
+  collectPostReleaseDrift,
+  createReleaseEvidenceBundleManifest,
+  createReleaseIncidentPacket,
+  createReleaseSupervisionStatusCard,
+  createReleaseBundleSummary,
+  createReleaseEvidenceExport,
+  exportReleasePromotionTimeline,
+  exportReleaseRollbackTimeline,
+  applyReleaseEvidenceRetention,
+  getReleaseDriftOverrideHistory,
+  getReleaseDecisionHistory,
+  getReleaseDeploymentCommandDescriptors,
+  getReleaseEvidenceHistory,
+  getReleasePromotionHistory,
+  getReleaseRollbackCommandDescriptors,
+  getReleaseRollbackHistory,
+  getReleaseRetentionPolicyPresets,
+  getReleaseReconciliationHistory,
+  recordReleaseDriftOverride,
+  reconcileReleaseDecision,
+  recordReleaseDecision,
+  startReleasePromotion,
+  planReleaseRollback,
+  transitionReleaseRollback,
+  transitionReleasePromotion,
+  verifyReleaseHandoffArtifacts,
+} from '../diagnostics/releaseReadiness';
+import { collectSystemDiagnostics } from '../diagnostics/systemDiagnostics';
+import { RequestWithContext, validateRuntimeEnvironment } from '../diagnostics/runtimeValidation';
 
 export const router = Router();
 
-function dbgId(prefix: string) {
-  return `${prefix}-${Math.random().toString(16).slice(2, 6).toUpperCase()}`;
+function dbgId(prefix: string, req?: RequestWithContext) {
+  return req?.requestId || `${prefix}-${Math.random().toString(16).slice(2, 6).toUpperCase()}`;
+}
+
+function logRouteError(prefix: string, req: RequestWithContext, error: unknown) {
+  const id = dbgId(prefix, req);
+  logger.error('route_error', {
+    debugId: id,
+    route: req.path,
+    method: req.method,
+    error: error instanceof Error ? error.message : String(error),
+  });
+  return id;
 }
 
 const GenerateBatchSchema = z.object({
@@ -32,7 +90,239 @@ const ImportSchema = z.object({
   preserveIds: z.boolean().default(false),
 });
 
-router.post('/generate-batch', async (req, res) => {
+const ReplayHistoryQuerySchema = z.object({
+  stream: z.string().min(1).default(DEFAULT_REPLAY_STREAM),
+  limit: z.coerce.number().int().min(1).max(500).default(50),
+});
+
+const ReplayVerifyQuerySchema = z.object({
+  persist: z.preprocess(value => (
+    value === undefined ? true : !['false', '0', 'no'].includes(String(value).toLowerCase())
+  ), z.boolean()).default(true),
+});
+
+const ReplayDiffQuerySchema = z.object({
+  stream: z.string().min(1).default(DEFAULT_REPLAY_STREAM),
+  baseId: z.string().min(1),
+  targetId: z.string().min(1),
+});
+
+const ContinuityExportQuerySchema = ReplayHistoryQuerySchema.extend({
+  checkpointId: z.string().min(1).optional(),
+});
+
+const ReplayMonitorQuerySchema = z.object({
+  stream: z.string().min(1).default(DEFAULT_REPLAY_STREAM),
+  persist: z.preprocess(value => (
+    value === undefined ? true : !['false', '0', 'no'].includes(String(value).toLowerCase())
+  ), z.boolean()).default(true),
+});
+
+const ReplayMonitorHistoryQuerySchema = ReplayHistoryQuerySchema;
+
+const ReplayMonitorAckSchema = z.object({
+  acknowledgedBy: z.string().min(1).default('operator'),
+});
+
+const DegradedReplayExportQuerySchema = ContinuityExportQuerySchema.extend({
+  snapshotId: z.string().min(1).optional(),
+});
+
+const ReleaseReadinessQuerySchema = z.object({
+  stream: z.string().min(1).default(DEFAULT_REPLAY_STREAM),
+  provider: z.string().min(1).default('local-docker'),
+  persistMonitor: z.preprocess(value => (
+    value === undefined ? true : !['false', '0', 'no'].includes(String(value).toLowerCase())
+  ), z.boolean()).default(true),
+  persistEvidence: z.preprocess(value => (
+    value === undefined ? true : !['false', '0', 'no'].includes(String(value).toLowerCase())
+  ), z.boolean()).default(true),
+  includeRollbackPreflight: z.preprocess(value => (
+    value === undefined ? false : !['false', '0', 'no'].includes(String(value).toLowerCase())
+  ), z.boolean()).default(false),
+});
+
+const ReleaseEvidenceQuerySchema = ReplayHistoryQuerySchema.extend({
+  provider: z.string().min(1).default('local-docker'),
+  status: z.enum(['ready', 'degraded', 'blocked']).optional(),
+  rollbackStatus: z.enum(['ready', 'degraded', 'blocked']).optional(),
+  includeRollbackPreflight: z.preprocess(value => (
+    value === undefined ? true : !['false', '0', 'no'].includes(String(value).toLowerCase())
+  ), z.boolean()).default(true),
+});
+
+const ReleaseEvidenceHistoryQuerySchema = ReplayHistoryQuerySchema.extend({
+  provider: z.string().min(1).optional(),
+  status: z.enum(['ready', 'degraded', 'blocked']).optional(),
+  rollbackStatus: z.enum(['ready', 'degraded', 'blocked']).optional(),
+});
+
+const ReleaseEvidenceCompareQuerySchema = z.object({
+  stream: z.string().min(1).default(DEFAULT_REPLAY_STREAM),
+  providers: z.string().min(1).default('local-docker,railway,render'),
+});
+
+const ReleaseEvidenceManifestQuerySchema = z.object({
+  decisionId: z.string().min(1).optional(),
+  stream: z.string().min(1).default(DEFAULT_REPLAY_STREAM),
+  provider: z.string().min(1).optional(),
+  promotionId: z.string().min(1).optional(),
+  rollbackId: z.string().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(8),
+});
+
+const ReleaseIncidentPacketQuerySchema = z.object({
+  decisionId: z.string().min(1).optional(),
+  stream: z.string().min(1).default(DEFAULT_REPLAY_STREAM),
+  provider: z.string().min(1).optional(),
+  promotionId: z.string().min(1).optional(),
+  rollbackId: z.string().min(1).optional(),
+  owner: z.string().min(1).default('incident-owner'),
+  visibility: z.enum(['public', 'private']).default('private'),
+  limit: z.coerce.number().int().min(1).max(50).default(8),
+});
+
+const ReleaseEvidenceArtifactVerificationSchema = z.object({
+  manifest: z.any(),
+  artifacts: z.record(z.string(), z.any()).optional(),
+});
+
+const ReleaseDecisionSchema = z.object({
+  evidenceId: z.string().min(1),
+  decision: z.enum(['go', 'no-go', 'exception']),
+  reason: z.string().min(1),
+  decidedBy: z.string().min(1).default('operator'),
+});
+
+const ReleaseDecisionHistoryQuerySchema = ReplayHistoryQuerySchema.extend({
+  provider: z.string().min(1).optional(),
+  decision: z.enum(['go', 'no-go', 'exception']).optional(),
+});
+
+const ReleaseReconciliationSchema = z.object({
+  decisionId: z.string().min(1),
+  commitSha: z.string().min(1),
+  branch: z.string().min(1),
+  pullRequestUrl: z.string().min(1).optional(),
+  sourceThread: z.string().min(1).optional(),
+  initiatedBy: z.string().min(1).optional(),
+});
+
+const ReleaseReconciliationHistoryQuerySchema = ReplayHistoryQuerySchema.extend({
+  provider: z.string().min(1).optional(),
+  decisionId: z.string().min(1).optional(),
+  commitSha: z.string().min(1).optional(),
+});
+
+const ReleaseBundleSummaryQuerySchema = z.object({
+  decisionId: z.string().min(1).optional(),
+  stream: z.string().min(1).default(DEFAULT_REPLAY_STREAM),
+  provider: z.string().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(8),
+});
+
+const ReleaseDriftQuerySchema = z.object({
+  decisionId: z.string().min(1),
+  persistMonitor: z.preprocess(value => (
+    value === undefined ? false : !['false', '0', 'no'].includes(String(value).toLowerCase())
+  ), z.boolean()).default(false),
+});
+
+const ReleaseRetentionSchema = z.object({
+  stream: z.string().min(1).default(DEFAULT_REPLAY_STREAM),
+  provider: z.string().min(1).optional(),
+  environment: z.enum(['local', 'staging', 'production']).optional(),
+  policy: z.enum(['local', 'staging', 'production']).optional(),
+  retainLatest: z.number().int().min(1).max(500).optional(),
+  dryRun: z.boolean().optional(),
+});
+
+const ReleaseSupervisionCardQuerySchema = z.object({
+  decisionId: z.string().min(1),
+  environment: z.enum(['local', 'staging', 'production']).default('staging'),
+  policy: z.enum(['local', 'staging', 'production']).optional(),
+});
+
+const ReleaseDriftOverrideSchema = z.object({
+  decisionId: z.string().min(1),
+  environment: z.enum(['local', 'staging', 'production']).default('staging'),
+  driftChecksum: z.string().min(1),
+  reason: z.string().min(1),
+  overriddenBy: z.string().min(1).default('operator'),
+});
+
+const ReleaseDriftOverrideHistoryQuerySchema = ReplayHistoryQuerySchema.extend({
+  provider: z.string().min(1).optional(),
+  decisionId: z.string().min(1).optional(),
+  environment: z.enum(['local', 'staging', 'production']).optional(),
+});
+
+const ReleaseDeploymentCommandsQuerySchema = z.object({
+  environment: z.enum(['local', 'staging', 'production']).default('staging'),
+});
+
+const ReleasePromotionSchema = z.object({
+  decisionId: z.string().min(1),
+  environment: z.enum(['local', 'staging', 'production']).default('staging'),
+  commandId: z.string().min(1).optional(),
+  actor: z.string().min(1).default('operator'),
+});
+
+const ReleasePromotionHistoryQuerySchema = ReplayHistoryQuerySchema.extend({
+  provider: z.string().min(1).optional(),
+  decisionId: z.string().min(1).optional(),
+  environment: z.enum(['local', 'staging', 'production']).optional(),
+  status: z.enum(['started', 'stopped', 'approved', 'rejected', 'deployed', 'failed']).optional(),
+});
+
+const ReleasePromotionTransitionSchema = z.object({
+  status: z.enum(['started', 'stopped', 'approved', 'rejected', 'deployed', 'failed']),
+  actor: z.string().min(1).default('operator'),
+  detail: z.string().min(1).optional(),
+  outcome: z.enum(['succeeded', 'failed', 'cancelled']).optional(),
+});
+
+const ReleasePromotionCiCheckSchema = z.object({
+  name: z.string().min(1),
+  status: z.enum(['queued', 'running', 'passed', 'failed', 'skipped']),
+  url: z.string().min(1).optional(),
+  detail: z.string().min(1).optional(),
+});
+
+const ReleaseRollbackCommandsQuerySchema = z.object({
+  environment: z.enum(['local', 'staging', 'production']).default('staging'),
+});
+
+const ReleaseRollbackSchema = z.object({
+  promotionId: z.string().min(1),
+  environment: z.enum(['local', 'staging', 'production']).default('staging'),
+  commandId: z.string().min(1).optional(),
+  actor: z.string().min(1).default('operator'),
+});
+
+const ReleaseRollbackHistoryQuerySchema = ReplayHistoryQuerySchema.extend({
+  provider: z.string().min(1).optional(),
+  promotionId: z.string().min(1).optional(),
+  decisionId: z.string().min(1).optional(),
+  environment: z.enum(['local', 'staging', 'production']).optional(),
+  status: z.enum(['planned', 'approved', 'rehearsed', 'executed', 'failed', 'cancelled']).optional(),
+});
+
+const ReleaseRollbackTransitionSchema = z.object({
+  status: z.enum(['planned', 'approved', 'rehearsed', 'executed', 'failed', 'cancelled']),
+  actor: z.string().min(1).default('operator'),
+  detail: z.string().min(1).optional(),
+  outcome: z.enum(['succeeded', 'failed', 'cancelled']).optional(),
+});
+
+const ReleaseRollbackCiCheckSchema = z.object({
+  name: z.string().min(1),
+  status: z.enum(['queued', 'running', 'passed', 'failed', 'skipped']),
+  url: z.string().min(1).optional(),
+  detail: z.string().min(1).optional(),
+});
+
+router.post('/generate-batch', async (req: RequestWithContext, res) => {
   try {
     const body = GenerateBatchSchema.parse(req.body);
     const startTime = Date.now();
@@ -50,17 +340,16 @@ router.post('/generate-batch', async (req, res) => {
       meta: {
         count: designs.length,
         executionTime: Date.now() - startTime,
-        cacheSize: DesignDB.getStats().total,
+        cacheSize: (await getStorageRepository().designs.getStats()).total,
       },
     });
   } catch (error) {
-    const id = dbgId('GEN');
-    console.error(`[${id}] /generate-batch error:`, error);
+    const id = logRouteError('GEN', req, error);
     res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
   }
 });
 
-router.post('/evolve', async (req, res) => {
+router.post('/evolve', async (req: RequestWithContext, res) => {
   try {
     const body = EvolveSchema.parse(req.body);
     let runId: string;
@@ -68,19 +357,20 @@ router.post('/evolve', async (req, res) => {
     if (body.resumeRunId) {
       const resumed = await evolutionEngine.resumeEvolution(body.resumeRunId);
       if (!resumed) {
-        const id = dbgId('EVO');
-        console.error(`[${id}] /evolve resume not found: ${body.resumeRunId}`);
+        const id = dbgId('EVO', req);
+        logger.warn('evolution_resume_not_found', { debugId: id, runId: body.resumeRunId });
         return res.status(404).json({ success: false, debugId: id, error: 'Run not found or not paused' });
       }
       runId = body.resumeRunId;
+      continuityHub.resume(runId);
     } else {
       let seeds = body.seedDesigns || [];
       if (seeds.length === 0) {
-        seeds = DesignDB.getAll({ limit: body.populationSize, minScore: 0.5 });
+        seeds = await getStorageRepository().designs.getAll({ limit: body.populationSize, minScore: 0.5 });
       }
       if (seeds.length === 0) {
-        const id = dbgId('EVO');
-        console.error(`[${id}] /evolve no seed designs available`);
+        const id = dbgId('EVO', req);
+        logger.warn('evolution_seed_designs_missing', { debugId: id });
         return res.status(400).json({ success: false, debugId: id, error: 'No seed designs available. Generate a batch first.' });
       }
 
@@ -96,16 +386,15 @@ router.post('/evolve', async (req, res) => {
 
     res.json({ success: true, runId, status: 'running' });
   } catch (error) {
-    const id = dbgId('EVO');
-    console.error(`[${id}] /evolve error:`, error);
+    const id = logRouteError('EVO', req, error);
     res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
   }
 });
 
-router.get('/evolve/:runId', (req, res) => {
-  const state = evolutionEngine.getState(req.params.runId);
+router.get('/evolve/:runId', async (req: RequestWithContext, res) => {
+  const state = await evolutionEngine.getStateFromStore(req.params.runId);
   if (!state) {
-    const id = dbgId('EVO');
+    const id = dbgId('EVO', req);
     return res.status(404).json({ success: false, debugId: id, error: 'Evolution run not found' });
   }
 
@@ -122,79 +411,660 @@ router.get('/evolve/:runId', (req, res) => {
   });
 });
 
-router.post('/evolve/:runId/pause', (req, res) => {
-  const paused = evolutionEngine.pauseEvolution(req.params.runId);
+router.post('/evolve/:runId/pause', async (req: RequestWithContext, res) => {
+  const paused = await evolutionEngine.pauseEvolution(req.params.runId);
   if (!paused) {
-    const id = dbgId('EVO');
+    const id = dbgId('EVO', req);
     return res.status(404).json({ success: false, debugId: id, error: 'Evolution run not running' });
   }
+  continuityHub.interrupt(req.params.runId, 'pause_endpoint');
   res.json({ success: true, status: 'paused' });
 });
 
-router.get('/designs', (req, res) => {
+router.get('/designs', async (req, res) => {
   const minScore = req.query.minScore ? parseFloat(req.query.minScore as string) : undefined;
   const generation = req.query.generation ? parseInt(req.query.generation as string) : undefined;
   const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
   const offset = req.query.offset ? parseInt(req.query.offset as string) : 0;
 
-  const designs = DesignDB.getAll({ minScore, generation, limit, offset });
-  res.json({ success: true, designs, stats: DesignDB.getStats() });
+  const designs = await getStorageRepository().designs.getAll({ minScore, generation, limit, offset });
+  const stats = await getStorageRepository().designs.getStats();
+  res.json({ success: true, designs, stats });
 });
 
-router.get('/designs/:id', (req, res) => {
-  const design = DesignDB.getById(req.params.id);
+router.get('/designs/:id', async (req: RequestWithContext, res) => {
+  const design = await getStorageRepository().designs.getById(req.params.id);
   if (!design) {
-    const id = dbgId('DES');
+    const id = dbgId('DES', req);
     return res.status(404).json({ success: false, debugId: id, error: 'Design not found' });
   }
   res.json({ success: true, design });
 });
 
-router.post('/import', (req, res) => {
+router.post('/import', async (req: RequestWithContext, res) => {
   try {
     const body = ImportSchema.parse(req.body);
-    const imported = body.designs.map((design: Design) => {
+    const imported = await Promise.all(body.designs.map(async (design: Design) => {
       const toImport = body.preserveIds ? design : {
         ...design,
         id: `imported_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
       };
-      DesignDB.create(toImport as any);
+      await getStorageRepository().designs.create(toImport as any);
       return toImport;
-    });
+    }));
     res.json({ success: true, imported: imported.length, designs: imported });
   } catch (error) {
-    const id = dbgId('IMP');
-    console.error(`[${id}] /import error:`, error);
+    const id = logRouteError('IMP', req, error);
     res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
   }
 });
 
-router.get('/export/:id', (req, res) => {
-  const design = DesignDB.getById(req.params.id);
+router.get('/export/:id', async (req: RequestWithContext, res) => {
+  const design = await getStorageRepository().designs.getById(req.params.id);
   if (!design) {
-    const id = dbgId('DES');
+    const id = dbgId('DES', req);
     return res.status(404).json({ success: false, debugId: id, error: 'Design not found' });
   }
-  DesignDB.updateExported(design.id, true);
+  await getStorageRepository().designs.updateExported(design.id, true);
   res.json({ success: true, export: { version: '1.0.0', exportedAt: Date.now(), design } });
 });
 
-router.get('/demand', async (req, res) => {
+router.get('/demand', async (req: RequestWithContext, res) => {
   try {
-    const latest = await demandEngine.updateDemand();
+    const input = typeof req.query.input === 'string' && req.query.input.trim()
+      ? req.query.input.trim()
+      : undefined;
+    const latest = await demandEngine.updateDemand(input);
     res.json({ success: true, demand: latest });
   } catch (error) {
-    const id = dbgId('DMD');
-    console.error(`[${id}] /demand error:`, error);
+    const id = logRouteError('DMD', req, error);
     res.status(500).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
   }
 });
 
-router.get('/health', (req, res) => {
-  res.json({
-    status: 'healthy',
+router.get('/reinforcement/replay', async (req: RequestWithContext, res) => {
+  try {
+    const replay = await reinforcementEngine.verifyReplay();
+    res.json({ success: true, replay, recent: await getStorageRepository().reinforcement.getLatest(8) });
+  } catch (error) {
+    const id = logRouteError('RFR', req, error);
+    res.status(500).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/replay/verify', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReplayVerifyQuerySchema.parse(req.query);
+    const replay = await runReplaySuite({ persist: query.persist });
+    res.status(replay.stable ? 200 : 503).json({ success: replay.stable, replay });
+  } catch (error) {
+    const id = logRouteError('RPY', req, error);
+    res.status(500).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/replay/monitor', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReplayMonitorQuerySchema.parse(req.query);
+    const monitor = await monitorReplayHistory(query.stream, { persist: query.persist });
+    res.status(monitor.status === 'ready' ? 200 : 503).json({
+      success: true,
+      monitor,
+    });
+  } catch (error) {
+    const id = logRouteError('RPM', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/replay/monitor/history', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReplayMonitorHistoryQuerySchema.parse(req.query);
+    const snapshots = await getReplayMonitorHistory(query.stream, query.limit);
+    res.json({ success: true, snapshots });
+  } catch (error) {
+    const id = logRouteError('RPH', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.post('/replay/monitor/:snapshotId/ack', async (req: RequestWithContext, res) => {
+  try {
+    const body = ReplayMonitorAckSchema.parse(req.body ?? {});
+    const snapshot = await acknowledgeReplayMonitorSnapshot(req.params.snapshotId, body.acknowledgedBy);
+    res.json({ success: true, snapshot });
+  } catch (error) {
+    const id = logRouteError('RPA', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/replay/history', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReplayHistoryQuerySchema.parse(req.query);
+    const history = await getReplayHistory(query.stream, query.limit);
+    res.status(history.verification.stable ? 200 : 503).json({
+      success: history.verification.stable,
+      history,
+    });
+  } catch (error) {
+    const id = logRouteError('RPH', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/replay/checkpoints/diff', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReplayDiffQuerySchema.parse(req.query);
+    const diff = await diffReplayCheckpoints(query.baseId, query.targetId, query.stream);
+    res.json({ success: true, diff });
+  } catch (error) {
+    const id = logRouteError('RPD', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/replay/degraded-export', async (req: RequestWithContext, res) => {
+  try {
+    const query = DegradedReplayExportQuerySchema.parse(req.query);
+    const degradedExport = await createDegradedReplayExport(query);
+    res.status(degradedExport.monitor.status === 'ready' ? 200 : 503).json({
+      success: true,
+      export: degradedExport,
+    });
+  } catch (error) {
+    const id = logRouteError('RPE', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/continuity/status', (_req, res) => {
+  res.json({ success: true, continuity: continuityHub.getStatus() });
+});
+
+router.get('/continuity/export', async (req: RequestWithContext, res) => {
+  try {
+    const query = ContinuityExportQuerySchema.parse(req.query);
+    const continuityExport = await createContinuityExport(query);
+    res.json({ success: true, export: continuityExport });
+  } catch (error) {
+    const id = logRouteError('CTX', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/readiness', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReleaseReadinessQuerySchema.parse(req.query);
+    const release = await collectReleaseReadiness({
+      stream: query.stream,
+      provider: query.provider,
+      persistMonitor: query.persistMonitor,
+      persistEvidence: query.persistEvidence,
+      includeRollbackPreflight: query.includeRollbackPreflight,
+    });
+    res.status(release.status === 'ready' ? 200 : 503).json({
+      success: true,
+      release,
+    });
+  } catch (error) {
+    const id = logRouteError('REL', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/evidence', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReleaseEvidenceHistoryQuerySchema.parse(req.query);
+    const evidence = await getReleaseEvidenceHistory(query.stream, query.limit, {
+      provider: query.provider,
+      status: query.status,
+      rollbackStatus: query.rollbackStatus,
+    });
+    res.json({ success: true, evidence });
+  } catch (error) {
+    const id = logRouteError('REV', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/evidence/export', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReleaseEvidenceQuerySchema.parse(req.query);
+    const evidenceExport = await createReleaseEvidenceExport({
+      stream: query.stream,
+      provider: query.provider,
+      limit: query.limit,
+      includeRollbackPreflight: query.includeRollbackPreflight,
+    });
+    res.status(evidenceExport.release.status === 'ready' ? 200 : 503).json({
+      success: true,
+      export: evidenceExport,
+    });
+  } catch (error) {
+    const id = logRouteError('REE', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/evidence/compare', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReleaseEvidenceCompareQuerySchema.parse(req.query);
+    const comparison = await compareReleaseEvidenceByProvider(
+      query.stream,
+      query.providers.split(',').map(provider => provider.trim()).filter(Boolean),
+    );
+    res.status(comparison.allMatched ? 200 : 409).json({ success: true, comparison });
+  } catch (error) {
+    const id = logRouteError('REC', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/evidence/manifest', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReleaseEvidenceManifestQuerySchema.parse(req.query);
+    const manifest = await createReleaseEvidenceBundleManifest({
+      decisionId: query.decisionId,
+      stream: query.stream,
+      provider: query.provider,
+      promotionId: query.promotionId,
+      rollbackId: query.rollbackId,
+      limit: query.limit,
+    });
+    res.status(manifest.triage.status === 'ready' ? 200 : 409).json({ success: true, manifest });
+  } catch (error) {
+    const id = logRouteError('REM', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.post('/release/evidence/verify-artifacts', async (req: RequestWithContext, res) => {
+  try {
+    const body = ReleaseEvidenceArtifactVerificationSchema.parse(req.body ?? {}) as {
+      manifest: any;
+      artifacts?: Record<string, unknown>;
+    };
+    const verification = verifyReleaseHandoffArtifacts({
+      manifest: body.manifest,
+      artifacts: body.artifacts,
+    });
+    res.status(verification.status === 'ready' ? 200 : 409).json({ success: true, verification });
+  } catch (error) {
+    const id = logRouteError('REVF', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/incident-packet', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReleaseIncidentPacketQuerySchema.parse(req.query);
+    const packet = await createReleaseIncidentPacket({
+      decisionId: query.decisionId,
+      stream: query.stream,
+      provider: query.provider,
+      promotionId: query.promotionId,
+      rollbackId: query.rollbackId,
+      owner: query.owner,
+      visibility: query.visibility,
+      limit: query.limit,
+    });
+    res.status(packet.summary.status === 'blocked' ? 409 : 200).json({ success: true, packet });
+  } catch (error) {
+    const id = logRouteError('RIP', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/evidence/retention/presets', (_req: RequestWithContext, res) => {
+  res.json({ success: true, presets: getReleaseRetentionPolicyPresets() });
+});
+
+router.post('/release/evidence/retention', async (req: RequestWithContext, res) => {
+  try {
+    const body = ReleaseRetentionSchema.parse(req.body ?? {});
+    const retention = await applyReleaseEvidenceRetention(body);
+    res.json({ success: true, retention });
+  } catch (error) {
+    const id = logRouteError('RER', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/evidence/:evidenceId', async (req: RequestWithContext, res) => {
+  try {
+    const evidence = await getStorageRepository().releaseEvidence.getById(req.params.evidenceId);
+    if (!evidence) {
+      res.status(404).json({ success: false, error: `Release evidence not found: ${req.params.evidenceId}` });
+      return;
+    }
+    res.json({ success: true, evidence });
+  } catch (error) {
+    const id = logRouteError('REI', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.post('/release/decisions', async (req: RequestWithContext, res) => {
+  try {
+    const body = ReleaseDecisionSchema.parse(req.body);
+    const decision = await recordReleaseDecision(body);
+    res.status(201).json({ success: true, decision });
+  } catch (error) {
+    const id = logRouteError('RDC', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/decisions', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReleaseDecisionHistoryQuerySchema.parse(req.query);
+    const decisions = await getReleaseDecisionHistory(query.stream, query.limit, {
+      provider: query.provider,
+      decision: query.decision,
+    });
+    res.json({ success: true, decisions });
+  } catch (error) {
+    const id = logRouteError('RDH', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.post('/release/reconciliations', async (req: RequestWithContext, res) => {
+  try {
+    const body = ReleaseReconciliationSchema.parse(req.body);
+    const reconciliation = await reconcileReleaseDecision(body);
+    res.status(201).json({ success: true, reconciliation });
+  } catch (error) {
+    const id = logRouteError('RRC', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/reconciliations', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReleaseReconciliationHistoryQuerySchema.parse(req.query);
+    const reconciliations = await getReleaseReconciliationHistory(query.stream, query.limit, {
+      provider: query.provider,
+      decisionId: query.decisionId,
+      commitSha: query.commitSha,
+    });
+    res.json({ success: true, reconciliations });
+  } catch (error) {
+    const id = logRouteError('RRH', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/bundle-summary', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReleaseBundleSummaryQuerySchema.parse(req.query);
+    const bundle = await createReleaseBundleSummary({
+      decisionId: query.decisionId,
+      stream: query.stream,
+      provider: query.provider,
+      limit: query.limit,
+    });
+    res.json({ success: true, bundle });
+  } catch (error) {
+    const id = logRouteError('RBS', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/drift', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReleaseDriftQuerySchema.parse(req.query);
+    const drift = await collectPostReleaseDrift(query.decisionId, { persistMonitor: query.persistMonitor });
+    res.status(drift.status === 'ready' ? 200 : 409).json({ success: true, drift });
+  } catch (error) {
+    const id = logRouteError('RDR', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.post('/release/drift-overrides', async (req: RequestWithContext, res) => {
+  try {
+    const body = ReleaseDriftOverrideSchema.parse(req.body);
+    const override = await recordReleaseDriftOverride(body);
+    res.status(201).json({ success: true, override });
+  } catch (error) {
+    const id = logRouteError('RDO', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/drift-overrides', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReleaseDriftOverrideHistoryQuerySchema.parse(req.query);
+    const overrides = await getReleaseDriftOverrideHistory(query.stream, query.limit, {
+      provider: query.provider,
+      decisionId: query.decisionId,
+      environment: query.environment,
+    });
+    res.json({ success: true, overrides });
+  } catch (error) {
+    const id = logRouteError('RDOH', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/supervision-card', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReleaseSupervisionCardQuerySchema.parse(req.query);
+    const card = await createReleaseSupervisionStatusCard({
+      decisionId: query.decisionId,
+      environment: query.environment,
+      policy: query.policy,
+    });
+    res.json({ success: true, card });
+  } catch (error) {
+    const id = logRouteError('RSC', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/deployment-commands', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReleaseDeploymentCommandsQuerySchema.parse(req.query);
+    res.json({ success: true, commands: getReleaseDeploymentCommandDescriptors(query.environment) });
+  } catch (error) {
+    const id = logRouteError('RDCM', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.post('/release/promotions', async (req: RequestWithContext, res) => {
+  try {
+    const body = ReleasePromotionSchema.parse(req.body);
+    const promotion = await startReleasePromotion(body);
+    res.status(201).json({ success: true, promotion });
+  } catch (error) {
+    const id = logRouteError('RPMO', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/promotions', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReleasePromotionHistoryQuerySchema.parse(req.query);
+    const promotions = await getReleasePromotionHistory(query.stream, query.limit, {
+      provider: query.provider,
+      decisionId: query.decisionId,
+      environment: query.environment,
+      status: query.status,
+    });
+    res.json({ success: true, promotions });
+  } catch (error) {
+    const id = logRouteError('RPMH', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.post('/release/promotions/:promotionId/transition', async (req: RequestWithContext, res) => {
+  try {
+    const body = ReleasePromotionTransitionSchema.parse(req.body);
+    const promotion = await transitionReleasePromotion({
+      promotionId: req.params.promotionId,
+      ...body,
+    });
+    res.json({ success: true, promotion });
+  } catch (error) {
+    const id = logRouteError('RPT', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.post('/release/promotions/:promotionId/ci-checks', async (req: RequestWithContext, res) => {
+  try {
+    const body = ReleasePromotionCiCheckSchema.parse(req.body);
+    const promotion = await attachReleasePromotionCiCheck({
+      promotionId: req.params.promotionId,
+      ...body,
+    });
+    res.json({ success: true, promotion });
+  } catch (error) {
+    const id = logRouteError('RPC', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/promotions/:promotionId/timeline', async (req: RequestWithContext, res) => {
+  try {
+    const timeline = await exportReleasePromotionTimeline(req.params.promotionId);
+    res.json({ success: true, timeline });
+  } catch (error) {
+    const id = logRouteError('RPTL', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/rollback-commands', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReleaseRollbackCommandsQuerySchema.parse(req.query);
+    res.json({ success: true, commands: getReleaseRollbackCommandDescriptors(query.environment) });
+  } catch (error) {
+    const id = logRouteError('RRBC', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.post('/release/rollbacks', async (req: RequestWithContext, res) => {
+  try {
+    const body = ReleaseRollbackSchema.parse(req.body);
+    const rollback = await planReleaseRollback(body);
+    res.status(201).json({ success: true, rollback });
+  } catch (error) {
+    const id = logRouteError('RRBP', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/rollbacks', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReleaseRollbackHistoryQuerySchema.parse(req.query);
+    const rollbacks = await getReleaseRollbackHistory(query.stream, query.limit, {
+      provider: query.provider,
+      promotionId: query.promotionId,
+      decisionId: query.decisionId,
+      environment: query.environment,
+      status: query.status,
+    });
+    res.json({ success: true, rollbacks });
+  } catch (error) {
+    const id = logRouteError('RRBH', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.post('/release/rollbacks/:rollbackId/transition', async (req: RequestWithContext, res) => {
+  try {
+    const body = ReleaseRollbackTransitionSchema.parse(req.body);
+    const rollback = await transitionReleaseRollback({
+      rollbackId: req.params.rollbackId,
+      ...body,
+    });
+    res.json({ success: true, rollback });
+  } catch (error) {
+    const id = logRouteError('RRBT', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.post('/release/rollbacks/:rollbackId/ci-checks', async (req: RequestWithContext, res) => {
+  try {
+    const body = ReleaseRollbackCiCheckSchema.parse(req.body);
+    const rollback = await attachReleaseRollbackCiCheck({
+      rollbackId: req.params.rollbackId,
+      ...body,
+    });
+    res.json({ success: true, rollback });
+  } catch (error) {
+    const id = logRouteError('RRBCI', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/rollbacks/:rollbackId/timeline', async (req: RequestWithContext, res) => {
+  try {
+    const timeline = await exportReleaseRollbackTimeline(req.params.rollbackId);
+    res.json({ success: true, timeline });
+  } catch (error) {
+    const id = logRouteError('RRBTL', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.post('/continuity/:runId/interrupt', async (req: RequestWithContext, res) => {
+  const paused = await evolutionEngine.pauseEvolution(req.params.runId);
+  const event = continuityHub.interrupt(req.params.runId, typeof req.body?.reason === 'string' ? req.body.reason : 'manual');
+  res.status(paused ? 200 : 202).json({ success: true, paused, event });
+});
+
+router.post('/continuity/:runId/resume', async (req: RequestWithContext, res) => {
+  try {
+    const resumed = await evolutionEngine.resumeEvolution(req.params.runId);
+    const event = continuityHub.resume(req.params.runId);
+    res.status(resumed ? 200 : 202).json({ success: true, resumed, event });
+  } catch (error) {
+    const id = logRouteError('CTY', req, error);
+    res.status(500).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/ready', async (req, res) => {
+  const runtime = validateRuntimeEnvironment();
+  const status = runtime.status === 'ready' ? 'ready' : 'degraded';
+  res.status(status === 'ready' ? 200 : 503).json({
+    success: status === 'ready',
+    status,
     timestamp: Date.now(),
+    runtime,
+    database: await getStorageRepository().designs.getStats(),
+    requestId: (req as RequestWithContext).requestId,
+  });
+});
+
+router.get('/diagnostics', async (req: RequestWithContext, res) => {
+  try {
+    const diagnostics = await collectSystemDiagnostics();
+    res.status(diagnostics.status === 'ready' ? 200 : 503).json({ success: diagnostics.status === 'ready', diagnostics });
+  } catch (error) {
+    const id = logRouteError('DGN', req, error);
+    res.status(500).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/health', async (req, res) => {
+  const runtime = validateRuntimeEnvironment();
+  res.json({
+    status: runtime.status === 'ready' ? 'healthy' : 'degraded',
+    timestamp: Date.now(),
+    uptimeSeconds: process.uptime(),
     activeEvolutions: evolutionEngine.getActiveRuns().length,
-    database: DesignDB.getStats(),
+    continuity: continuityHub.getStatus(),
+    runtime,
+    database: await getStorageRepository().designs.getStats(),
+    requestId: (req as RequestWithContext).requestId,
   });
 });

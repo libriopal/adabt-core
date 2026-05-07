@@ -1,7 +1,8 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
-import { DBDesign, DBEvolutionRun, DemandResult, Design, EvolutionState } from '../types';
+import { DBDesign, DBEvolutionRun, DemandResult, Design, EvolutionState, ReinforcementDecision } from '../types';
+import { runSqliteMigrations } from './migrations';
 
 let db: Database.Database | null = null;
 
@@ -11,77 +12,58 @@ export function initDatabase(dbPath: string = './data/slotgpt.db'): Database.Dat
     fs.mkdirSync(dir, { recursive: true });
   }
 
-  db = new Database(dbPath);
-  db.pragma('journal_mode = WAL');
-
-  createTables();
+  db = initializeDatabase(dbPath);
   return db;
+}
+
+function initializeDatabase(dbPath: string): Database.Database {
+  try {
+    const database = new Database(dbPath);
+    db = database;
+    database.pragma('journal_mode = WAL');
+    runSqliteMigrations(database);
+    return database;
+  } catch (error) {
+    if (
+      dbPath !== ':memory:'
+      && process.env.NODE_ENV !== 'production'
+      && isSqliteCorruption(error)
+    ) {
+      try {
+        db?.close();
+      } catch {
+        // Best effort cleanup before quarantining local development files.
+      }
+      db = null;
+      quarantineCorruptDatabase(dbPath);
+      const database = new Database(dbPath);
+      db = database;
+      database.pragma('journal_mode = WAL');
+      runSqliteMigrations(database);
+      return database;
+    }
+
+    throw error;
+  }
+}
+
+function isSqliteCorruption(error: unknown): boolean {
+  return error instanceof Error
+    && 'code' in error
+    && (error as { code?: string }).code === 'SQLITE_CORRUPT';
+}
+
+function quarantineCorruptDatabase(dbPath: string): void {
+  const stamp = Date.now();
+  for (const candidate of [dbPath, `${dbPath}-shm`, `${dbPath}-wal`]) {
+    if (!fs.existsSync(candidate)) continue;
+    fs.renameSync(candidate, `${candidate}.corrupt-${stamp}`);
+  }
 }
 
 export function getDB(): Database.Database {
   if (!db) throw new Error('Database not initialized');
   return db;
-}
-
-function createTables(): void {
-  const database = getDB();
-
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS designs (
-      id TEXT PRIMARY KEY,
-      seed TEXT NOT NULL,
-      timestamp INTEGER NOT NULL,
-      input TEXT NOT NULL,
-      mode TEXT NOT NULL,
-      intent_vector TEXT NOT NULL,
-      mechanics TEXT NOT NULL,
-      content TEXT NOT NULL,
-      score_total REAL NOT NULL,
-      score_demand REAL NOT NULL,
-      score_engagement REAL NOT NULL,
-      score_novelty REAL NOT NULL,
-      score_retention REAL NOT NULL,
-      generation INTEGER DEFAULT 0,
-      parent_ids TEXT,
-      exported BOOLEAN DEFAULT 0,
-      archived BOOLEAN DEFAULT 0,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_designs_score ON designs(score_total DESC);
-    CREATE INDEX IF NOT EXISTS idx_designs_generation ON designs(generation);
-    CREATE INDEX IF NOT EXISTS idx_designs_timestamp ON designs(timestamp);
-  `);
-
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS evolution_runs (
-      id TEXT PRIMARY KEY,
-      current_generation INTEGER DEFAULT 0,
-      max_generations INTEGER NOT NULL,
-      population_size INTEGER NOT NULL,
-      mutation_rate REAL NOT NULL,
-      elite_ratio REAL NOT NULL,
-      designs TEXT NOT NULL,
-      history TEXT NOT NULL,
-      status TEXT NOT NULL,
-      config TEXT NOT NULL,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_evolution_status ON evolution_runs(status);
-  `);
-
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS demand_cache (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      demand_score REAL NOT NULL,
-      trend_vector TEXT NOT NULL,
-      keyword_clusters TEXT NOT NULL,
-      timestamp INTEGER NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
 }
 
 // ─── DesignDB ───────────────────────────────────────────────────────────────
@@ -302,5 +284,49 @@ export const DemandDB = {
       keywordClusters: JSON.parse(row.keyword_clusters),
       timestamp: row.timestamp,
     };
+  },
+};
+
+// ─── ReinforcementDB ─────────────────────────────────────────────────────────
+
+export const ReinforcementDB = {
+  save(decision: ReinforcementDecision): void {
+    getDB().prepare(`
+      INSERT OR REPLACE INTO reinforcement_events
+        (id, design_id, total, axes, weights, gate, mutation_weight, lineage,
+         demand_checksum, replay_checksum, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      decision.id,
+      decision.designId,
+      decision.total,
+      JSON.stringify(decision.axes),
+      JSON.stringify(decision.weights),
+      JSON.stringify(decision.gate),
+      decision.mutationWeight,
+      JSON.stringify(decision.lineage),
+      decision.demandChecksum,
+      decision.replayChecksum,
+      Date.now(),
+    );
+  },
+
+  getLatest(limit = 20): ReinforcementDecision[] {
+    const rows = getDB()
+      .prepare('SELECT * FROM reinforcement_events ORDER BY created_at DESC LIMIT ?')
+      .all(limit) as any[];
+
+    return rows.map(row => ({
+      id: row.id,
+      designId: row.design_id,
+      total: row.total,
+      axes: JSON.parse(row.axes),
+      weights: JSON.parse(row.weights),
+      gate: JSON.parse(row.gate),
+      mutationWeight: row.mutation_weight,
+      lineage: JSON.parse(row.lineage),
+      demandChecksum: row.demand_checksum,
+      replayChecksum: row.replay_checksum,
+    }));
   },
 };

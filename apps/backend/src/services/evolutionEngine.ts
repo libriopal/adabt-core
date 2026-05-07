@@ -1,7 +1,8 @@
 import { Design, EvolutionState, EvolutionConfig, GenerationSnapshot, SlotMechanics } from '../types';
 import { DeterministicPRNG } from '../utils/prng';
-import { DesignDB, EvolutionDB } from '../storage/db';
+import { getStorageRepository } from '../storage/repository';
 import { reinforcementEngine, RewardBreakdown } from './reinforcementEngine';
+import { logger } from '../diagnostics/logger';
 
 export class EvolutionEngine {
   private activeRuns: Map<string, EvolutionState> = new Map();
@@ -26,14 +27,21 @@ export class EvolutionEngine {
     this.activeRuns.set(runId, state);
     this.abortControllers.set(runId, new AbortController());
 
-    try { EvolutionDB.create(state); } catch { /* non-fatal */ }
+    try { await getStorageRepository().evolutionRuns.create(state); } catch { /* non-fatal */ }
+
+    logger.info('evolution_started', {
+      runId,
+      populationSize: config.populationSize,
+      maxGenerations: config.maxGenerations,
+      mutationRate: config.mutationRate,
+    });
 
     this.runEvolutionLoop(runId, state, this.abortControllers.get(runId)!.signal);
     return runId;
   }
 
   async resumeEvolution(runId: string): Promise<boolean> {
-    const dbRun = EvolutionDB.getById(runId);
+    const dbRun = await getStorageRepository().evolutionRuns.getById(runId);
     if (!dbRun || dbRun.status !== 'paused') return false;
 
     const state = dbRun as unknown as EvolutionState;
@@ -43,10 +51,11 @@ export class EvolutionEngine {
     this.abortControllers.set(runId, new AbortController());
 
     this.runEvolutionLoop(runId, state, this.abortControllers.get(runId)!.signal);
+    logger.info('evolution_resumed', { runId, currentGeneration: state.currentGeneration });
     return true;
   }
 
-  pauseEvolution(runId: string): boolean {
+  async pauseEvolution(runId: string): Promise<boolean> {
     const controller = this.abortControllers.get(runId);
     if (controller) {
       controller.abort();
@@ -56,17 +65,24 @@ export class EvolutionEngine {
     const state = this.activeRuns.get(runId);
     if (state) {
       state.status = 'paused';
-      try { EvolutionDB.update(runId, { status: 'paused' }); } catch { /* non-fatal */ }
+      try { await getStorageRepository().evolutionRuns.update(runId, { status: 'paused' }); } catch { /* non-fatal */ }
     }
 
+    if (state) logger.info('evolution_paused', { runId, currentGeneration: state.currentGeneration });
     return !!state;
   }
 
   getState(runId: string): EvolutionState | undefined {
     const mem = this.activeRuns.get(runId);
     if (mem) return mem;
+    return undefined;
+  }
+
+  async getStateFromStore(runId: string): Promise<EvolutionState | undefined> {
+    const mem = this.activeRuns.get(runId);
+    if (mem) return mem;
     try {
-      const db = EvolutionDB.getById(runId);
+      const db = await getStorageRepository().evolutionRuns.getById(runId);
       return db as unknown as EvolutionState | undefined;
     } catch {
       return undefined;
@@ -86,7 +102,11 @@ export class EvolutionEngine {
   ): Promise<void> {
     try {
       while (state.currentGeneration < state.maxGenerations && !signal.aborted) {
-        console.log(`[Evolution ${runId}] Generation ${state.currentGeneration + 1}/${state.maxGenerations}`);
+        logger.info('evolution_generation_started', {
+          runId,
+          generation: state.currentGeneration + 1,
+          maxGenerations: state.maxGenerations,
+        });
 
         const evaluated = await reinforcementEngine.evaluatePopulation(state.designs);
 
@@ -103,11 +123,12 @@ export class EvolutionEngine {
         }
 
         const parents = this.selectParents(evaluated, state);
-        state.designs = this.generateNextGeneration(parents, state, signal);
+        const mutationWeights = new Map(evaluated.map(e => [e.design.id, e.mutationWeight]));
+        state.designs = this.generateNextGeneration(parents, state, signal, mutationWeights);
         state.currentGeneration++;
 
         try {
-          EvolutionDB.update(runId, {
+          await getStorageRepository().evolutionRuns.update(runId, {
             currentGeneration: state.currentGeneration,
             history: state.history,
             status: state.status,
@@ -123,11 +144,14 @@ export class EvolutionEngine {
         state.status = 'completed';
       }
     } catch (error) {
-      console.error(`[Evolution ${runId}] Error:`, error);
+      logger.error('evolution_failed', {
+        runId,
+        error: error instanceof Error ? error.message : String(error),
+      });
       state.status = 'error';
     } finally {
       try {
-        EvolutionDB.update(runId, {
+        await getStorageRepository().evolutionRuns.update(runId, {
           currentGeneration: state.currentGeneration,
           history: state.history,
           status: state.status,
@@ -135,6 +159,11 @@ export class EvolutionEngine {
       } catch { /* non-fatal */ }
       this.activeRuns.delete(runId);
       this.abortControllers.delete(runId);
+      logger.info('evolution_finished', {
+        runId,
+        status: state.status,
+        currentGeneration: state.currentGeneration,
+      });
     }
   }
 
@@ -207,6 +236,7 @@ export class EvolutionEngine {
     parents: Design[],
     state: EvolutionState,
     signal: AbortSignal,
+    mutationWeights: Map<string, number> = new Map(),
   ): Design[] {
     const newGeneration: Design[] = [];
     const prng = new DeterministicPRNG(`${state.runId}_${state.currentGeneration}`);
@@ -218,7 +248,8 @@ export class EvolutionEngine {
       const parent1 = prng.pick(parents);
       const parent2 = prng.pick(parents);
       const child = this.crossover(parent1, parent2, prng, state.runId, state.currentGeneration);
-      this.mutate(child, state.mutationRate, prng);
+      const mutationRate = reinforcementEngine.getChildMutationRate(parent1, parent2, state.mutationRate, mutationWeights);
+      this.mutate(child, mutationRate, prng);
       newGeneration.push(child);
     }
 

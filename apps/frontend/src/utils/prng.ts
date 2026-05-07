@@ -24,6 +24,10 @@ export class DeterministicPRNG {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   }
 
+  getState(): number {
+    return this.seed;
+  }
+
   nextInt(min: number, max: number): number {
     return Math.floor(this.next() * (max - min + 1)) + min;
   }

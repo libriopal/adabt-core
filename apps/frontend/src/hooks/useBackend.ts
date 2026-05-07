@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 interface UseBackendOptions {
   onError?: (error: string) => void;
@@ -68,7 +68,378 @@ export function useBackend({ onError }: UseBackendOptions = {}) {
 
   const exportDesign = useCallback((id: string) => request(`/export/${id}`), [request]);
 
-  const getDemand = useCallback(() => request('/demand'), [request]);
+  const getDemand = useCallback((params?: { input?: string }) => {
+    const qs = params?.input ? `?${new URLSearchParams({ input: params.input }).toString()}` : '';
+    return request(`/demand${qs}`);
+  }, [request]);
 
-  return { loading, generateBatch, startEvolution, getEvolutionState, pauseEvolution, getDesigns, importDesigns, exportDesign, getDemand };
+  const getReinforcementReplay = useCallback(() => request('/reinforcement/replay'), [request]);
+
+  const runReplayVerify = useCallback((params?: { persist?: boolean }) => {
+    const qs = params?.persist === false ? '?persist=false' : '';
+    return request(`/replay/verify${qs}`);
+  }, [request]);
+
+  const getReplayHistory = useCallback((params?: { stream?: string; limit?: number }) => {
+    const qs = params ? new URLSearchParams(
+      Object.entries(params)
+        .filter(([, value]) => value !== undefined && value !== '')
+        .map(([key, value]) => [key, String(value)]),
+    ).toString() : '';
+    return request(`/replay/history${qs ? `?${qs}` : ''}`);
+  }, [request]);
+
+  const getReplayMonitor = useCallback((params?: { stream?: string }) => {
+    const qs = params?.stream ? `?${new URLSearchParams({ stream: params.stream }).toString()}` : '';
+    return request(`/replay/monitor${qs}`);
+  }, [request]);
+
+  const getReplayMonitorHistory = useCallback((params?: { stream?: string; limit?: number }) => {
+    const qs = params ? new URLSearchParams(
+      Object.entries(params)
+        .filter(([, value]) => value !== undefined && value !== '')
+        .map(([key, value]) => [key, String(value)]),
+    ).toString() : '';
+    return request(`/replay/monitor/history${qs ? `?${qs}` : ''}`);
+  }, [request]);
+
+  const acknowledgeReplayMonitor = useCallback((snapshotId: string, acknowledgedBy = 'operator') =>
+    request(`/replay/monitor/${snapshotId}/ack`, {
+      method: 'POST',
+      body: JSON.stringify({ acknowledgedBy }),
+    }), [request]);
+
+  const getReplayCheckpointDiff = useCallback((params: {
+    stream?: string;
+    baseId: string;
+    targetId: string;
+  }) => {
+    const qs = new URLSearchParams(
+      Object.entries(params)
+        .filter(([, value]) => value !== undefined && value !== '')
+        .map(([key, value]) => [key, String(value)]),
+    ).toString();
+    return request(`/replay/checkpoints/diff?${qs}`);
+  }, [request]);
+
+  const getContinuityExport = useCallback((params?: {
+    stream?: string;
+    checkpointId?: string;
+    limit?: number;
+  }) => {
+    const qs = params ? new URLSearchParams(
+      Object.entries(params)
+        .filter(([, value]) => value !== undefined && value !== '')
+        .map(([key, value]) => [key, String(value)]),
+    ).toString() : '';
+    return request(`/continuity/export${qs ? `?${qs}` : ''}`);
+  }, [request]);
+
+  const getDegradedReplayExport = useCallback((params?: {
+    stream?: string;
+    checkpointId?: string;
+    snapshotId?: string;
+    limit?: number;
+  }) => {
+    const qs = params ? new URLSearchParams(
+      Object.entries(params)
+        .filter(([, value]) => value !== undefined && value !== '')
+        .map(([key, value]) => [key, String(value)]),
+    ).toString() : '';
+    return request(`/replay/degraded-export${qs ? `?${qs}` : ''}`);
+  }, [request]);
+
+  const getReleaseReadiness = useCallback((params?: {
+    stream?: string;
+    provider?: string;
+    persistMonitor?: boolean;
+    persistEvidence?: boolean;
+    includeRollbackPreflight?: boolean;
+  }) => {
+    const qs = params ? new URLSearchParams(
+      Object.entries(params)
+        .filter(([, value]) => value !== undefined && value !== '')
+        .map(([key, value]) => [key, String(value)]),
+    ).toString() : '';
+    return request(`/release/readiness${qs ? `?${qs}` : ''}`);
+  }, [request]);
+
+  const getReleaseEvidenceHistory = useCallback((params?: {
+    stream?: string;
+    provider?: string;
+    status?: string;
+    rollbackStatus?: string;
+    limit?: number;
+  }) => {
+    const qs = params ? new URLSearchParams(
+      Object.entries(params)
+        .filter(([, value]) => value !== undefined && value !== '')
+        .map(([key, value]) => [key, String(value)]),
+    ).toString() : '';
+    return request(`/release/evidence${qs ? `?${qs}` : ''}`);
+  }, [request]);
+
+  const compareReleaseEvidence = useCallback((params?: { stream?: string; providers?: string }) => {
+    const qs = params ? new URLSearchParams(
+      Object.entries(params)
+        .filter(([, value]) => value !== undefined && value !== '')
+        .map(([key, value]) => [key, String(value)]),
+    ).toString() : '';
+    return request(`/release/evidence/compare${qs ? `?${qs}` : ''}`);
+  }, [request]);
+
+  const getReleaseEvidenceExport = useCallback((params?: {
+    stream?: string;
+    provider?: string;
+    limit?: number;
+    includeRollbackPreflight?: boolean;
+  }) => {
+    const qs = params ? new URLSearchParams(
+      Object.entries(params)
+        .filter(([, value]) => value !== undefined && value !== '')
+        .map(([key, value]) => [key, String(value)]),
+    ).toString() : '';
+    return request(`/release/evidence/export${qs ? `?${qs}` : ''}`);
+  }, [request]);
+
+  const createReleaseDecision = useCallback((params: {
+    evidenceId: string;
+    decision: 'go' | 'no-go' | 'exception';
+    reason: string;
+    decidedBy?: string;
+  }) => request('/release/decisions', { method: 'POST', body: JSON.stringify(params) }), [request]);
+
+  const getReleaseDecisions = useCallback((params?: {
+    stream?: string;
+    provider?: string;
+    decision?: string;
+    limit?: number;
+  }) => {
+    const qs = params ? new URLSearchParams(
+      Object.entries(params)
+        .filter(([, value]) => value !== undefined && value !== '')
+        .map(([key, value]) => [key, String(value)]),
+    ).toString() : '';
+    return request(`/release/decisions${qs ? `?${qs}` : ''}`);
+  }, [request]);
+
+  const createReleaseReconciliation = useCallback((params: {
+    decisionId: string;
+    commitSha: string;
+    branch: string;
+    pullRequestUrl?: string;
+    sourceThread?: string;
+    initiatedBy?: string;
+  }) => request('/release/reconciliations', { method: 'POST', body: JSON.stringify(params) }), [request]);
+
+  const getReleaseBundleSummary = useCallback((params?: {
+    decisionId?: string;
+    stream?: string;
+    provider?: string;
+    limit?: number;
+  }) => {
+    const qs = params ? new URLSearchParams(
+      Object.entries(params)
+        .filter(([, value]) => value !== undefined && value !== '')
+        .map(([key, value]) => [key, String(value)]),
+    ).toString() : '';
+    return request(`/release/bundle-summary${qs ? `?${qs}` : ''}`);
+  }, [request]);
+
+  const getReleaseEvidenceManifest = useCallback((params?: {
+    decisionId?: string;
+    stream?: string;
+    provider?: string;
+    promotionId?: string;
+    rollbackId?: string;
+    limit?: number;
+  }) => {
+    const qs = params ? new URLSearchParams(
+      Object.entries(params)
+        .filter(([, value]) => value !== undefined && value !== '')
+        .map(([key, value]) => [key, String(value)]),
+    ).toString() : '';
+    return request(`/release/evidence/manifest${qs ? `?${qs}` : ''}`);
+  }, [request]);
+
+  const verifyReleaseArtifacts = useCallback((params: {
+    manifest: unknown;
+    artifacts?: Record<string, unknown>;
+  }) => request('/release/evidence/verify-artifacts', { method: 'POST', body: JSON.stringify(params) }), [request]);
+
+  const getReleaseIncidentPacket = useCallback((params?: {
+    decisionId?: string;
+    stream?: string;
+    provider?: string;
+    promotionId?: string;
+    rollbackId?: string;
+    owner?: string;
+    visibility?: string;
+    limit?: number;
+  }) => {
+    const qs = params ? new URLSearchParams(
+      Object.entries(params)
+        .filter(([, value]) => value !== undefined && value !== '')
+        .map(([key, value]) => [key, String(value)]),
+    ).toString() : '';
+    return request(`/release/incident-packet${qs ? `?${qs}` : ''}`);
+  }, [request]);
+
+  const getReleaseDrift = useCallback((params: {
+    decisionId: string;
+    persistMonitor?: boolean;
+  }) => {
+    const qs = new URLSearchParams(
+      Object.entries(params)
+        .filter(([, value]) => value !== undefined && value !== '')
+        .map(([key, value]) => [key, String(value)]),
+    ).toString();
+    return request(`/release/drift?${qs}`);
+  }, [request]);
+
+  const applyReleaseEvidenceRetention = useCallback((params: {
+    stream?: string;
+    provider?: string;
+    environment?: string;
+    policy?: string;
+    retainLatest?: number;
+    dryRun?: boolean;
+  }) => request('/release/evidence/retention', { method: 'POST', body: JSON.stringify(params) }), [request]);
+
+  const getReleaseRetentionPolicyPresets = useCallback(() =>
+    request('/release/evidence/retention/presets'), [request]);
+
+  const getReleaseSupervisionCard = useCallback((params: {
+    decisionId: string;
+    environment?: string;
+    policy?: string;
+  }) => {
+    const qs = new URLSearchParams(
+      Object.entries(params)
+        .filter(([, value]) => value !== undefined && value !== '')
+        .map(([key, value]) => [key, String(value)]),
+    ).toString();
+    return request(`/release/supervision-card?${qs}`);
+  }, [request]);
+
+  const createReleaseDriftOverride = useCallback((params: {
+    decisionId: string;
+    environment?: string;
+    driftChecksum: string;
+    reason: string;
+    overriddenBy?: string;
+  }) => request('/release/drift-overrides', { method: 'POST', body: JSON.stringify(params) }), [request]);
+
+  const getReleaseDeploymentCommands = useCallback((params?: { environment?: string }) => {
+    const qs = params ? new URLSearchParams(
+      Object.entries(params)
+        .filter(([, value]) => value !== undefined && value !== '')
+        .map(([key, value]) => [key, String(value)]),
+    ).toString() : '';
+    return request(`/release/deployment-commands${qs ? `?${qs}` : ''}`);
+  }, [request]);
+
+  const startReleasePromotion = useCallback((params: {
+    decisionId: string;
+    environment?: string;
+    commandId?: string;
+    actor?: string;
+  }) => request('/release/promotions', { method: 'POST', body: JSON.stringify(params) }), [request]);
+
+  const transitionReleasePromotion = useCallback((promotionId: string, params: {
+    status: string;
+    actor?: string;
+    detail?: string;
+    outcome?: string;
+  }) => request(`/release/promotions/${promotionId}/transition`, { method: 'POST', body: JSON.stringify(params) }), [request]);
+
+  const attachReleasePromotionCiCheck = useCallback((promotionId: string, params: {
+    name: string;
+    status: string;
+    url?: string;
+    detail?: string;
+  }) => request(`/release/promotions/${promotionId}/ci-checks`, { method: 'POST', body: JSON.stringify(params) }), [request]);
+
+  const getReleasePromotionTimeline = useCallback((promotionId: string) =>
+    request(`/release/promotions/${promotionId}/timeline`), [request]);
+
+  const getReleaseRollbackCommands = useCallback((params?: { environment?: string }) => {
+    const qs = params ? new URLSearchParams(
+      Object.entries(params)
+        .filter(([, value]) => value !== undefined && value !== '')
+        .map(([key, value]) => [key, String(value)]),
+    ).toString() : '';
+    return request(`/release/rollback-commands${qs ? `?${qs}` : ''}`);
+  }, [request]);
+
+  const planReleaseRollback = useCallback((params: {
+    promotionId: string;
+    environment?: string;
+    commandId?: string;
+    actor?: string;
+  }) => request('/release/rollbacks', { method: 'POST', body: JSON.stringify(params) }), [request]);
+
+  const transitionReleaseRollback = useCallback((rollbackId: string, params: {
+    status: string;
+    actor?: string;
+    detail?: string;
+    outcome?: string;
+  }) => request(`/release/rollbacks/${rollbackId}/transition`, { method: 'POST', body: JSON.stringify(params) }), [request]);
+
+  const attachReleaseRollbackCiCheck = useCallback((rollbackId: string, params: {
+    name: string;
+    status: string;
+    url?: string;
+    detail?: string;
+  }) => request(`/release/rollbacks/${rollbackId}/ci-checks`, { method: 'POST', body: JSON.stringify(params) }), [request]);
+
+  const getReleaseRollbackTimeline = useCallback((rollbackId: string) =>
+    request(`/release/rollbacks/${rollbackId}/timeline`), [request]);
+
+  return {
+    loading,
+    generateBatch,
+    startEvolution,
+    getEvolutionState,
+    pauseEvolution,
+    getDesigns,
+    importDesigns,
+    exportDesign,
+    getDemand,
+    getReinforcementReplay,
+    runReplayVerify,
+    getReplayHistory,
+    getReplayMonitor,
+    getReplayMonitorHistory,
+    acknowledgeReplayMonitor,
+    getReplayCheckpointDiff,
+    getContinuityExport,
+    getDegradedReplayExport,
+    getReleaseReadiness,
+    getReleaseEvidenceHistory,
+    compareReleaseEvidence,
+    getReleaseEvidenceExport,
+    createReleaseDecision,
+    getReleaseDecisions,
+    createReleaseReconciliation,
+    getReleaseBundleSummary,
+    getReleaseEvidenceManifest,
+    verifyReleaseArtifacts,
+    getReleaseIncidentPacket,
+    getReleaseDrift,
+    applyReleaseEvidenceRetention,
+    getReleaseRetentionPolicyPresets,
+    getReleaseSupervisionCard,
+    createReleaseDriftOverride,
+    getReleaseDeploymentCommands,
+    startReleasePromotion,
+    transitionReleasePromotion,
+    attachReleasePromotionCiCheck,
+    getReleasePromotionTimeline,
+    getReleaseRollbackCommands,
+    planReleaseRollback,
+    transitionReleaseRollback,
+    attachReleaseRollbackCiCheck,
+    getReleaseRollbackTimeline,
+  };
 }

@@ -1,0 +1,174 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            apps/frontend/package-lock.json
+            apps/backend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix apps/frontend
+
+      - name: Install backend dependencies
+        run: npm ci --prefix apps/backend
+
+      - name: Build frontend
+        run: npm run build --prefix apps/frontend
+
+      - name: Build backend
+        run: npm run build --prefix apps/backend
+
+      - name: Test backend
+        run: npm test --prefix apps/backend
+
+      - name: Validate production readiness
+        run: node scripts/validate-production.mjs
+
+      - name: Generate release evidence artifact
+        if: ${{ env.AGROS_API_URL != '' }}
+        run: |
+          npm run artifact:release-evidence -- \
+            --api-url="$AGROS_API_URL" \
+            --provider="${AGROS_RELEASE_PROVIDER:-railway}" \
+            --output=outputs/release-evidence.json
+
+      - name: Upload release evidence artifact
+        if: ${{ env.AGROS_API_URL != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-evidence
+          path: outputs/release-evidence.json
+
+      - name: Publish release bundle summary
+        if: ${{ env.AGROS_API_URL != '' && env.AGROS_RELEASE_DECISION_ID != '' }}
+        run: |
+          npm run artifact:release-bundle -- \
+            --api-url="$AGROS_API_URL" \
+            --decision-id="$AGROS_RELEASE_DECISION_ID" \
+            --environment="${AGROS_RELEASE_ENVIRONMENT:-staging}" \
+            --output=outputs/release-bundle-summary.json
+
+      - name: Upload release bundle summary
+        if: ${{ env.AGROS_API_URL != '' && env.AGROS_RELEASE_DECISION_ID != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-bundle-summary
+          path: outputs/release-bundle-summary.json
+
+      - name: Attach release promotion CI check
+        if: ${{ env.AGROS_API_URL != '' && env.AGROS_RELEASE_PROMOTION_ID != '' }}
+        run: |
+          npm run release:ci-check -- \
+            --api-url="$AGROS_API_URL" \
+            --promotion-id="$AGROS_RELEASE_PROMOTION_ID" \
+            --name=github-actions \
+            --status=passed \
+            --url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --detail="GitHub Actions validation passed"
+
+      - name: Export release promotion timeline
+        if: ${{ env.AGROS_API_URL != '' && env.AGROS_RELEASE_PROMOTION_ID != '' }}
+        run: |
+          npm run artifact:promotion-timeline -- \
+            --api-url="$AGROS_API_URL" \
+            --promotion-id="$AGROS_RELEASE_PROMOTION_ID" \
+            --output=outputs/release-promotion-timeline.json
+
+      - name: Upload release promotion timeline
+        if: ${{ env.AGROS_API_URL != '' && env.AGROS_RELEASE_PROMOTION_ID != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-promotion-timeline
+          path: outputs/release-promotion-timeline.json
+
+      - name: Attach release rollback CI check
+        if: ${{ env.AGROS_API_URL != '' && env.AGROS_RELEASE_ROLLBACK_ID != '' }}
+        run: |
+          npm run release:rollback-ci-check -- \
+            --api-url="$AGROS_API_URL" \
+            --rollback-id="$AGROS_RELEASE_ROLLBACK_ID" \
+            --name=github-actions-rollback \
+            --status=passed \
+            --url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --detail="GitHub Actions rollback validation passed"
+
+      - name: Export release rollback timeline
+        if: ${{ env.AGROS_API_URL != '' && env.AGROS_RELEASE_ROLLBACK_ID != '' }}
+        run: |
+          npm run artifact:rollback-timeline -- \
+            --api-url="$AGROS_API_URL" \
+            --rollback-id="$AGROS_RELEASE_ROLLBACK_ID" \
+            --output=outputs/release-rollback-timeline.json
+
+      - name: Upload release rollback timeline
+        if: ${{ env.AGROS_API_URL != '' && env.AGROS_RELEASE_ROLLBACK_ID != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-rollback-timeline
+          path: outputs/release-rollback-timeline.json
+
+      - name: Generate release evidence manifest
+        if: ${{ env.AGROS_API_URL != '' && env.AGROS_RELEASE_DECISION_ID != '' }}
+        run: |
+          npm run artifact:evidence-manifest -- \
+            --api-url="$AGROS_API_URL" \
+            --decision-id="$AGROS_RELEASE_DECISION_ID" \
+            --promotion-id="${AGROS_RELEASE_PROMOTION_ID:-}" \
+            --rollback-id="${AGROS_RELEASE_ROLLBACK_ID:-}" \
+            --provider="${AGROS_RELEASE_PROVIDER:-railway}" \
+            --output=outputs/release-evidence-manifest.json
+
+      - name: Verify release handoff artifacts
+        if: ${{ env.AGROS_API_URL != '' && env.AGROS_RELEASE_DECISION_ID != '' }}
+        run: |
+          npm run release:verify-artifacts -- \
+            --api-url="$AGROS_API_URL" \
+            --manifest=outputs/release-evidence-manifest.json \
+            --release-evidence=outputs/release-evidence.json \
+            --release-bundle=outputs/release-bundle-summary.json \
+            --promotion-timeline=outputs/release-promotion-timeline.json \
+            --rollback-timeline=outputs/release-rollback-timeline.json \
+            --output=outputs/release-artifact-verification.json
+
+      - name: Upload release evidence manifest
+        if: ${{ env.AGROS_API_URL != '' && env.AGROS_RELEASE_DECISION_ID != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-evidence-manifest
+          path: |
+            outputs/release-evidence-manifest.json
+            outputs/release-artifact-verification.json
+
+      - name: Generate release incident packet
+        if: ${{ env.AGROS_API_URL != '' && env.AGROS_RELEASE_DECISION_ID != '' }}
+        run: |
+          npm run artifact:incident-packet -- \
+            --api-url="$AGROS_API_URL" \
+            --decision-id="$AGROS_RELEASE_DECISION_ID" \
+            --promotion-id="${AGROS_RELEASE_PROMOTION_ID:-}" \
+            --rollback-id="${AGROS_RELEASE_ROLLBACK_ID:-}" \
+            --owner="${AGROS_RELEASE_INCIDENT_OWNER:-release-owner}" \
+            --visibility="${AGROS_RELEASE_PACKET_VISIBILITY:-private}" \
+            --provider="${AGROS_RELEASE_PROVIDER:-railway}" \
+            --output=outputs/release-incident-packet.json
+
+      - name: Upload release incident packet
+        if: ${{ env.AGROS_API_URL != '' && env.AGROS_RELEASE_DECISION_ID != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-incident-packet
+          path: outputs/release-incident-packet.json

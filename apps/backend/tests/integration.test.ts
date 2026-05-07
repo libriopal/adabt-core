@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { batchGenerator } from '../src/services/batchGenerator';
+import { demandEngine } from '../src/services/demandEngine';
 import { evolutionEngine } from '../src/services/evolutionEngine';
+import { reinforcementEngine } from '../src/services/reinforcementEngine';
 import { initDatabase } from '../src/storage/db';
+import { verifyCocoonReplay } from '../../frontend/src/cocoon/verifier';
 
 beforeAll(() => {
   initDatabase(':memory:');
@@ -54,5 +57,35 @@ describe('Integration Tests', () => {
     const state = evolutionEngine.getState(runId);
     expect(state).toBeDefined();
     expect(state?.status).toBe('running');
+  });
+
+  it('should compute source-weighted demand intelligence', async () => {
+    const demand = await demandEngine.updateDemand('mythic bonus volatility');
+
+    expect(demand.demandScore).toBeGreaterThan(0);
+    expect(demand.keywordClusters.length).toBeGreaterThan(0);
+    expect(demand.sourceBreakdown?.length).toBeGreaterThan(1);
+    expect(demand.reinforcementInputs?.demandWeight).toBeGreaterThan(0);
+    expect(demand.checksum).toBeDefined();
+  });
+
+  it('should verify deterministic reinforcement replay', async () => {
+    const replay = await reinforcementEngine.verifyReplay();
+
+    expect(replay.stable).toBe(true);
+    expect(replay.firstChecksum).toBe(replay.secondChecksum);
+    expect(replay.decisionCount).toBe(3);
+    expect(Object.values(replay.gateStatuses).reduce((sum, count) => sum + count, 0)).toBe(3);
+  });
+
+  it('should verify deterministic cocoon reconstruction replay', () => {
+    const replay = verifyCocoonReplay();
+
+    expect(replay.stable).toBe(true);
+    expect(replay.firstChecksum).toBe(replay.secondChecksum);
+    expect(replay.reconstruction.accuracy).toBe(1);
+    expect(replay.continuity.overall).toBeGreaterThanOrEqual(0.82);
+    expect(replay.metrics.entropyAfter).toBeLessThanOrEqual(replay.metrics.entropyBefore);
+    expect(replay.topology.connectedComponents).toBe(1);
   });
 });

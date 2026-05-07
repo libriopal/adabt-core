@@ -1,0 +1,48 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      LOG_LEVEL: info
+      FRONTEND_URL: http://localhost:3000
+      DATABASE_PATH: /data/slotgpt.db
+      ENABLE_WORKERS: "true"
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    ports:
+      - "3001:3001"
+    volumes:
+      - backend_data:/data
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3001/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/frontend/Dockerfile
+    environment:
+      VITE_API_URL: http://localhost:3001/api
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  backend_data:
+  redis_data:
