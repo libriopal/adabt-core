@@ -18,6 +18,7 @@ import {
   monitorReplayHistory,
 } from '../diagnostics/replayHistory';
 import { runReplaySuite } from '../diagnostics/replaySuite';
+import { collectReleaseReadiness } from '../diagnostics/releaseReadiness';
 import { collectSystemDiagnostics } from '../diagnostics/systemDiagnostics';
 import { RequestWithContext, validateRuntimeEnvironment } from '../diagnostics/runtimeValidation';
 
@@ -94,6 +95,13 @@ const ReplayMonitorAckSchema = z.object({
 
 const DegradedReplayExportQuerySchema = ContinuityExportQuerySchema.extend({
   snapshotId: z.string().min(1).optional(),
+});
+
+const ReleaseReadinessQuerySchema = z.object({
+  stream: z.string().min(1).default(DEFAULT_REPLAY_STREAM),
+  persistMonitor: z.preprocess(value => (
+    value === undefined ? true : !['false', '0', 'no'].includes(String(value).toLowerCase())
+  ), z.boolean()).default(true),
 });
 
 router.post('/generate-batch', async (req: RequestWithContext, res) => {
@@ -363,6 +371,23 @@ router.get('/continuity/export', async (req: RequestWithContext, res) => {
     res.json({ success: true, export: continuityExport });
   } catch (error) {
     const id = logRouteError('CTX', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/readiness', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReleaseReadinessQuerySchema.parse(req.query);
+    const release = await collectReleaseReadiness({
+      stream: query.stream,
+      persistMonitor: query.persistMonitor,
+    });
+    res.status(release.status === 'ready' ? 200 : 503).json({
+      success: true,
+      release,
+    });
+  } catch (error) {
+    const id = logRouteError('REL', req, error);
     res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
   }
 });

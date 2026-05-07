@@ -78,7 +78,13 @@
    curl 'http://localhost:3001/api/replay/degraded-export?stream=agros-replay-suite&snapshotId=<snapshotId>&limit=20'
    ```
 
-12. Pause a runaway evolution:
+12. Check release readiness before promotion:
+
+   ```bash
+   curl 'http://localhost:3001/api/release/readiness?stream=agros-replay-suite'
+   ```
+
+13. Pause a runaway evolution:
 
    ```bash
    curl -X POST http://localhost:3001/api/continuity/<runId>/interrupt \
@@ -86,7 +92,7 @@
      -d '{"reason":"operator recovery"}'
    ```
 
-13. Resume after validation:
+14. Resume after validation:
 
    ```bash
    curl -X POST http://localhost:3001/api/continuity/<runId>/resume \
@@ -139,6 +145,22 @@ Local Docker:
 - Run `docker compose up --build`, then poll `/api/replay/monitor` before running replay append operations.
 - Mount SQLite `./data` as a persistent volume if Postgres is not configured.
 - Export `/api/replay/degraded-export` before recreating containers during recovery.
+
+## Release Go/No-Go
+
+Before a release promotion:
+
+1. Run `/api/release/readiness`.
+2. Proceed only when the release status is `ready`.
+3. Treat `blocked` as a hard stop until the latest replay alert is acknowledged or resolved.
+4. Treat `degraded` as an operator exception path that requires a written release note.
+5. Run the provider preflight command:
+
+   ```bash
+   npm run preflight:railway -- --api-url=https://<railway-backend>/api
+   npm run preflight:render -- --api-url=https://<render-backend>/api
+   npm run preflight:docker -- --api-url=http://localhost:3001/api
+   ```
 
 ## Continuity Failure Response
 

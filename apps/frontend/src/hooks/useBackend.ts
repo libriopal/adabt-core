@@ -149,6 +149,15 @@ export function useBackend({ onError }: UseBackendOptions = {}) {
     return request(`/replay/degraded-export${qs ? `?${qs}` : ''}`);
   }, [request]);
 
+  const getReleaseReadiness = useCallback((params?: { stream?: string; persistMonitor?: boolean }) => {
+    const qs = params ? new URLSearchParams(
+      Object.entries(params)
+        .filter(([, value]) => value !== undefined && value !== '')
+        .map(([key, value]) => [key, String(value)]),
+    ).toString() : '';
+    return request(`/release/readiness${qs ? `?${qs}` : ''}`);
+  }, [request]);
+
   return {
     loading,
     generateBatch,
@@ -168,5 +177,6 @@ export function useBackend({ onError }: UseBackendOptions = {}) {
     getReplayCheckpointDiff,
     getContinuityExport,
     getDegradedReplayExport,
+    getReleaseReadiness,
   };
 }

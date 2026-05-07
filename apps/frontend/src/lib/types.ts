@@ -275,6 +275,33 @@ export interface DegradedReplayExportBundle {
   exportChecksum: string;
 }
 
+export type ReleaseGateStatus = 'ready' | 'degraded' | 'blocked';
+
+export interface ReleaseGateReport {
+  name: string;
+  status: ReleaseGateStatus;
+  detail: string;
+  evidence?: Record<string, unknown>;
+}
+
+export interface ReleaseReadinessReport {
+  status: ReleaseGateStatus;
+  checkedAt: number;
+  stream: string;
+  runtime: {
+    status: 'ready' | 'degraded';
+    environment: string;
+    warnings: string[];
+    config: Record<string, unknown>;
+  };
+  replayMonitor: ReplayHistoryMonitorReport;
+  latestMonitorSnapshot?: ReplayMonitorSnapshot;
+  latestAlertSnapshot?: ReplayMonitorSnapshot;
+  latestAcknowledgedAlertSnapshot?: ReplayMonitorSnapshot;
+  gates: ReleaseGateReport[];
+  recommendations: string[];
+}
+
 export interface SlotGPTOutput {
   id: string;
   transformedTheme: string;

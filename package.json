@@ -19,6 +19,11 @@
     "validate:phase4": "node scripts/validate-phase4.mjs",
     "validate:phase5": "node scripts/validate-phase5.mjs",
     "validate:phase6": "node scripts/validate-phase6.mjs",
+    "validate:phase7": "node scripts/validate-phase7.mjs",
+    "preflight:release": "node scripts/release-preflight.mjs",
+    "preflight:railway": "node scripts/release-preflight.mjs --provider=railway",
+    "preflight:render": "node scripts/release-preflight.mjs --provider=render",
+    "preflight:docker": "node scripts/release-preflight.mjs --provider=local-docker",
     "dev:frontend": "npm run dev --prefix apps/frontend",
     "dev:backend": "npm run dev --prefix apps/backend"
   }

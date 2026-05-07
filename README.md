@@ -74,6 +74,12 @@ Phase 6 replay observability persistence can be checked with:
 npm run validate:phase6
 ```
 
+Phase 7 controlled release gates can be checked with:
+
+```bash
+npm run validate:phase7
+```
+
 ## Deployment
 
 - Frontend: Vercel with `vercel.json`.
@@ -97,6 +103,7 @@ See `DEPLOYMENT_GUIDE.md` for environment variables and provider-specific setup.
 - `GET /api/health`
 - `GET /api/ready`
 - `GET /api/diagnostics`
+- `GET /api/release/readiness`
 - `GET /api/replay/verify`
 - `GET /api/replay/history`
 - `GET /api/replay/monitor`
@@ -112,4 +119,4 @@ See `DEPLOYMENT_GUIDE.md` for environment variables and provider-specific setup.
 
 ## State
 
-Backend SQLite runtime files are intentionally ignored. Local runtime defaults to `DATABASE_PROVIDER=sqlite` and `DATABASE_PATH=./data/slotgpt.db`. Phase 6 routes request-time storage, replay event history, replay checkpoints, monitor snapshots, continuity exports, checkpoint diffs, and degraded replay exports through the operational replay path. Use `DATABASE_PROVIDER=postgres` plus `DATABASE_URL` for Postgres-backed request storage.
+Backend SQLite runtime files are intentionally ignored. Local runtime defaults to `DATABASE_PROVIDER=sqlite` and `DATABASE_PATH=./data/slotgpt.db`. Phase 7 routes request-time storage, replay event history, replay checkpoints, monitor snapshots, continuity exports, checkpoint diffs, degraded replay exports, and release readiness gates through the operational replay path. Use `DATABASE_PROVIDER=postgres` plus `DATABASE_URL` for Postgres-backed request storage.

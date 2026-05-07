@@ -6,6 +6,7 @@ import { DemandIntelligencePanel } from './components/DemandIntelligencePanel';
 import { ReinforcementOptimizerPanel } from './components/ReinforcementOptimizerPanel';
 import { CocoonDebugPanel } from './components/CocoonDebugPanel';
 import { ReplayOperationsPanel } from './components/ReplayOperationsPanel';
+import { ReleaseReadinessPanel } from './components/ReleaseReadinessPanel';
 import { useBackend } from './hooks/useBackend';
 import { agros, AGROSState } from './agros/init';
 
@@ -90,6 +91,7 @@ const App: React.FC = () => {
         <DemandIntelligencePanel />
         <ReinforcementOptimizerPanel />
         <ReplayOperationsPanel />
+        <ReleaseReadinessPanel />
         <CocoonDebugPanel />
 
         <div style={{ background: '#12172B', borderRadius: 8, padding: 24, border: '1px solid #1E293B', marginBottom: 24 }}>

@@ -36,6 +36,7 @@ Backend endpoints:
 - `GET /api/replay/checkpoints/diff`: returns server-side checkpoint comparisons.
 - `GET /api/replay/degraded-export`: exports monitor state, continuity state, and recovery recommendations.
 - `GET /api/continuity/export`: exports replay-checkpoint-anchored continuity state for recovery.
+- `GET /api/release/readiness`: returns release go/no-go gates for runtime, replay monitor, and alert acknowledgement state.
 - `GET /api/diagnostics`: returns runtime, replay, database, continuity, demand, and reinforcement diagnostics.
 - `GET /api/continuity/status`: returns websocket clients, interrupted run IDs, and recent continuity events.
 - `POST /api/continuity/:runId/interrupt`: pauses a run when possible and broadcasts a continuity interrupt event.
@@ -66,6 +67,7 @@ Backend continuity is preserved through:
 - server-side checkpoint diffs and replay monitor alerts
 - persisted replay monitor snapshots and alert acknowledgements
 - degraded replay recovery exports with recommendations
+- release-readiness gates for controlled go/no-go decisions
 - demand cache records
 - structured request IDs
 

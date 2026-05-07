@@ -33,6 +33,7 @@ Important variables:
 
 ```bash
 docker compose up --build
+npm run preflight:docker -- --api-url=http://localhost:3001/api
 ```
 
 Services:
@@ -97,11 +98,23 @@ RUN_MIGRATIONS=true
 
 Production startup fails when `DATABASE_PROVIDER=postgres` is selected without `DATABASE_URL`.
 
+After deployment, run:
+
+```bash
+npm run preflight:railway -- --api-url=https://<railway-backend>/api
+```
+
 ## Render Backend
 
 The repository includes `render.yaml`.
 
 Before deploying, set the synced `FRONTEND_URL` to the Vercel origin. The backend disk mounts at `/data`, and the backend service uses `/api/health` as its health check path.
+
+After deployment, run:
+
+```bash
+npm run preflight:render -- --api-url=https://<render-backend>/api
+```
 
 ## Android Termux Development
 
@@ -123,6 +136,12 @@ Run:
 
 ```bash
 node scripts/validate-production.mjs
+```
+
+Provider release preflight:
+
+```bash
+npm run preflight:release -- --provider=railway --api-url=https://<backend>/api
 ```
 
 This validates:
