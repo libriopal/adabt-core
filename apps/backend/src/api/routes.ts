@@ -25,6 +25,7 @@ import {
   collectReleaseReadiness,
   collectPostReleaseDrift,
   createReleaseEvidenceBundleManifest,
+  createReleaseIncidentPacket,
   createReleaseSupervisionStatusCard,
   createReleaseBundleSummary,
   createReleaseEvidenceExport,
@@ -167,6 +168,17 @@ const ReleaseEvidenceManifestQuerySchema = z.object({
   provider: z.string().min(1).optional(),
   promotionId: z.string().min(1).optional(),
   rollbackId: z.string().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(8),
+});
+
+const ReleaseIncidentPacketQuerySchema = z.object({
+  decisionId: z.string().min(1).optional(),
+  stream: z.string().min(1).default(DEFAULT_REPLAY_STREAM),
+  provider: z.string().min(1).optional(),
+  promotionId: z.string().min(1).optional(),
+  rollbackId: z.string().min(1).optional(),
+  owner: z.string().min(1).default('incident-owner'),
+  visibility: z.enum(['public', 'private']).default('private'),
   limit: z.coerce.number().int().min(1).max(50).default(8),
 });
 
@@ -680,6 +692,26 @@ router.post('/release/evidence/verify-artifacts', async (req: RequestWithContext
     res.status(verification.status === 'ready' ? 200 : 409).json({ success: true, verification });
   } catch (error) {
     const id = logRouteError('REVF', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/incident-packet', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReleaseIncidentPacketQuerySchema.parse(req.query);
+    const packet = await createReleaseIncidentPacket({
+      decisionId: query.decisionId,
+      stream: query.stream,
+      provider: query.provider,
+      promotionId: query.promotionId,
+      rollbackId: query.rollbackId,
+      owner: query.owner,
+      visibility: query.visibility,
+      limit: query.limit,
+    });
+    res.status(packet.summary.status === 'blocked' ? 409 : 200).json({ success: true, packet });
+  } catch (error) {
+    const id = logRouteError('RIP', req, error);
     res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
   }
 });

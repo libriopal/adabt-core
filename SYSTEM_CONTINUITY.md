@@ -59,6 +59,7 @@ Backend endpoints:
 - `GET /api/release/rollbacks/:rollbackId/timeline`: exports rollback timelines with linked promotion timeline evidence.
 - `GET /api/release/evidence/manifest`: generates a signed handoff manifest for release, promotion, and rollback artifacts.
 - `POST /api/release/evidence/verify-artifacts`: verifies uploaded handoff artifacts against the signed manifest checksums.
+- `GET /api/release/incident-packet`: exports an owner-assigned incident packet with manifest, verification, drift, rollback timeline, and public/private redaction controls.
 - `GET /api/diagnostics`: returns runtime, replay, database, continuity, demand, and reinforcement diagnostics.
 - `GET /api/continuity/status`: returns websocket clients, interrupted run IDs, and recent continuity events.
 - `POST /api/continuity/:runId/interrupt`: pauses a run when possible and broadcasts a continuity interrupt event.

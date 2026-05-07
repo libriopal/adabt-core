@@ -385,6 +385,53 @@ export interface ReleaseArtifactVerificationReport {
   recommendations: string[];
 }
 
+export type ReleaseIncidentPacketVisibility = 'public' | 'private';
+
+export interface ReleaseIncidentPacketInput {
+  decisionId?: string;
+  stream?: string;
+  provider?: string;
+  promotionId?: string;
+  rollbackId?: string;
+  owner?: string;
+  visibility?: ReleaseIncidentPacketVisibility;
+  limit?: number;
+  verification?: ReleaseArtifactVerificationReport;
+}
+
+export interface ReleaseIncidentPacketRedaction {
+  path: string;
+  reason: string;
+}
+
+export interface ReleaseIncidentPacketExport {
+  version: 'agros-release-incident-packet-v1';
+  generatedAt: number;
+  visibility: ReleaseIncidentPacketVisibility;
+  owner: string;
+  stream: string;
+  provider: string;
+  decisionId: string;
+  evidenceId: string;
+  promotionId?: string;
+  rollbackId?: string;
+  manifest: ReleaseEvidenceBundleManifest;
+  verification: ReleaseArtifactVerificationReport;
+  drift: ReleaseDriftReport;
+  bundleSummary: ReleaseBundleSummary | Record<string, unknown>;
+  promotionTimeline?: ReleasePromotionTimelineExport;
+  rollbackTimeline?: ReleaseRollbackTimelineExport;
+  redactions: ReleaseIncidentPacketRedaction[];
+  summary: {
+    status: ReleaseGateStatus;
+    recommendation: string;
+    artifactStatus: ReleaseArtifactVerificationReport['status'];
+    driftStatus: ReleaseDriftReport['status'];
+    rollbackStatus: ReleaseRollbackStatus | 'missing';
+  };
+  packetChecksum: string;
+}
+
 const PROVIDERS = new Set(['local-docker', 'railway', 'render', 'custom']);
 
 const RELEASE_RETENTION_POLICY_PRESETS: Record<ReleaseRetentionPolicyName, ReleaseRetentionPolicyPreset> = {
@@ -2037,5 +2084,214 @@ export function verifyReleaseHandoffArtifacts(
     recommendations: mismatches.length
       ? ['Regenerate mismatched artifacts from the release API and rerun artifact verification before publishing.']
       : manifest.triage.recommendations,
+  };
+}
+
+function normalizeIncidentPacketVisibility(
+  visibility?: ReleaseIncidentPacketVisibility,
+): ReleaseIncidentPacketVisibility {
+  return visibility === 'public' ? 'public' : 'private';
+}
+
+function normalizeIncidentOwner(owner?: string): string {
+  const trimmed = owner?.trim();
+  return trimmed || 'incident-owner';
+}
+
+function redactReleaseIncidentBundle(
+  bundle: ReleaseBundleSummary,
+  visibility: ReleaseIncidentPacketVisibility,
+): {
+  bundleSummary: ReleaseBundleSummary | Record<string, unknown>;
+  redactions: ReleaseIncidentPacketRedaction[];
+} {
+  if (visibility === 'private') {
+    return { bundleSummary: bundle, redactions: [] };
+  }
+
+  const redactions: ReleaseIncidentPacketRedaction[] = [];
+  const reconciliation = bundle.reconciliation
+    ? {
+      id: bundle.reconciliation.id,
+      decisionId: bundle.reconciliation.decisionId,
+      evidenceId: bundle.reconciliation.evidenceId,
+      stream: bundle.reconciliation.stream,
+      provider: bundle.reconciliation.provider,
+      commitSha: bundle.reconciliation.commitSha,
+      branch: bundle.reconciliation.branch,
+      decisionSignature: bundle.reconciliation.decisionSignature,
+      evidenceChecksum: bundle.reconciliation.evidenceChecksum,
+      providerSignature: bundle.reconciliation.providerSignature,
+      reconciliationSignature: bundle.reconciliation.reconciliationSignature,
+      createdAt: bundle.reconciliation.createdAt,
+    }
+    : undefined;
+
+  if (bundle.reconciliation?.pullRequestUrl) {
+    redactions.push({ path: 'bundleSummary.reconciliation.pullRequestUrl', reason: 'public handoff omits private review links' });
+  }
+  if (bundle.reconciliation?.sourceThread) {
+    redactions.push({ path: 'bundleSummary.reconciliation.sourceThread', reason: 'public handoff omits Slack thread links' });
+  }
+  if (bundle.reconciliation?.initiatedBy) {
+    redactions.push({ path: 'bundleSummary.reconciliation.initiatedBy', reason: 'public handoff omits internal actor attribution' });
+  }
+
+  return {
+    bundleSummary: {
+      version: bundle.version,
+      generatedAt: bundle.generatedAt,
+      stream: bundle.stream,
+      provider: bundle.provider,
+      decision: {
+        id: bundle.decision.id,
+        evidenceId: bundle.decision.evidenceId,
+        stream: bundle.decision.stream,
+        provider: bundle.decision.provider,
+        decision: bundle.decision.decision,
+        decidedAt: bundle.decision.decidedAt,
+        evidenceChecksum: bundle.decision.evidenceChecksum,
+        providerSignature: bundle.decision.providerSignature,
+        decisionSignature: bundle.decision.decisionSignature,
+        createdAt: bundle.decision.createdAt,
+      },
+      evidence: {
+        id: bundle.evidence.id,
+        stream: bundle.evidence.stream,
+        provider: bundle.evidence.provider,
+        status: bundle.evidence.status,
+        checkedAt: bundle.evidence.checkedAt,
+        gateCount: bundle.evidence.gateCount,
+        blockedGateCount: bundle.evidence.blockedGateCount,
+        degradedGateCount: bundle.evidence.degradedGateCount,
+        latestMonitorSnapshotId: bundle.evidence.latestMonitorSnapshotId,
+        latestAlertSnapshotId: bundle.evidence.latestAlertSnapshotId,
+        rollbackStatus: bundle.evidence.rollbackStatus,
+        latestDegradedExportChecksum: bundle.evidence.latestDegradedExportChecksum,
+        createdAt: bundle.evidence.createdAt,
+      },
+      reconciliation,
+      comparison: bundle.comparison,
+      drift: bundle.drift,
+      history: bundle.history.map(item => ({
+        id: item.id,
+        stream: item.stream,
+        provider: item.provider,
+        status: item.status,
+        checkedAt: item.checkedAt,
+        rollbackStatus: item.rollbackStatus,
+        createdAt: item.createdAt,
+      })),
+      summary: bundle.summary,
+      bundleChecksum: bundle.bundleChecksum,
+    },
+    redactions,
+  };
+}
+
+function releaseIncidentPacketStatus(input: {
+  verification: ReleaseArtifactVerificationReport;
+  drift: ReleaseDriftReport;
+  rollbackTimeline?: ReleaseRollbackTimelineExport;
+  manifest: ReleaseEvidenceBundleManifest;
+}): ReleaseIncidentPacketExport['summary'] {
+  const rollbackStatus = input.rollbackTimeline?.rollback.status ?? 'missing';
+  const status: ReleaseGateStatus = input.verification.status === 'blocked'
+    ? 'blocked'
+    : input.drift.status === 'degraded' || input.verification.status === 'degraded' || input.manifest.missingArtifacts.length
+      ? 'degraded'
+      : 'ready';
+  const recommendation = status === 'ready'
+    ? 'Publish the incident packet with the verified release handoff artifacts.'
+    : status === 'blocked'
+      ? 'Do not publish the incident packet until artifact verification mismatches are resolved.'
+      : 'Publish only with operator acknowledgement of missing timelines or post-release drift.';
+
+  return {
+    status,
+    recommendation,
+    artifactStatus: input.verification.status,
+    driftStatus: input.drift.status,
+    rollbackStatus,
+  };
+}
+
+export async function createReleaseIncidentPacket(
+  options: ReleaseIncidentPacketInput = {},
+): Promise<ReleaseIncidentPacketExport> {
+  const owner = normalizeIncidentOwner(options.owner);
+  const visibility = normalizeIncidentPacketVisibility(options.visibility);
+  const manifest = await createReleaseEvidenceBundleManifest({
+    decisionId: options.decisionId,
+    stream: options.stream,
+    provider: options.provider,
+    promotionId: options.promotionId,
+    rollbackId: options.rollbackId,
+    limit: options.limit ?? 8,
+  });
+  const bundle = await createReleaseBundleSummary({
+    decisionId: manifest.decisionId,
+    stream: manifest.stream,
+    provider: manifest.provider,
+    limit: options.limit ?? 8,
+  });
+  const promotionTimeline = manifest.promotionId
+    ? await exportReleasePromotionTimeline(manifest.promotionId)
+    : undefined;
+  const rollbackTimeline = manifest.rollbackId
+    ? await exportReleaseRollbackTimeline(manifest.rollbackId)
+    : undefined;
+  const drift = await collectPostReleaseDrift(manifest.decisionId, { persistMonitor: false });
+  const verification = options.verification ?? verifyReleaseHandoffArtifacts({
+    manifest,
+    artifacts: {
+      release_evidence: bundle.evidence,
+      release_bundle_summary: bundle,
+      promotion_timeline: promotionTimeline ?? rollbackTimeline?.promotionTimeline,
+      rollback_timeline: rollbackTimeline,
+    },
+  });
+  const { bundleSummary, redactions } = redactReleaseIncidentBundle(bundle, visibility);
+  const summary = releaseIncidentPacketStatus({
+    verification,
+    drift,
+    rollbackTimeline,
+    manifest,
+  });
+  const generatedAt = Date.now();
+  const packetChecksum = hashString(stableStringify({
+    decisionId: manifest.decisionId,
+    driftChecksum: drift.driftChecksum,
+    generatedAt,
+    manifestChecksum: manifest.manifestChecksum,
+    owner,
+    packetVisibility: visibility,
+    promotionChecksum: promotionTimeline?.exportChecksum ?? null,
+    redactions: redactions.map(redaction => redaction.path),
+    rollbackChecksum: rollbackTimeline?.exportChecksum ?? null,
+    status: summary.status,
+    verificationStatus: verification.status,
+  }));
+
+  return {
+    version: 'agros-release-incident-packet-v1',
+    generatedAt,
+    visibility,
+    owner,
+    stream: manifest.stream,
+    provider: manifest.provider,
+    decisionId: manifest.decisionId,
+    evidenceId: manifest.evidenceId,
+    promotionId: manifest.promotionId,
+    rollbackId: manifest.rollbackId,
+    manifest,
+    verification,
+    drift,
+    bundleSummary,
+    promotionTimeline,
+    rollbackTimeline,
+    redactions,
+    summary,
+    packetChecksum,
   };
 }

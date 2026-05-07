@@ -673,6 +673,39 @@ export interface ReleaseArtifactVerificationReport {
   recommendations: string[];
 }
 
+export type ReleaseIncidentPacketVisibility = 'public' | 'private';
+
+export interface ReleaseIncidentPacketExport {
+  version: 'agros-release-incident-packet-v1';
+  generatedAt: number;
+  visibility: ReleaseIncidentPacketVisibility;
+  owner: string;
+  stream: string;
+  provider: string;
+  decisionId: string;
+  evidenceId: string;
+  promotionId?: string;
+  rollbackId?: string;
+  manifest: ReleaseEvidenceBundleManifest;
+  verification: ReleaseArtifactVerificationReport;
+  drift: ReleaseDriftReport;
+  bundleSummary: ReleaseBundleSummary | Record<string, unknown>;
+  promotionTimeline?: ReleasePromotionTimelineExport;
+  rollbackTimeline?: ReleaseRollbackTimelineExport;
+  redactions: Array<{
+    path: string;
+    reason: string;
+  }>;
+  summary: {
+    status: ReleaseGateStatus;
+    recommendation: string;
+    artifactStatus: ReleaseArtifactVerificationReport['status'];
+    driftStatus: ReleaseDriftReport['status'];
+    rollbackStatus: ReleaseRollbackStatus | 'missing';
+  };
+  packetChecksum: string;
+}
+
 export interface SlotGPTOutput {
   id: string;
   transformedTheme: string;

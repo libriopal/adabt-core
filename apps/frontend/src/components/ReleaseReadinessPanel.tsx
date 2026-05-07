@@ -12,6 +12,8 @@ import {
   ReleaseEvidenceBundleManifest,
   ReleaseEvidenceRecord,
   ReleaseGateReport,
+  ReleaseIncidentPacketExport,
+  ReleaseIncidentPacketVisibility,
   ReleasePromotionRecord,
   ReleasePromotionStatus,
   ReleasePromotionTimelineExport,
@@ -50,6 +52,9 @@ export const ReleaseReadinessPanel: React.FC = () => {
   const [rollbackTimeline, setRollbackTimeline] = useState<ReleaseRollbackTimelineExport | null>(null);
   const [integrityManifest, setIntegrityManifest] = useState<ReleaseEvidenceBundleManifest | null>(null);
   const [artifactVerification, setArtifactVerification] = useState<ReleaseArtifactVerificationReport | null>(null);
+  const [incidentPacket, setIncidentPacket] = useState<ReleaseIncidentPacketExport | null>(null);
+  const [incidentOwner, setIncidentOwner] = useState('incident-owner');
+  const [packetVisibility, setPacketVisibility] = useState<ReleaseIncidentPacketVisibility>('private');
   const [historyStatus, setHistoryStatus] = useState('');
   const [historyRollbackStatus, setHistoryRollbackStatus] = useState('');
   const [decision, setDecision] = useState<ReleaseDecisionOutcome>('go');
@@ -80,6 +85,7 @@ export const ReleaseReadinessPanel: React.FC = () => {
     getReleaseDrift,
     getReleaseEvidenceManifest,
     getReleaseEvidenceExport,
+    getReleaseIncidentPacket,
     getReleaseEvidenceHistory,
     getReleaseDecisions,
     getReleasePromotionTimeline,
@@ -424,6 +430,36 @@ export const ReleaseReadinessPanel: React.FC = () => {
     }
   };
 
+  const generateIncidentPacket = async () => {
+    const latestDecision = decisions[0];
+    if (!latestDecision) {
+      setError('Record a release decision before assembling an incident packet.');
+      return;
+    }
+    if (!incidentOwner.trim()) {
+      setError('Incident owner is required before assembling an incident packet.');
+      return;
+    }
+    setError(null);
+    const data = await getReleaseIncidentPacket({
+      decisionId: latestDecision.id,
+      stream,
+      provider,
+      promotionId: promotion?.id,
+      rollbackId: rollback?.id,
+      owner: incidentOwner.trim(),
+      visibility: packetVisibility,
+      limit: 8,
+    }) as any;
+    if (data?.packet) {
+      setIncidentPacket(data.packet);
+      setIntegrityManifest(data.packet.manifest);
+      setArtifactVerification(data.packet.verification);
+      setDrift(data.packet.drift);
+      downloadJson(`agros-release-incident-packet-${latestDecision.id}-${packetVisibility}.json`, data.packet);
+    }
+  };
+
   const verifyIntegrityArtifacts = async () => {
     if (!integrityManifest) {
       setError('Generate an evidence manifest before verifying handoff artifacts.');
@@ -489,6 +525,7 @@ export const ReleaseReadinessPanel: React.FC = () => {
     setRollbackTimeline(null);
     setIntegrityManifest(null);
     setArtifactVerification(null);
+    setIncidentPacket(null);
     loadDeploymentCommands();
     loadRollbackCommands();
   }, [environment]);
@@ -497,9 +534,9 @@ export const ReleaseReadinessPanel: React.FC = () => {
     <div style={{ background: '#12172B', borderRadius: 8, padding: 24, border: '1px solid #1E293B', marginBottom: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', marginBottom: 18 }}>
         <div>
-          <h2 style={{ color: '#94A3B8', fontSize: 14, marginTop: 0, marginBottom: 6 }}>Phase 14 Evidence Integrity</h2>
+          <h2 style={{ color: '#94A3B8', fontSize: 14, marginTop: 0, marginBottom: 6 }}>Phase 15 Incident Packets</h2>
           <div style={{ color: '#64748B', fontSize: 12 }}>
-            Runtime gates, promotions, rollbacks, signed handoff manifests, and artifact verification.
+            Runtime gates, promotions, rollbacks, signed manifests, verification, and redacted incident packet exports.
           </div>
         </div>
         <StatusBadge status={release?.status} />
@@ -558,6 +595,23 @@ export const ReleaseReadinessPanel: React.FC = () => {
         </button>
         <button onClick={generateIntegrityManifest} disabled={loading || !decisions[0]} style={buttonStyle(loading || !decisions[0])}>
           Manifest
+        </button>
+        <input
+          value={incidentOwner}
+          onChange={event => setIncidentOwner(event.target.value)}
+          placeholder="Incident owner"
+          style={inputStyle}
+        />
+        <select
+          value={packetVisibility}
+          onChange={event => setPacketVisibility(event.target.value as ReleaseIncidentPacketVisibility)}
+          style={inputStyle}
+        >
+          <option value="private">private packet</option>
+          <option value="public">public packet</option>
+        </select>
+        <button onClick={generateIncidentPacket} disabled={loading || !decisions[0] || !incidentOwner.trim()} style={buttonStyle(loading || !decisions[0] || !incidentOwner.trim())}>
+          Packet
         </button>
       </div>
 
@@ -866,6 +920,28 @@ export const ReleaseReadinessPanel: React.FC = () => {
               {artifactVerification.mismatches.length > 0 && (
                 <div>{artifactVerification.mismatches.join(' ')}</div>
               )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {incidentPacket && (
+        <div style={{ ...panelStyle, marginTop: 12, borderColor: statusColor(incidentPacket.summary.status) }}>
+          <div style={panelTitleStyle}>Release Incident Packet</div>
+          <div style={{ color: statusColor(incidentPacket.summary.status), fontSize: 12, fontWeight: 800, marginBottom: 8 }}>
+            {incidentPacket.summary.status}: {incidentPacket.summary.recommendation}
+          </div>
+          <div style={{ display: 'grid', gap: 6, color: '#CBD5E1', fontSize: 11 }}>
+            <div>Owner: {incidentPacket.owner} | Visibility: {incidentPacket.visibility}</div>
+            <div>Artifacts: {incidentPacket.verification.status} | Drift: {incidentPacket.drift.status} | Rollback: {incidentPacket.summary.rollbackStatus}</div>
+            <div>Redactions: {incidentPacket.redactions.length}</div>
+            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              Packet checksum: {incidentPacket.packetChecksum}
+            </div>
+          </div>
+          {incidentPacket.redactions.length > 0 && (
+            <div style={{ color: '#94A3B8', fontSize: 11, marginTop: 8 }}>
+              {incidentPacket.redactions.map(redaction => redaction.path).join(', ')}
             </div>
           )}
         </div>

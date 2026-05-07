@@ -187,3 +187,12 @@ npm run release:verify-artifacts -- --api-url=http://localhost:3001/api --manife
 ```
 
 Phase 14 adds signed release evidence manifests, uploaded artifact verification, dashboard mismatch triage, and CI verification for handoff artifacts before publication.
+
+## Phase 15 Validation
+
+```bash
+npm run validate:phase15
+npm run artifact:incident-packet -- --api-url=http://localhost:3001/api --decision-id=<decision-id> --promotion-id=<promotion-id> --rollback-id=<rollback-id> --owner=<incident-owner> --visibility=private --output=/tmp/agros-release-incident-packet.json
+```
+
+Phase 15 adds release incident packet exports that combine signed manifests, artifact verification, post-release drift, rollback timelines, owner assignment, and public/private redaction controls for handoff publication.

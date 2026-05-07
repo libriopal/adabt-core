@@ -182,6 +182,7 @@ Before a release promotion:
 23. Export `/api/release/rollbacks/<rollback-id>/timeline` and store it with incident, audit, or rollback handoff artifacts.
 24. Generate `/api/release/evidence/manifest` with the decision, promotion, and rollback IDs before publishing the handoff packet.
 25. Verify uploaded handoff artifacts with `POST /api/release/evidence/verify-artifacts`; block publication until mismatches are resolved.
+26. Export `/api/release/incident-packet` with an incident owner and choose `visibility=public` for redacted handoff contexts or `visibility=private` for internal incident review.
 
 ## Continuity Failure Response
 

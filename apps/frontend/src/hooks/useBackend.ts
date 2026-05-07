@@ -267,6 +267,24 @@ export function useBackend({ onError }: UseBackendOptions = {}) {
     artifacts?: Record<string, unknown>;
   }) => request('/release/evidence/verify-artifacts', { method: 'POST', body: JSON.stringify(params) }), [request]);
 
+  const getReleaseIncidentPacket = useCallback((params?: {
+    decisionId?: string;
+    stream?: string;
+    provider?: string;
+    promotionId?: string;
+    rollbackId?: string;
+    owner?: string;
+    visibility?: string;
+    limit?: number;
+  }) => {
+    const qs = params ? new URLSearchParams(
+      Object.entries(params)
+        .filter(([, value]) => value !== undefined && value !== '')
+        .map(([key, value]) => [key, String(value)]),
+    ).toString() : '';
+    return request(`/release/incident-packet${qs ? `?${qs}` : ''}`);
+  }, [request]);
+
   const getReleaseDrift = useCallback((params: {
     decisionId: string;
     persistMonitor?: boolean;
@@ -407,6 +425,7 @@ export function useBackend({ onError }: UseBackendOptions = {}) {
     getReleaseBundleSummary,
     getReleaseEvidenceManifest,
     verifyReleaseArtifacts,
+    getReleaseIncidentPacket,
     getReleaseDrift,
     applyReleaseEvidenceRetention,
     getReleaseRetentionPolicyPresets,
