@@ -8,6 +8,7 @@ import {
   EvolutionState,
   ReinforcementDecision,
   ReplayCheckpoint,
+  ReplayMonitorSnapshot,
 } from '../types';
 import { initDatabase, getDB } from './db';
 import {
@@ -36,6 +37,11 @@ export type EventLogInput = Omit<EventLogEntry, 'createdAt'> & {
 
 export type ReplayCheckpointInput = Omit<ReplayCheckpoint, 'createdAt'> & {
   createdAt?: number;
+};
+
+export type ReplayMonitorSnapshotInput = Omit<ReplayMonitorSnapshot, 'acknowledgedAt' | 'acknowledgedBy'> & {
+  acknowledgedAt?: number;
+  acknowledgedBy?: string;
 };
 
 export interface StorageRepository {
@@ -69,6 +75,11 @@ export interface StorageRepository {
     save(checkpoint: ReplayCheckpointInput): Promise<ReplayCheckpoint>;
     getLatest(stream?: string, limit?: number): Promise<ReplayCheckpoint[]>;
     getById(id: string): Promise<ReplayCheckpoint | null>;
+  };
+  replayMonitorSnapshots: {
+    save(snapshot: ReplayMonitorSnapshotInput): Promise<ReplayMonitorSnapshot>;
+    getLatest(stream?: string, limit?: number): Promise<ReplayMonitorSnapshot[]>;
+    acknowledge(id: string, acknowledgedBy?: string): Promise<ReplayMonitorSnapshot | null>;
   };
   close(): Promise<void>;
 }
@@ -181,6 +192,25 @@ function rowToReplayCheckpoint(row: any): ReplayCheckpoint {
     replayChecksum: row.replay_checksum,
     state: JSON.parse(row.state),
     createdAt: Number(row.created_at),
+  };
+}
+
+function rowToReplayMonitorSnapshot(row: any): ReplayMonitorSnapshot {
+  return {
+    id: row.id,
+    stream: row.stream,
+    status: row.status,
+    checkedAt: Number(row.checked_at),
+    eventCount: Number(row.event_count),
+    checkpointCount: Number(row.checkpoint_count),
+    latestCheckpointId: row.latest_checkpoint_id ?? undefined,
+    alertCount: Number(row.alert_count),
+    alerts: JSON.parse(row.alerts),
+    report: JSON.parse(row.report),
+    acknowledgedAt: row.acknowledged_at === null || row.acknowledged_at === undefined
+      ? undefined
+      : Number(row.acknowledged_at),
+    acknowledgedBy: row.acknowledged_by ?? undefined,
   };
 }
 
@@ -423,6 +453,56 @@ export class SqliteStorageRepository implements StorageRepository {
     getById: async (id: string): Promise<ReplayCheckpoint | null> => {
       const row = getDB().prepare('SELECT * FROM replay_checkpoints WHERE id = ?').get(id) as any;
       return row ? rowToReplayCheckpoint(row) : null;
+    },
+  };
+
+  replayMonitorSnapshots = {
+    save: async (snapshot: ReplayMonitorSnapshotInput): Promise<ReplayMonitorSnapshot> => {
+      getDB().prepare(`
+        INSERT OR REPLACE INTO replay_monitor_snapshots
+          (id, stream, status, checked_at, event_count, checkpoint_count,
+           latest_checkpoint_id, alert_count, alerts, report, acknowledged_at, acknowledged_by)
+        VALUES
+          (@id, @stream, @status, @checked_at, @event_count, @checkpoint_count,
+           @latest_checkpoint_id, @alert_count, @alerts, @report, @acknowledged_at, @acknowledged_by)
+      `).run({
+        id: snapshot.id,
+        stream: snapshot.stream,
+        status: snapshot.status,
+        checked_at: snapshot.checkedAt,
+        event_count: snapshot.eventCount,
+        checkpoint_count: snapshot.checkpointCount,
+        latest_checkpoint_id: snapshot.latestCheckpointId ?? null,
+        alert_count: snapshot.alertCount,
+        alerts: JSON.stringify(snapshot.alerts),
+        report: JSON.stringify(snapshot.report),
+        acknowledged_at: snapshot.acknowledgedAt ?? null,
+        acknowledged_by: snapshot.acknowledgedBy ?? null,
+      });
+
+      return {
+        ...snapshot,
+        acknowledgedAt: snapshot.acknowledgedAt,
+        acknowledgedBy: snapshot.acknowledgedBy,
+      };
+    },
+    getLatest: async (stream?: string, limit = 20): Promise<ReplayMonitorSnapshot[]> => {
+      const rows = stream
+        ? getDB()
+          .prepare('SELECT * FROM replay_monitor_snapshots WHERE stream = ? ORDER BY checked_at DESC LIMIT ?')
+          .all(stream, limit) as any[]
+        : getDB()
+          .prepare('SELECT * FROM replay_monitor_snapshots ORDER BY checked_at DESC LIMIT ?')
+          .all(limit) as any[];
+      return rows.map(rowToReplayMonitorSnapshot);
+    },
+    acknowledge: async (id: string, acknowledgedBy = 'operator'): Promise<ReplayMonitorSnapshot | null> => {
+      const acknowledgedAt = Date.now();
+      getDB()
+        .prepare('UPDATE replay_monitor_snapshots SET acknowledged_at = ?, acknowledged_by = ? WHERE id = ?')
+        .run(acknowledgedAt, acknowledgedBy, id);
+      const row = getDB().prepare('SELECT * FROM replay_monitor_snapshots WHERE id = ?').get(id) as any;
+      return row ? rowToReplayMonitorSnapshot(row) : null;
     },
   };
 
@@ -738,6 +818,71 @@ export class PostgresStorageRepository implements StorageRepository {
     getById: async (id: string): Promise<ReplayCheckpoint | null> => {
       const result = await this.pool.query('SELECT * FROM replay_checkpoints WHERE id = $1', [id]);
       return result.rows[0] ? rowToReplayCheckpoint(result.rows[0]) : null;
+    },
+  };
+
+  replayMonitorSnapshots = {
+    save: async (snapshot: ReplayMonitorSnapshotInput): Promise<ReplayMonitorSnapshot> => {
+      await this.pool.query(`
+        INSERT INTO replay_monitor_snapshots
+          (id, stream, status, checked_at, event_count, checkpoint_count,
+           latest_checkpoint_id, alert_count, alerts, report, acknowledged_at, acknowledged_by)
+        VALUES
+          ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        ON CONFLICT (id) DO UPDATE SET
+          stream = EXCLUDED.stream,
+          status = EXCLUDED.status,
+          checked_at = EXCLUDED.checked_at,
+          event_count = EXCLUDED.event_count,
+          checkpoint_count = EXCLUDED.checkpoint_count,
+          latest_checkpoint_id = EXCLUDED.latest_checkpoint_id,
+          alert_count = EXCLUDED.alert_count,
+          alerts = EXCLUDED.alerts,
+          report = EXCLUDED.report,
+          acknowledged_at = EXCLUDED.acknowledged_at,
+          acknowledged_by = EXCLUDED.acknowledged_by
+      `, [
+        snapshot.id,
+        snapshot.stream,
+        snapshot.status,
+        snapshot.checkedAt,
+        snapshot.eventCount,
+        snapshot.checkpointCount,
+        snapshot.latestCheckpointId ?? null,
+        snapshot.alertCount,
+        JSON.stringify(snapshot.alerts),
+        JSON.stringify(snapshot.report),
+        snapshot.acknowledgedAt ?? null,
+        snapshot.acknowledgedBy ?? null,
+      ]);
+
+      return {
+        ...snapshot,
+        acknowledgedAt: snapshot.acknowledgedAt,
+        acknowledgedBy: snapshot.acknowledgedBy,
+      };
+    },
+    getLatest: async (stream?: string, limit = 20): Promise<ReplayMonitorSnapshot[]> => {
+      const result = stream
+        ? await this.pool.query(
+          'SELECT * FROM replay_monitor_snapshots WHERE stream = $1 ORDER BY checked_at DESC LIMIT $2',
+          [stream, limit],
+        )
+        : await this.pool.query(
+          'SELECT * FROM replay_monitor_snapshots ORDER BY checked_at DESC LIMIT $1',
+          [limit],
+        );
+      return result.rows.map(rowToReplayMonitorSnapshot);
+    },
+    acknowledge: async (id: string, acknowledgedBy = 'operator'): Promise<ReplayMonitorSnapshot | null> => {
+      const acknowledgedAt = Date.now();
+      const result = await this.pool.query(`
+        UPDATE replay_monitor_snapshots
+        SET acknowledged_at = $1, acknowledged_by = $2
+        WHERE id = $3
+        RETURNING *
+      `, [acknowledgedAt, acknowledgedBy, id]);
+      return result.rows[0] ? rowToReplayMonitorSnapshot(result.rows[0]) : null;
     },
   };
 

@@ -2,11 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useBackend } from '../hooks/useBackend';
 import {
   ContinuityExportBundle,
+  DegradedReplayExportBundle,
   EventLogEntry,
   ReplayCheckpoint,
   ReplayCheckpointDiff,
   ReplayHistoryMonitorReport,
   ReplayHistoryResult,
+  ReplayMonitorSnapshot,
 } from '../lib/types';
 
 const DEFAULT_STREAM = 'agros-replay-suite';
@@ -19,22 +21,28 @@ export const ReplayOperationsPanel: React.FC = () => {
   const [targetId, setTargetId] = useState('');
   const [serverDiff, setServerDiff] = useState<ReplayCheckpointDiff | null>(null);
   const [monitor, setMonitor] = useState<ReplayHistoryMonitorReport | null>(null);
+  const [monitorHistory, setMonitorHistory] = useState<ReplayMonitorSnapshot[]>([]);
   const [continuityExport, setContinuityExport] = useState<ContinuityExportBundle | null>(null);
+  const [degradedExport, setDegradedExport] = useState<DegradedReplayExportBundle | null>(null);
   const [error, setError] = useState<string | null>(null);
   const {
     getReplayHistory,
     getReplayMonitor,
+    getReplayMonitorHistory,
+    acknowledgeReplayMonitor,
     getReplayCheckpointDiff,
     getContinuityExport,
+    getDegradedReplayExport,
     runReplayVerify,
     loading,
   } = useBackend({ onError: setError });
 
   const loadHistory = async () => {
     setError(null);
-    const [data, monitorData] = await Promise.all([
+    const [data, monitorData, monitorHistoryData] = await Promise.all([
       getReplayHistory({ stream, limit }) as any,
       getReplayMonitor({ stream }) as any,
+      getReplayMonitorHistory({ stream, limit }) as any,
     ]);
     if (data?.history) {
       const nextHistory = data.history as ReplayHistoryResult;
@@ -51,6 +59,7 @@ export const ReplayOperationsPanel: React.FC = () => {
       ));
     }
     if (monitorData?.monitor) setMonitor(monitorData.monitor);
+    if (monitorHistoryData?.snapshots) setMonitorHistory(monitorHistoryData.snapshots);
   };
 
   useEffect(() => {
@@ -90,26 +99,61 @@ export const ReplayOperationsPanel: React.FC = () => {
     if (data?.export) setContinuityExport(data.export);
   };
 
-  const handleDownload = () => {
-    if (!continuityExport) return;
-    const blob = new Blob([JSON.stringify(continuityExport, null, 2)], { type: 'application/json' });
+  const handleDegradedExport = async () => {
+    setError(null);
+    const checkpointId = targetId || history?.verification.latestCheckpointId;
+    const data = await getDegradedReplayExport({
+      stream,
+      checkpointId,
+      limit,
+      snapshotId: monitor?.snapshotId || monitorHistory[0]?.id,
+    }) as any;
+    if (data?.export) setDegradedExport(data.export);
+  };
+
+  const handleAcknowledgeMonitor = async () => {
+    const snapshotId = monitor?.snapshotId || monitorHistory[0]?.id;
+    if (!snapshotId) return;
+    setError(null);
+    await acknowledgeReplayMonitor(snapshotId, 'frontend-operator');
+    await loadHistory();
+  };
+
+  const downloadJson = (payload: unknown, filename: string) => {
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const href = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = href;
-    anchor.download = `${continuityExport.stream}-${continuityExport.anchor?.id || 'latest'}-continuity.json`;
+    anchor.download = filename;
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
     URL.revokeObjectURL(href);
   };
 
+  const handleDownload = () => {
+    if (!continuityExport) return;
+    downloadJson(
+      continuityExport,
+      `${continuityExport.stream}-${continuityExport.anchor?.id || 'latest'}-continuity.json`,
+    );
+  };
+
+  const handleDownloadDegraded = () => {
+    if (!degradedExport) return;
+    downloadJson(
+      degradedExport,
+      `${degradedExport.stream}-${degradedExport.monitorSnapshot?.id || 'latest'}-degraded-replay.json`,
+    );
+  };
+
   return (
     <div style={{ background: '#12172B', borderRadius: 8, padding: 24, border: '1px solid #1E293B', marginBottom: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', marginBottom: 18 }}>
         <div>
-          <h2 style={{ color: '#94A3B8', fontSize: 14, marginTop: 0, marginBottom: 6 }}>Phase 5 Replay Recovery</h2>
+          <h2 style={{ color: '#94A3B8', fontSize: 14, marginTop: 0, marginBottom: 6 }}>Phase 6 Replay Observability</h2>
           <div style={{ color: '#64748B', fontSize: 12 }}>
-            Recovery-mode replay, server checkpoint diffs, export downloads, and degradation monitoring.
+            Persisted monitor trend, alert acknowledgement, degraded export bundles, and recovery guidance.
           </div>
         </div>
         <StatusBadge stable={monitor ? monitor.status === 'ready' : history?.verification.stable} />
@@ -144,6 +188,12 @@ export const ReplayOperationsPanel: React.FC = () => {
         </button>
         <button onClick={handleDownload} disabled={!continuityExport} style={buttonStyle('#E2E8F0', !continuityExport)}>
           Download
+        </button>
+        <button onClick={handleDegradedExport} disabled={loading || !history?.checkpoints.length} style={buttonStyle('#F97316', loading || !history?.checkpoints.length)}>
+          Degraded Export
+        </button>
+        <button onClick={handleAcknowledgeMonitor} disabled={loading || !(monitor?.snapshotId || monitorHistory[0]?.id)} style={buttonStyle('#A3E635', loading || !(monitor?.snapshotId || monitorHistory[0]?.id))}>
+          Ack Monitor
         </button>
       </div>
 
@@ -215,6 +265,44 @@ export const ReplayOperationsPanel: React.FC = () => {
               <div key={alert} style={{ color: '#F59E0B', fontSize: 12 }}>{alert}</div>
             ))}
           </div>
+        </div>
+      )}
+
+      <div style={{ ...panelStyle, marginTop: 12 }}>
+        <div style={panelTitleStyle}>Monitor History</div>
+        <div style={{ display: 'grid', gap: 8, maxHeight: 160, overflowY: 'auto' }}>
+          {monitorHistory.map(snapshot => (
+            <div key={snapshot.id} style={{ display: 'grid', gridTemplateColumns: '82px 74px 1fr 86px', gap: 8, color: '#94A3B8', fontSize: 11, alignItems: 'center' }}>
+              <span style={{ color: snapshot.status === 'degraded' ? '#F59E0B' : '#10B981', fontWeight: 800 }}>{snapshot.status}</span>
+              <span>{snapshot.alertCount} alerts</span>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: 'JetBrains Mono, monospace' }}>{snapshot.id}</span>
+              <span style={{ color: snapshot.acknowledgedAt ? '#A3E635' : '#64748B' }}>
+                {snapshot.acknowledgedAt ? 'acked' : 'open'}
+              </span>
+            </div>
+          ))}
+          {monitorHistory.length === 0 && (
+            <div style={{ color: '#64748B', fontSize: 12 }}>No monitor snapshots persisted yet.</div>
+          )}
+        </div>
+      </div>
+
+      {degradedExport && (
+        <div style={{ ...panelStyle, marginTop: 12, borderColor: 'rgba(249,115,22,0.65)' }}>
+          <div style={panelTitleStyle}>Degraded Replay Export</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10, marginBottom: 10 }}>
+            <Line label="Snapshot" value={degradedExport.monitorSnapshot?.id || 'none'} />
+            <Line label="Status" value={degradedExport.monitor.status} />
+            <Line label="Checksum" value={degradedExport.exportChecksum} />
+          </div>
+          <div style={{ display: 'grid', gap: 6, marginBottom: 10 }}>
+            {degradedExport.recommendations.map(recommendation => (
+              <div key={recommendation} style={{ color: '#FDBA74', fontSize: 12 }}>{recommendation}</div>
+            ))}
+          </div>
+          <button onClick={handleDownloadDegraded} style={{ ...buttonStyle('#FDBA74'), width: '100%' }}>
+            Download Degraded Bundle
+          </button>
         </div>
       )}
     </div>

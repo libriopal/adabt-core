@@ -1,7 +1,14 @@
 import { continuityHub, ContinuityEvent } from './continuityHub';
-import { DEFAULT_REPLAY_STREAM, getReplayHistory, stableStringify, verifyReplayHistory } from './replayHistory';
+import {
+  DEFAULT_REPLAY_STREAM,
+  getReplayHistory,
+  getReplayMonitorHistory,
+  monitorReplayHistory,
+  stableStringify,
+  verifyReplayHistory,
+} from './replayHistory';
 import { getStorageRepository } from '../storage/repository';
-import { ReplayCheckpoint } from '../types';
+import { ReplayCheckpoint, ReplayMonitorSnapshot } from '../types';
 import { hashString } from '../utils/prng';
 
 export interface ContinuityExportOptions {
@@ -22,6 +29,17 @@ export interface ContinuityExportBundle {
     events: ContinuityEvent[];
   };
   verification: Awaited<ReturnType<typeof verifyReplayHistory>>;
+  exportChecksum: string;
+}
+
+export interface DegradedReplayExportBundle {
+  version: 'agros-degraded-replay-export-v1';
+  exportedAt: number;
+  stream: string;
+  monitor: Awaited<ReturnType<typeof monitorReplayHistory>>;
+  monitorSnapshot: ReplayMonitorSnapshot | null;
+  continuityExport: ContinuityExportBundle;
+  recommendations: string[];
   exportChecksum: string;
 }
 
@@ -77,5 +95,64 @@ export async function createContinuityExport(
     },
     verification,
     exportChecksum: hashString(stableStringify(checksumPayload)),
+  };
+}
+
+function replayRecoveryRecommendations(
+  monitor: Awaited<ReturnType<typeof monitorReplayHistory>>,
+  snapshot: ReplayMonitorSnapshot | null,
+): string[] {
+  const recommendations = new Set<string>();
+
+  if (monitor.alerts.length === 0) {
+    recommendations.add('Continue scheduled replay monitor snapshots and retain the latest continuity export.');
+  }
+  if (monitor.verification.failures.length > 0) {
+    recommendations.add('Run recovery verification with /api/replay/verify?persist=false before appending new replay events.');
+    recommendations.add('Compare the last stable checkpoint against the degraded checkpoint with /api/replay/checkpoints/diff.');
+  }
+  if (monitor.latestDiff?.degradedChecks.length) {
+    recommendations.add(`Inspect degraded replay checks: ${monitor.latestDiff.degradedChecks.join(', ')}.`);
+  }
+  if (!monitor.latestCheckpoint) {
+    recommendations.add('Create a fresh checkpoint with /api/replay/verify after confirming repository storage is healthy.');
+  }
+  if (snapshot && !snapshot.acknowledgedAt && snapshot.alertCount > 0) {
+    recommendations.add(`Acknowledge monitor snapshot ${snapshot.id} after the recovery owner accepts the alert.`);
+  }
+  recommendations.add('Attach this degraded replay export to the incident or deployment rollback record.');
+
+  return Array.from(recommendations);
+}
+
+export async function createDegradedReplayExport(
+  options: ContinuityExportOptions & { snapshotId?: string } = {},
+): Promise<DegradedReplayExportBundle> {
+  const stream = options.stream ?? DEFAULT_REPLAY_STREAM;
+  const monitor = await monitorReplayHistory(stream);
+  const snapshots = await getReplayMonitorHistory(stream, 50);
+  const monitorSnapshot = options.snapshotId
+    ? snapshots.find(snapshot => snapshot.id === options.snapshotId) ?? null
+    : snapshots.find(snapshot => snapshot.id === monitor.snapshotId) ?? snapshots[0] ?? null;
+  const continuityExport = await createContinuityExport(options);
+  const exportedAt = Date.now();
+  const recommendations = replayRecoveryRecommendations(monitor, monitorSnapshot);
+
+  return {
+    version: 'agros-degraded-replay-export-v1',
+    exportedAt,
+    stream,
+    monitor,
+    monitorSnapshot,
+    continuityExport,
+    recommendations,
+    exportChecksum: hashString(stableStringify({
+      continuityChecksum: continuityExport.exportChecksum,
+      exportedAt,
+      monitorSnapshotId: monitorSnapshot?.id ?? null,
+      recommendations,
+      status: monitor.status,
+      stream,
+    })),
   };
 }

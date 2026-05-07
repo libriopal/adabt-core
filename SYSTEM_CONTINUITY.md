@@ -31,7 +31,10 @@ Backend endpoints:
 - `GET /api/replay/verify?persist=false`: verifies replay without appending recovery events.
 - `GET /api/replay/history`: returns replay events, replay checkpoints, and stored-history verification.
 - `GET /api/replay/monitor`: returns replay-history degradation status and alerts.
+- `GET /api/replay/monitor/history`: returns persisted replay monitor snapshots for trend analysis.
+- `POST /api/replay/monitor/:snapshotId/ack`: records operator acknowledgement for a monitor alert.
 - `GET /api/replay/checkpoints/diff`: returns server-side checkpoint comparisons.
+- `GET /api/replay/degraded-export`: exports monitor state, continuity state, and recovery recommendations.
 - `GET /api/continuity/export`: exports replay-checkpoint-anchored continuity state for recovery.
 - `GET /api/diagnostics`: returns runtime, replay, database, continuity, demand, and reinforcement diagnostics.
 - `GET /api/continuity/status`: returns websocket clients, interrupted run IDs, and recent continuity events.
@@ -61,6 +64,8 @@ Backend continuity is preserved through:
 - continuity exports anchored to replay checkpoints
 - recovery-mode replay verification without persistence
 - server-side checkpoint diffs and replay monitor alerts
+- persisted replay monitor snapshots and alert acknowledgements
+- degraded replay recovery exports with recommendations
 - demand cache records
 - structured request IDs
 

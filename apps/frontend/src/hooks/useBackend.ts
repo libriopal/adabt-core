@@ -94,6 +94,21 @@ export function useBackend({ onError }: UseBackendOptions = {}) {
     return request(`/replay/monitor${qs}`);
   }, [request]);
 
+  const getReplayMonitorHistory = useCallback((params?: { stream?: string; limit?: number }) => {
+    const qs = params ? new URLSearchParams(
+      Object.entries(params)
+        .filter(([, value]) => value !== undefined && value !== '')
+        .map(([key, value]) => [key, String(value)]),
+    ).toString() : '';
+    return request(`/replay/monitor/history${qs ? `?${qs}` : ''}`);
+  }, [request]);
+
+  const acknowledgeReplayMonitor = useCallback((snapshotId: string, acknowledgedBy = 'operator') =>
+    request(`/replay/monitor/${snapshotId}/ack`, {
+      method: 'POST',
+      body: JSON.stringify({ acknowledgedBy }),
+    }), [request]);
+
   const getReplayCheckpointDiff = useCallback((params: {
     stream?: string;
     baseId: string;
@@ -120,6 +135,20 @@ export function useBackend({ onError }: UseBackendOptions = {}) {
     return request(`/continuity/export${qs ? `?${qs}` : ''}`);
   }, [request]);
 
+  const getDegradedReplayExport = useCallback((params?: {
+    stream?: string;
+    checkpointId?: string;
+    snapshotId?: string;
+    limit?: number;
+  }) => {
+    const qs = params ? new URLSearchParams(
+      Object.entries(params)
+        .filter(([, value]) => value !== undefined && value !== '')
+        .map(([key, value]) => [key, String(value)]),
+    ).toString() : '';
+    return request(`/replay/degraded-export${qs ? `?${qs}` : ''}`);
+  }, [request]);
+
   return {
     loading,
     generateBatch,
@@ -134,7 +163,10 @@ export function useBackend({ onError }: UseBackendOptions = {}) {
     runReplayVerify,
     getReplayHistory,
     getReplayMonitor,
+    getReplayMonitorHistory,
+    acknowledgeReplayMonitor,
     getReplayCheckpointDiff,
     getContinuityExport,
+    getDegradedReplayExport,
   };
 }

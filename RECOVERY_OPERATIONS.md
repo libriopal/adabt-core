@@ -52,13 +52,33 @@
    curl 'http://localhost:3001/api/replay/checkpoints/diff?baseId=<baseCheckpoint>&targetId=<targetCheckpoint>'
    ```
 
-8. Export continuity anchored to the latest replay checkpoint:
+8. Inspect monitor snapshot history:
+
+   ```bash
+   curl 'http://localhost:3001/api/replay/monitor/history?stream=agros-replay-suite&limit=20'
+   ```
+
+9. Acknowledge an accepted replay monitor alert:
+
+   ```bash
+   curl -X POST 'http://localhost:3001/api/replay/monitor/<snapshotId>/ack' \
+     -H 'content-type: application/json' \
+     -d '{"acknowledgedBy":"operator"}'
+   ```
+
+10. Export continuity anchored to the latest replay checkpoint:
 
    ```bash
    curl 'http://localhost:3001/api/continuity/export?stream=agros-replay-suite&limit=20'
    ```
 
-9. Pause a runaway evolution:
+11. Export a degraded replay recovery bundle:
+
+   ```bash
+   curl 'http://localhost:3001/api/replay/degraded-export?stream=agros-replay-suite&snapshotId=<snapshotId>&limit=20'
+   ```
+
+12. Pause a runaway evolution:
 
    ```bash
    curl -X POST http://localhost:3001/api/continuity/<runId>/interrupt \
@@ -66,7 +86,7 @@
      -d '{"reason":"operator recovery"}'
    ```
 
-10. Resume after validation:
+13. Resume after validation:
 
    ```bash
    curl -X POST http://localhost:3001/api/continuity/<runId>/resume \
@@ -93,10 +113,32 @@ If replay verification fails:
 3. Run recovery verification with `/api/replay/verify?persist=false` to avoid appending diagnostic events.
 4. Capture `/api/replay/monitor` and `/api/replay/history`.
 5. Compare the latest stable and degraded checkpoints with `/api/replay/checkpoints/diff`.
-6. Export `/api/continuity/export` with the degraded checkpoint ID.
-7. Check recent code changes touching PRNG, demand weighting, reinforcement gates, cocoon serialization, replay history, or manifest order.
-8. Run `node scripts/validate-production.mjs`.
-9. Repair checksum instability before re-enabling workers.
+6. Export `/api/replay/degraded-export` with the monitor snapshot ID.
+7. Acknowledge the monitor snapshot only after a recovery owner accepts the alert.
+8. Export `/api/continuity/export` with the degraded checkpoint ID.
+9. Check recent code changes touching PRNG, demand weighting, reinforcement gates, cocoon serialization, replay history, or manifest order.
+10. Run `node scripts/validate-production.mjs`.
+11. Repair checksum instability before re-enabling workers.
+
+## Deployment Monitoring
+
+Railway:
+
+- Add a lightweight monitor command that calls `/api/replay/monitor` after deploy and records the JSON response in deploy logs.
+- Alert when the endpoint returns HTTP 503 or when `monitor.status` is `degraded`.
+- Keep `DATABASE_PROVIDER=postgres` and `DATABASE_URL` configured before enabling production workers.
+
+Render:
+
+- Add `/api/ready` as the health check path and run `/api/replay/monitor` from a scheduled external check.
+- Store degraded replay bundles from `/api/replay/degraded-export` with incident artifacts.
+- Confirm persistent disk or Postgres storage before relying on monitor trend history.
+
+Local Docker:
+
+- Run `docker compose up --build`, then poll `/api/replay/monitor` before running replay append operations.
+- Mount SQLite `./data` as a persistent volume if Postgres is not configured.
+- Export `/api/replay/degraded-export` before recreating containers during recovery.
 
 ## Continuity Failure Response
 

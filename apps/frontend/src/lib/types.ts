@@ -218,11 +218,29 @@ export interface ReplayHistoryMonitorReport {
   status: 'ready' | 'degraded';
   stream: string;
   checkedAt: number;
+  snapshotId?: string;
   verification: ReplayHistoryVerification;
   latestCheckpoint?: ReplayCheckpoint;
   previousCheckpoint?: ReplayCheckpoint;
   latestDiff?: ReplayCheckpointDiff;
   alerts: string[];
+  acknowledgedAt?: number;
+  acknowledgedBy?: string;
+}
+
+export interface ReplayMonitorSnapshot {
+  id: string;
+  stream: string;
+  status: 'ready' | 'degraded';
+  checkedAt: number;
+  eventCount: number;
+  checkpointCount: number;
+  latestCheckpointId?: string;
+  alertCount: number;
+  alerts: string[];
+  report: Record<string, unknown>;
+  acknowledgedAt?: number;
+  acknowledgedBy?: string;
 }
 
 export interface ContinuityEvent {
@@ -243,6 +261,17 @@ export interface ContinuityExportBundle {
     events: ContinuityEvent[];
   };
   verification: ReplayHistoryVerification;
+  exportChecksum: string;
+}
+
+export interface DegradedReplayExportBundle {
+  version: 'agros-degraded-replay-export-v1';
+  exportedAt: number;
+  stream: string;
+  monitor: ReplayHistoryMonitorReport;
+  monitorSnapshot: ReplayMonitorSnapshot | null;
+  continuityExport: ContinuityExportBundle;
+  recommendations: string[];
   exportChecksum: string;
 }
 

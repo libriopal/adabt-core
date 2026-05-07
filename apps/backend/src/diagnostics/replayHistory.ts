@@ -1,5 +1,5 @@
 import { getStorageRepository } from '../storage/repository';
-import { EventLogEntry, ReplayCheckpoint } from '../types';
+import { EventLogEntry, ReplayCheckpoint, ReplayMonitorSnapshot } from '../types';
 import { hashString } from '../utils/prng';
 
 export const DEFAULT_REPLAY_STREAM = 'agros-replay-suite';
@@ -63,11 +63,18 @@ export interface ReplayHistoryMonitorReport {
   status: 'ready' | 'degraded';
   stream: string;
   checkedAt: number;
+  snapshotId?: string;
   verification: ReplayHistoryVerification;
   latestCheckpoint?: ReplayCheckpoint;
   previousCheckpoint?: ReplayCheckpoint;
   latestDiff?: ReplayCheckpointDiff;
   alerts: string[];
+  acknowledgedAt?: number;
+  acknowledgedBy?: string;
+}
+
+export interface ReplayMonitorOptions {
+  persist?: boolean;
 }
 
 function stableNormalize(value: unknown): unknown {
@@ -298,6 +305,7 @@ export async function diffReplayCheckpoints(
 
 export async function monitorReplayHistory(
   stream = DEFAULT_REPLAY_STREAM,
+  options: ReplayMonitorOptions = {},
 ): Promise<ReplayHistoryMonitorReport> {
   const repository = getStorageRepository();
   const [verification, checkpoints] = await Promise.all([
@@ -325,16 +333,58 @@ export async function monitorReplayHistory(
     }
   }
 
-  return {
+  const checkedAt = Date.now();
+  const report: ReplayHistoryMonitorReport = {
     status: alerts.length === 0 ? 'ready' : 'degraded',
     stream,
-    checkedAt: Date.now(),
+    checkedAt,
     verification,
     latestCheckpoint,
     previousCheckpoint,
     latestDiff,
     alerts,
   };
+
+  if (options.persist !== false) {
+    const snapshot = await repository.replayMonitorSnapshots.save({
+      id: `monitor_${hashString(stableStringify({
+        alerts,
+        checkedAt,
+        checkpoint: verification.latestCheckpointId ?? null,
+        eventCount: verification.eventCount,
+        status: report.status,
+        stream,
+      }))}`,
+      stream,
+      status: report.status,
+      checkedAt,
+      eventCount: verification.eventCount,
+      checkpointCount: verification.checkpointCount,
+      latestCheckpointId: verification.latestCheckpointId,
+      alertCount: alerts.length,
+      alerts,
+      report: report as unknown as Record<string, unknown>,
+    });
+    report.snapshotId = snapshot.id;
+  }
+
+  return report;
+}
+
+export async function getReplayMonitorHistory(
+  stream = DEFAULT_REPLAY_STREAM,
+  limit = 20,
+): Promise<ReplayMonitorSnapshot[]> {
+  return getStorageRepository().replayMonitorSnapshots.getLatest(stream, limit);
+}
+
+export async function acknowledgeReplayMonitorSnapshot(
+  snapshotId: string,
+  acknowledgedBy = 'operator',
+): Promise<ReplayMonitorSnapshot> {
+  const snapshot = await getStorageRepository().replayMonitorSnapshots.acknowledge(snapshotId, acknowledgedBy);
+  if (!snapshot) throw new Error(`Replay monitor snapshot not found: ${snapshotId}`);
+  return snapshot;
 }
 
 export async function getReplayHistory(

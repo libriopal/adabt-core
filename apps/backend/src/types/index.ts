@@ -127,6 +127,21 @@ export interface ReplayCheckpoint {
   createdAt: number;
 }
 
+export interface ReplayMonitorSnapshot {
+  id: string;
+  stream: string;
+  status: 'ready' | 'degraded';
+  checkedAt: number;
+  eventCount: number;
+  checkpointCount: number;
+  latestCheckpointId?: string;
+  alertCount: number;
+  alerts: string[];
+  report: Record<string, unknown>;
+  acknowledgedAt?: number;
+  acknowledgedBy?: string;
+}
+
 export interface Design {
   id: string;
   seed: string;

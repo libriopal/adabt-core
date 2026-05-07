@@ -7,11 +7,13 @@ import { reinforcementEngine } from '../services/reinforcementEngine';
 import { getStorageRepository } from '../storage/repository';
 import { Design } from '../types';
 import { continuityHub } from '../diagnostics/continuityHub';
-import { createContinuityExport } from '../diagnostics/continuityExport';
+import { createContinuityExport, createDegradedReplayExport } from '../diagnostics/continuityExport';
 import { logger } from '../diagnostics/logger';
 import {
   DEFAULT_REPLAY_STREAM,
+  acknowledgeReplayMonitorSnapshot,
   diffReplayCheckpoints,
+  getReplayMonitorHistory,
   getReplayHistory,
   monitorReplayHistory,
 } from '../diagnostics/replayHistory';
@@ -75,6 +77,23 @@ const ReplayDiffQuerySchema = z.object({
 
 const ContinuityExportQuerySchema = ReplayHistoryQuerySchema.extend({
   checkpointId: z.string().min(1).optional(),
+});
+
+const ReplayMonitorQuerySchema = z.object({
+  stream: z.string().min(1).default(DEFAULT_REPLAY_STREAM),
+  persist: z.preprocess(value => (
+    value === undefined ? true : !['false', '0', 'no'].includes(String(value).toLowerCase())
+  ), z.boolean()).default(true),
+});
+
+const ReplayMonitorHistoryQuerySchema = ReplayHistoryQuerySchema;
+
+const ReplayMonitorAckSchema = z.object({
+  acknowledgedBy: z.string().min(1).default('operator'),
+});
+
+const DegradedReplayExportQuerySchema = ContinuityExportQuerySchema.extend({
+  snapshotId: z.string().min(1).optional(),
 });
 
 router.post('/generate-batch', async (req: RequestWithContext, res) => {
@@ -260,14 +279,36 @@ router.get('/replay/verify', async (req: RequestWithContext, res) => {
 
 router.get('/replay/monitor', async (req: RequestWithContext, res) => {
   try {
-    const query = z.object({ stream: z.string().min(1).default(DEFAULT_REPLAY_STREAM) }).parse(req.query);
-    const monitor = await monitorReplayHistory(query.stream);
+    const query = ReplayMonitorQuerySchema.parse(req.query);
+    const monitor = await monitorReplayHistory(query.stream, { persist: query.persist });
     res.status(monitor.status === 'ready' ? 200 : 503).json({
       success: true,
       monitor,
     });
   } catch (error) {
     const id = logRouteError('RPM', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/replay/monitor/history', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReplayMonitorHistoryQuerySchema.parse(req.query);
+    const snapshots = await getReplayMonitorHistory(query.stream, query.limit);
+    res.json({ success: true, snapshots });
+  } catch (error) {
+    const id = logRouteError('RPH', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.post('/replay/monitor/:snapshotId/ack', async (req: RequestWithContext, res) => {
+  try {
+    const body = ReplayMonitorAckSchema.parse(req.body ?? {});
+    const snapshot = await acknowledgeReplayMonitorSnapshot(req.params.snapshotId, body.acknowledgedBy);
+    res.json({ success: true, snapshot });
+  } catch (error) {
+    const id = logRouteError('RPA', req, error);
     res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
   }
 });
@@ -293,6 +334,20 @@ router.get('/replay/checkpoints/diff', async (req: RequestWithContext, res) => {
     res.json({ success: true, diff });
   } catch (error) {
     const id = logRouteError('RPD', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/replay/degraded-export', async (req: RequestWithContext, res) => {
+  try {
+    const query = DegradedReplayExportQuerySchema.parse(req.query);
+    const degradedExport = await createDegradedReplayExport(query);
+    res.status(degradedExport.monitor.status === 'ready' ? 200 : 503).json({
+      success: true,
+      export: degradedExport,
+    });
+  } catch (error) {
+    const id = logRouteError('RPE', req, error);
     res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
   }
 });
