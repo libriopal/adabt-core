@@ -52,6 +52,14 @@ export class DeterministicPRNG {
     const z0 = Math.sqrt(-2 * Math.log(u1 + 1e-10)) * Math.cos(2 * Math.PI * u2);
     return z0 * std + mean;
   }
+
+  /**
+   * Return the current internal seed so checkpoints can capture
+   * and later reconstruct this PRNG's exact position.
+   */
+  getState(): number {
+    return this.seed;
+  }
 }
 
 export function generateSessionSeed(input: string): string {
