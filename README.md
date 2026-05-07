@@ -10,27 +10,32 @@ AGROS is a deterministic adaptive research system for slot-design simulation, se
 ## Quick Start
 
 ```bash
-npm ci --prefix apps/frontend
-npm ci --prefix apps/backend
-npm run build --prefix apps/frontend
-npm run build --prefix apps/backend
-npm test --prefix apps/backend
+npm install
+npm run build
+npm test
 ```
 
 Run local development servers:
 
 ```bash
-npm run dev --prefix apps/frontend
-npm run dev --prefix apps/backend
+npm run dev
 ```
+
+Root `npm run dev` starts both apps with local defaults: SQLite, workers disabled, mock/deterministic ingestion, and no Redis, Docker, Railway, Postgres, or cloud service requirement.
 
 ## Production Validation
 
 ```bash
-node scripts/validate-production.mjs
+npm run validate
 ```
 
 The validation script builds both apps, runs backend tests, verifies deterministic evolution replay parity, verifies cocoon reconstruction, verifies cocoon replay, and runs `git diff --check`.
+
+Phase 0 local stabilization can be checked with:
+
+```bash
+npm run validate:phase0
+```
 
 ## Deployment
 

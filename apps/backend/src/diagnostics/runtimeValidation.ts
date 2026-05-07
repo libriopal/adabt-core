@@ -24,7 +24,7 @@ export function validateRuntimeEnvironment(): RuntimeValidationReport {
   const workersEnabled = process.env.ENABLE_WORKERS === 'true';
   const redisConfigured = Boolean(process.env.REDIS_HOST);
   const databasePath = process.env.DATABASE_PATH || './data/slotgpt.db';
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
 
   if (process.env.NODE_ENV === 'production' && frontendUrl.includes('localhost')) {
     warnings.push('FRONTEND_URL should be set to the deployed frontend origin in production');

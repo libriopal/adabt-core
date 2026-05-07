@@ -7,6 +7,7 @@ import { initDatabase } from './storage/db';
 import { continuityHub } from './diagnostics/continuityHub';
 import { logger } from './diagnostics/logger';
 import { requestContext, runtimeGuard, validateRuntimeEnvironment } from './diagnostics/runtimeValidation';
+import { validateStartup } from './diagnostics/startupValidator';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -14,7 +15,7 @@ const PORT = process.env.PORT || 3001;
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
 }));
-app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:3000' }));
+app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:5173' }));
 app.use(requestContext);
 app.use(express.json({ limit: '10mb' }));
 app.use(runtimeGuard);
@@ -38,6 +39,7 @@ app.use((err: any, req: express.Request, res: express.Response, _next: any) => {
 
 const runtime = validateRuntimeEnvironment();
 initDatabase(process.env.DATABASE_PATH);
+const startup = validateStartup();
 
 const workersEnabled = process.env.ENABLE_WORKERS === 'true';
 if (workersEnabled) {
@@ -52,6 +54,7 @@ server.listen(PORT, () => {
     port: PORT,
     workersEnabled,
     runtimeStatus: runtime.status,
+    startupStatus: startup.status,
     warnings: runtime.warnings,
   });
 });

@@ -11,11 +11,53 @@ export function initDatabase(dbPath: string = './data/slotgpt.db'): Database.Dat
     fs.mkdirSync(dir, { recursive: true });
   }
 
-  db = new Database(dbPath);
-  db.pragma('journal_mode = WAL');
-
-  createTables();
+  db = initializeDatabase(dbPath);
   return db;
+}
+
+function initializeDatabase(dbPath: string): Database.Database {
+  try {
+    const database = new Database(dbPath);
+    db = database;
+    database.pragma('journal_mode = WAL');
+    createTables();
+    return database;
+  } catch (error) {
+    if (
+      dbPath !== ':memory:'
+      && process.env.NODE_ENV !== 'production'
+      && isSqliteCorruption(error)
+    ) {
+      try {
+        db?.close();
+      } catch {
+        // Best effort cleanup before quarantining local development files.
+      }
+      db = null;
+      quarantineCorruptDatabase(dbPath);
+      const database = new Database(dbPath);
+      db = database;
+      database.pragma('journal_mode = WAL');
+      createTables();
+      return database;
+    }
+
+    throw error;
+  }
+}
+
+function isSqliteCorruption(error: unknown): boolean {
+  return error instanceof Error
+    && 'code' in error
+    && (error as { code?: string }).code === 'SQLITE_CORRUPT';
+}
+
+function quarantineCorruptDatabase(dbPath: string): void {
+  const stamp = Date.now();
+  for (const candidate of [dbPath, `${dbPath}-shm`, `${dbPath}-wal`]) {
+    if (!fs.existsSync(candidate)) continue;
+    fs.renameSync(candidate, `${candidate}.corrupt-${stamp}`);
+  }
 }
 
 export function getDB(): Database.Database {

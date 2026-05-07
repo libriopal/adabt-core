@@ -1,0 +1,18 @@
+{
+  "name": "agros-struthio-runtime",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/frontend",
+    "apps/backend"
+  ],
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "npm run build --prefix apps/frontend && npm run build --prefix apps/backend",
+    "test": "npm test --prefix apps/backend",
+    "validate": "node scripts/validate-production.mjs",
+    "validate:phase0": "node scripts/validate-phase0.mjs",
+    "dev:frontend": "npm run dev --prefix apps/frontend",
+    "dev:backend": "npm run dev --prefix apps/backend"
+  }
+}

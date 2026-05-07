@@ -15,6 +15,7 @@ node_modules
 dist/
 apps/backend/dist/
 apps/frontend/dist/
+apps/backend/data/
 apps/backend/data/*.db
 apps/backend/data/*.db-shm
 apps/backend/data/*.db-wal
