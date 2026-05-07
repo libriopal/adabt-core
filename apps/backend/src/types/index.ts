@@ -192,6 +192,21 @@ export interface ReleaseReconciliationRecord {
   createdAt: number;
 }
 
+export interface ReleaseDriftOverrideRecord {
+  id: string;
+  decisionId: string;
+  evidenceId: string;
+  stream: string;
+  provider: string;
+  environment: 'local' | 'staging' | 'production';
+  driftChecksum: string;
+  decisionSignature: string;
+  reason: string;
+  overriddenBy: string;
+  overrideSignature: string;
+  createdAt: number;
+}
+
 export interface Design {
   id: string;
   seed: string;

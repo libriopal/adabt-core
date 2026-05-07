@@ -1,5 +1,6 @@
 import {
   ReleaseDecisionRecord,
+  ReleaseDriftOverrideRecord,
   ReleaseEvidenceRecord,
   ReleaseReconciliationRecord,
   ReplayMonitorSnapshot,
@@ -113,6 +114,8 @@ export interface ReleaseEvidenceComparison {
 export interface ReleaseRetentionInput {
   stream?: string;
   provider?: string;
+  environment?: ReleaseEnvironment;
+  policy?: ReleaseRetentionPolicyName;
   retainLatest?: number;
   dryRun?: boolean;
 }
@@ -176,11 +179,102 @@ export interface ReleaseBundleSummary {
   bundleChecksum: string;
 }
 
+export type ReleaseEnvironment = 'local' | 'staging' | 'production';
+export type ReleaseRetentionPolicyName = 'local' | 'staging' | 'production';
+export type ReleaseStatusTone = 'success' | 'warning' | 'danger';
+
+export interface ReleaseRetentionPolicyPreset {
+  name: ReleaseRetentionPolicyName;
+  environment: ReleaseEnvironment;
+  retainLatest: number;
+  dryRunDefault: boolean;
+  description: string;
+}
+
+export interface ReleaseDriftOverrideInput {
+  decisionId: string;
+  environment?: ReleaseEnvironment;
+  driftChecksum: string;
+  reason: string;
+  overriddenBy?: string;
+}
+
+export interface ReleaseSupervisionCardAction {
+  type: 'prompt_run';
+  actionId: string;
+  label: string;
+  prompt: string;
+  style?: 'primary' | 'danger';
+}
+
+export interface ReleaseSupervisionStatusCard {
+  version: 'agros-release-supervision-card-v1';
+  title: string;
+  statusLabel: string;
+  statusTone: ReleaseStatusTone;
+  summary: string;
+  environment: ReleaseEnvironment;
+  decisionId: string;
+  bundle: ReleaseBundleSummary;
+  retentionPolicy: ReleaseRetentionPolicyPreset;
+  latestOverride?: ReleaseDriftOverrideRecord;
+  sections: Array<{ title: string; body: string }>;
+  facts: Array<{ label: string; value: string }>;
+  links: Array<{ label: string; url: string }>;
+  actions: ReleaseSupervisionCardAction[];
+  exampleReplies: Array<{ actionId: string; label: string; reply: string }>;
+  cardChecksum: string;
+}
+
 const PROVIDERS = new Set(['local-docker', 'railway', 'render', 'custom']);
+
+const RELEASE_RETENTION_POLICY_PRESETS: Record<ReleaseRetentionPolicyName, ReleaseRetentionPolicyPreset> = {
+  local: {
+    name: 'local',
+    environment: 'local',
+    retainLatest: 20,
+    dryRunDefault: true,
+    description: 'Keep a compact local evidence window for developer smoke checks.',
+  },
+  staging: {
+    name: 'staging',
+    environment: 'staging',
+    retainLatest: 75,
+    dryRunDefault: true,
+    description: 'Keep enough staging evidence for cross-provider promotion review.',
+  },
+  production: {
+    name: 'production',
+    environment: 'production',
+    retainLatest: 250,
+    dryRunDefault: true,
+    description: 'Keep the long production audit trail and require explicit non-dry-run cleanup.',
+  },
+};
 
 function normalizeProvider(provider?: string): ReleaseProvider {
   const candidate = (provider || 'local-docker').trim().toLowerCase();
   return PROVIDERS.has(candidate) ? candidate as ReleaseProvider : 'custom';
+}
+
+function normalizeEnvironment(environment?: string): ReleaseEnvironment {
+  const candidate = (environment || 'staging').trim().toLowerCase();
+  if (candidate === 'local' || candidate === 'production') return candidate;
+  return 'staging';
+}
+
+function resolveRetentionPolicy(
+  policy?: ReleaseRetentionPolicyName,
+  environment?: ReleaseEnvironment,
+): ReleaseRetentionPolicyPreset {
+  if (policy && RELEASE_RETENTION_POLICY_PRESETS[policy]) {
+    return RELEASE_RETENTION_POLICY_PRESETS[policy];
+  }
+  return RELEASE_RETENTION_POLICY_PRESETS[environment ?? 'staging'];
+}
+
+export function getReleaseRetentionPolicyPresets(): ReleaseRetentionPolicyPreset[] {
+  return Object.values(RELEASE_RETENTION_POLICY_PRESETS);
 }
 
 function summarizeRuntimeGate(runtime: RuntimeValidationReport): ReleaseGateReport {
@@ -698,8 +792,10 @@ export async function applyReleaseEvidenceRetention(
   input: ReleaseRetentionInput = {},
 ): Promise<ReleaseRetentionReport> {
   const stream = input.stream ?? DEFAULT_REPLAY_STREAM;
-  const retainLatest = Math.max(1, Math.min(input.retainLatest ?? 50, 500));
-  const dryRun = input.dryRun !== false;
+  const environment = normalizeEnvironment(input.environment);
+  const policy = resolveRetentionPolicy(input.policy, environment);
+  const retainLatest = Math.max(1, Math.min(input.retainLatest ?? policy.retainLatest, 500));
+  const dryRun = input.dryRun ?? policy.dryRunDefault;
   const records = await getReleaseEvidenceHistory(stream, 500, { provider: input.provider });
   const candidates = records.slice(retainLatest);
   const candidateIds = candidates.map(record => record.id);
@@ -802,5 +898,174 @@ export async function createReleaseBundleSummary(options: {
     history,
     summary,
     bundleChecksum,
+  };
+}
+
+export async function recordReleaseDriftOverride(
+  input: ReleaseDriftOverrideInput,
+): Promise<ReleaseDriftOverrideRecord> {
+  const decision = await getStorageRepository().releaseDecisions.getById(input.decisionId);
+  if (!decision) {
+    throw new Error(`Release decision not found: ${input.decisionId}`);
+  }
+  const evidence = await getStorageRepository().releaseEvidence.getById(decision.evidenceId);
+  if (!evidence) {
+    throw new Error(`Release evidence not found: ${decision.evidenceId}`);
+  }
+  const environment = normalizeEnvironment(input.environment);
+  const drift = await collectPostReleaseDrift(decision.id, { persistMonitor: false });
+  if (drift.driftChecksum !== input.driftChecksum) {
+    throw new Error(`Drift checksum mismatch for decision ${decision.id}`);
+  }
+
+  const createdAt = Date.now();
+  const overrideSignature = hashString(stableStringify({
+    decisionSignature: decision.decisionSignature,
+    driftChecksum: drift.driftChecksum,
+    environment,
+    overriddenBy: input.overriddenBy ?? 'operator',
+    reason: input.reason,
+  }));
+
+  return getStorageRepository().releaseDriftOverrides.save({
+    id: `drift_override_${overrideSignature}`,
+    decisionId: decision.id,
+    evidenceId: evidence.id,
+    stream: evidence.stream,
+    provider: evidence.provider,
+    environment,
+    driftChecksum: drift.driftChecksum,
+    decisionSignature: decision.decisionSignature,
+    reason: input.reason,
+    overriddenBy: input.overriddenBy ?? 'operator',
+    overrideSignature,
+    createdAt,
+  });
+}
+
+export async function getReleaseDriftOverrideHistory(
+  stream?: string,
+  limit = 20,
+  filters: { provider?: string; decisionId?: string; environment?: ReleaseEnvironment } = {},
+): Promise<ReleaseDriftOverrideRecord[]> {
+  return getStorageRepository().releaseDriftOverrides.getLatest(stream, limit, filters);
+}
+
+export async function createReleaseSupervisionStatusCard(options: {
+  decisionId: string;
+  environment?: ReleaseEnvironment;
+  policy?: ReleaseRetentionPolicyName;
+}): Promise<ReleaseSupervisionStatusCard> {
+  const environment = normalizeEnvironment(options.environment);
+  const retentionPolicy = resolveRetentionPolicy(options.policy, environment);
+  const bundle = await createReleaseBundleSummary({ decisionId: options.decisionId, limit: 8 });
+  const latestOverride = (await getReleaseDriftOverrideHistory(bundle.stream, 1, {
+    decisionId: bundle.decision.id,
+    provider: bundle.provider,
+    environment,
+  }))[0];
+  const driftRequiresReview = bundle.drift.status !== 'ready' && !latestOverride;
+  const releaseBlocked = bundle.decision.decision === 'no-go' || bundle.evidence.status === 'blocked';
+  const statusLabel = releaseBlocked
+    ? 'Blocked'
+    : driftRequiresReview
+      ? 'Drift Review'
+      : bundle.summary.releaseReady || latestOverride
+        ? 'Supervised'
+        : 'Needs Review';
+  const statusTone: ReleaseStatusTone = releaseBlocked
+    ? 'danger'
+    : statusLabel === 'Drift Review' || statusLabel === 'Needs Review'
+      ? 'warning'
+      : 'success';
+  const links = bundle.reconciliation?.pullRequestUrl
+    ? [{ label: 'Pull Request', url: bundle.reconciliation.pullRequestUrl }]
+    : [];
+  const actions: ReleaseSupervisionCardAction[] = [
+    {
+      type: 'prompt_run',
+      actionId: 'refresh_release_supervision',
+      label: 'Refresh Status',
+      prompt: `Refresh release supervision for decision ${bundle.decision.id} in ${environment}.`,
+      style: 'primary',
+    },
+    {
+      type: 'prompt_run',
+      actionId: 'publish_bundle_summary',
+      label: 'Publish Bundle',
+      prompt: `Publish the release bundle summary for decision ${bundle.decision.id} in ${environment}.`,
+    },
+    {
+      type: 'prompt_run',
+      actionId: 'record_drift_exception',
+      label: 'Record Drift Exception',
+      prompt: `Record an operator drift exception for decision ${bundle.decision.id} using drift checksum ${bundle.drift.driftChecksum}.`,
+      style: 'danger',
+    },
+  ];
+  const cardChecksum = hashString(stableStringify({
+    bundleChecksum: bundle.bundleChecksum,
+    driftChecksum: bundle.drift.driftChecksum,
+    environment,
+    latestOverrideSignature: latestOverride?.overrideSignature ?? null,
+    retentionPolicy: retentionPolicy.name,
+    statusLabel,
+  }));
+
+  return {
+    version: 'agros-release-supervision-card-v1',
+    title: `Release supervision: ${environment}`,
+    statusLabel,
+    statusTone,
+    summary: latestOverride
+      ? `Drift exception recorded by ${latestOverride.overriddenBy}; continue with operator review.`
+      : bundle.summary.recommendation,
+    environment,
+    decisionId: bundle.decision.id,
+    bundle,
+    retentionPolicy,
+    latestOverride,
+    sections: [
+      {
+        title: 'Decision',
+        body: `${bundle.decision.decision} by ${bundle.decision.decidedBy}: ${bundle.decision.reason}`,
+      },
+      {
+        title: 'Drift',
+        body: bundle.drift.alerts.length ? bundle.drift.alerts.join(' ') : 'No post-release drift alerts are active.',
+      },
+      {
+        title: 'Retention',
+        body: `${retentionPolicy.description} Retain latest ${retentionPolicy.retainLatest} evidence records by default.`,
+      },
+    ],
+    facts: [
+      { label: 'Environment', value: environment },
+      { label: 'Provider', value: bundle.provider },
+      { label: 'Decision signature', value: bundle.decision.decisionSignature },
+      { label: 'Bundle checksum', value: bundle.bundleChecksum },
+      { label: 'Drift checksum', value: bundle.drift.driftChecksum },
+      { label: 'Retention policy', value: retentionPolicy.name },
+    ],
+    links,
+    actions,
+    exampleReplies: [
+      {
+        actionId: 'refresh_release_supervision',
+        label: 'Refresh Status',
+        reply: 'Release supervision refreshed and the status card now reflects the latest drift and bundle state.',
+      },
+      {
+        actionId: 'publish_bundle_summary',
+        label: 'Publish Bundle',
+        reply: 'Release bundle summary published with the current bundle checksum and reconciliation metadata.',
+      },
+      {
+        actionId: 'record_drift_exception',
+        label: 'Record Drift Exception',
+        reply: 'Drift exception recorded. The release remains operator-supervised until a clean drift check passes.',
+      },
+    ],
+    cardChecksum,
   };
 }

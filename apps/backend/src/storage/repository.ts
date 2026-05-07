@@ -9,6 +9,7 @@ import {
   ReleaseEvidenceRecord,
   ReleaseDecisionRecord,
   ReleaseReconciliationRecord,
+  ReleaseDriftOverrideRecord,
   ReinforcementDecision,
   ReplayCheckpoint,
   ReplayMonitorSnapshot,
@@ -59,6 +60,10 @@ export type ReleaseReconciliationInput = Omit<ReleaseReconciliationRecord, 'crea
   createdAt?: number;
 };
 
+export type ReleaseDriftOverrideInput = Omit<ReleaseDriftOverrideRecord, 'createdAt'> & {
+  createdAt?: number;
+};
+
 export interface ReleaseEvidenceFilters {
   provider?: string;
   status?: ReleaseEvidenceRecord['status'];
@@ -74,6 +79,12 @@ export interface ReleaseReconciliationFilters {
   provider?: string;
   decisionId?: string;
   commitSha?: string;
+}
+
+export interface ReleaseDriftOverrideFilters {
+  provider?: string;
+  decisionId?: string;
+  environment?: ReleaseDriftOverrideRecord['environment'];
 }
 
 export interface StorageRepository {
@@ -128,6 +139,11 @@ export interface StorageRepository {
     save(reconciliation: ReleaseReconciliationInput): Promise<ReleaseReconciliationRecord>;
     getLatest(stream?: string, limit?: number, filters?: ReleaseReconciliationFilters): Promise<ReleaseReconciliationRecord[]>;
     getById(id: string): Promise<ReleaseReconciliationRecord | null>;
+  };
+  releaseDriftOverrides: {
+    save(override: ReleaseDriftOverrideInput): Promise<ReleaseDriftOverrideRecord>;
+    getLatest(stream?: string, limit?: number, filters?: ReleaseDriftOverrideFilters): Promise<ReleaseDriftOverrideRecord[]>;
+    getById(id: string): Promise<ReleaseDriftOverrideRecord | null>;
   };
   close(): Promise<void>;
 }
@@ -314,6 +330,23 @@ function rowToReleaseReconciliation(row: any): ReleaseReconciliationRecord {
     evidenceChecksum: row.evidence_checksum,
     providerSignature: row.provider_signature,
     reconciliationSignature: row.reconciliation_signature,
+    createdAt: Number(row.created_at),
+  };
+}
+
+function rowToReleaseDriftOverride(row: any): ReleaseDriftOverrideRecord {
+  return {
+    id: row.id,
+    decisionId: row.decision_id,
+    evidenceId: row.evidence_id,
+    stream: row.stream,
+    provider: row.provider,
+    environment: row.environment,
+    driftChecksum: row.drift_checksum,
+    decisionSignature: row.decision_signature,
+    reason: row.reason,
+    overriddenBy: row.overridden_by,
+    overrideSignature: row.override_signature,
     createdAt: Number(row.created_at),
   };
 }
@@ -814,6 +847,74 @@ export class SqliteStorageRepository implements StorageRepository {
     getById: async (id: string): Promise<ReleaseReconciliationRecord | null> => {
       const row = getDB().prepare('SELECT * FROM release_reconciliations WHERE id = ?').get(id) as any;
       return row ? rowToReleaseReconciliation(row) : null;
+    },
+  };
+
+  releaseDriftOverrides = {
+    save: async (override: ReleaseDriftOverrideInput): Promise<ReleaseDriftOverrideRecord> => {
+      const existing = getDB().prepare('SELECT id FROM release_drift_overrides WHERE id = ?').get(override.id);
+      if (existing) {
+        throw new Error(`Release drift override already exists: ${override.id}`);
+      }
+      const createdAt = override.createdAt ?? Date.now();
+      getDB().prepare(`
+        INSERT INTO release_drift_overrides
+          (id, decision_id, evidence_id, stream, provider, environment,
+           drift_checksum, decision_signature, reason, overridden_by,
+           override_signature, created_at)
+        VALUES
+          (@id, @decision_id, @evidence_id, @stream, @provider, @environment,
+           @drift_checksum, @decision_signature, @reason, @overridden_by,
+           @override_signature, @created_at)
+      `).run({
+        id: override.id,
+        decision_id: override.decisionId,
+        evidence_id: override.evidenceId,
+        stream: override.stream,
+        provider: override.provider,
+        environment: override.environment,
+        drift_checksum: override.driftChecksum,
+        decision_signature: override.decisionSignature,
+        reason: override.reason,
+        overridden_by: override.overriddenBy,
+        override_signature: override.overrideSignature,
+        created_at: createdAt,
+      });
+
+      return { ...override, createdAt };
+    },
+    getLatest: async (
+      stream?: string,
+      limit = 20,
+      filters: ReleaseDriftOverrideFilters = {},
+    ): Promise<ReleaseDriftOverrideRecord[]> => {
+      const conditions: string[] = [];
+      const params: Record<string, unknown> = { limit };
+      if (stream) {
+        conditions.push('stream = @stream');
+        params.stream = stream;
+      }
+      if (filters.provider) {
+        conditions.push('provider = @provider');
+        params.provider = filters.provider;
+      }
+      if (filters.decisionId) {
+        conditions.push('decision_id = @decisionId');
+        params.decisionId = filters.decisionId;
+      }
+      if (filters.environment) {
+        conditions.push('environment = @environment');
+        params.environment = filters.environment;
+      }
+      const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+      const rows = getDB()
+        .prepare(`SELECT * FROM release_drift_overrides ${where} ORDER BY created_at DESC LIMIT @limit`)
+        .all(params) as any[];
+      return rows.map(rowToReleaseDriftOverride);
+    },
+    getById: async (id: string): Promise<ReleaseDriftOverrideRecord | null> => {
+      const row = getDB().prepare('SELECT * FROM release_drift_overrides WHERE id = ?').get(id) as any;
+      return row ? rowToReleaseDriftOverride(row) : null;
     },
   };
 
@@ -1413,6 +1514,74 @@ export class PostgresStorageRepository implements StorageRepository {
     getById: async (id: string): Promise<ReleaseReconciliationRecord | null> => {
       const result = await this.pool.query('SELECT * FROM release_reconciliations WHERE id = $1', [id]);
       return result.rows[0] ? rowToReleaseReconciliation(result.rows[0]) : null;
+    },
+  };
+
+  releaseDriftOverrides = {
+    save: async (override: ReleaseDriftOverrideInput): Promise<ReleaseDriftOverrideRecord> => {
+      const existing = await this.pool.query('SELECT id FROM release_drift_overrides WHERE id = $1', [override.id]);
+      if (existing.rows[0]) {
+        throw new Error(`Release drift override already exists: ${override.id}`);
+      }
+      const createdAt = override.createdAt ?? Date.now();
+      await this.pool.query(`
+        INSERT INTO release_drift_overrides
+          (id, decision_id, evidence_id, stream, provider, environment,
+           drift_checksum, decision_signature, reason, overridden_by,
+           override_signature, created_at)
+        VALUES
+          ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      `, [
+        override.id,
+        override.decisionId,
+        override.evidenceId,
+        override.stream,
+        override.provider,
+        override.environment,
+        override.driftChecksum,
+        override.decisionSignature,
+        override.reason,
+        override.overriddenBy,
+        override.overrideSignature,
+        createdAt,
+      ]);
+
+      return { ...override, createdAt };
+    },
+    getLatest: async (
+      stream?: string,
+      limit = 20,
+      filters: ReleaseDriftOverrideFilters = {},
+    ): Promise<ReleaseDriftOverrideRecord[]> => {
+      const conditions: string[] = [];
+      const values: unknown[] = [];
+      if (stream) {
+        values.push(stream);
+        conditions.push(`stream = $${values.length}`);
+      }
+      if (filters.provider) {
+        values.push(filters.provider);
+        conditions.push(`provider = $${values.length}`);
+      }
+      if (filters.decisionId) {
+        values.push(filters.decisionId);
+        conditions.push(`decision_id = $${values.length}`);
+      }
+      if (filters.environment) {
+        values.push(filters.environment);
+        conditions.push(`environment = $${values.length}`);
+      }
+      values.push(limit);
+      const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+      const result = await this.pool.query(
+        `SELECT * FROM release_drift_overrides ${where} ORDER BY created_at DESC LIMIT $${values.length}`,
+        values,
+      );
+      return result.rows.map(rowToReleaseDriftOverride);
+    },
+    getById: async (id: string): Promise<ReleaseDriftOverrideRecord | null> => {
+      const result = await this.pool.query('SELECT * FROM release_drift_overrides WHERE id = $1', [id]);
+      return result.rows[0] ? rowToReleaseDriftOverride(result.rows[0]) : null;
     },
   };
 

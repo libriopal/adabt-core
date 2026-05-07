@@ -22,12 +22,16 @@ import {
   compareReleaseEvidenceByProvider,
   collectReleaseReadiness,
   collectPostReleaseDrift,
+  createReleaseSupervisionStatusCard,
   createReleaseBundleSummary,
   createReleaseEvidenceExport,
   applyReleaseEvidenceRetention,
+  getReleaseDriftOverrideHistory,
   getReleaseDecisionHistory,
   getReleaseEvidenceHistory,
+  getReleaseRetentionPolicyPresets,
   getReleaseReconciliationHistory,
+  recordReleaseDriftOverride,
   reconcileReleaseDecision,
   recordReleaseDecision,
 } from '../diagnostics/releaseReadiness';
@@ -187,8 +191,30 @@ const ReleaseDriftQuerySchema = z.object({
 const ReleaseRetentionSchema = z.object({
   stream: z.string().min(1).default(DEFAULT_REPLAY_STREAM),
   provider: z.string().min(1).optional(),
-  retainLatest: z.number().int().min(1).max(500).default(50),
-  dryRun: z.boolean().default(true),
+  environment: z.enum(['local', 'staging', 'production']).optional(),
+  policy: z.enum(['local', 'staging', 'production']).optional(),
+  retainLatest: z.number().int().min(1).max(500).optional(),
+  dryRun: z.boolean().optional(),
+});
+
+const ReleaseSupervisionCardQuerySchema = z.object({
+  decisionId: z.string().min(1),
+  environment: z.enum(['local', 'staging', 'production']).default('staging'),
+  policy: z.enum(['local', 'staging', 'production']).optional(),
+});
+
+const ReleaseDriftOverrideSchema = z.object({
+  decisionId: z.string().min(1),
+  environment: z.enum(['local', 'staging', 'production']).default('staging'),
+  driftChecksum: z.string().min(1),
+  reason: z.string().min(1),
+  overriddenBy: z.string().min(1).default('operator'),
+});
+
+const ReleaseDriftOverrideHistoryQuerySchema = ReplayHistoryQuerySchema.extend({
+  provider: z.string().min(1).optional(),
+  decisionId: z.string().min(1).optional(),
+  environment: z.enum(['local', 'staging', 'production']).optional(),
 });
 
 router.post('/generate-batch', async (req: RequestWithContext, res) => {
@@ -530,6 +556,10 @@ router.get('/release/evidence/compare', async (req: RequestWithContext, res) => 
   }
 });
 
+router.get('/release/evidence/retention/presets', (_req: RequestWithContext, res) => {
+  res.json({ success: true, presets: getReleaseRetentionPolicyPresets() });
+});
+
 router.post('/release/evidence/retention', async (req: RequestWithContext, res) => {
   try {
     const body = ReleaseRetentionSchema.parse(req.body ?? {});
@@ -629,6 +659,47 @@ router.get('/release/drift', async (req: RequestWithContext, res) => {
     res.status(drift.status === 'ready' ? 200 : 409).json({ success: true, drift });
   } catch (error) {
     const id = logRouteError('RDR', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.post('/release/drift-overrides', async (req: RequestWithContext, res) => {
+  try {
+    const body = ReleaseDriftOverrideSchema.parse(req.body);
+    const override = await recordReleaseDriftOverride(body);
+    res.status(201).json({ success: true, override });
+  } catch (error) {
+    const id = logRouteError('RDO', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/drift-overrides', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReleaseDriftOverrideHistoryQuerySchema.parse(req.query);
+    const overrides = await getReleaseDriftOverrideHistory(query.stream, query.limit, {
+      provider: query.provider,
+      decisionId: query.decisionId,
+      environment: query.environment,
+    });
+    res.json({ success: true, overrides });
+  } catch (error) {
+    const id = logRouteError('RDOH', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/supervision-card', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReleaseSupervisionCardQuerySchema.parse(req.query);
+    const card = await createReleaseSupervisionStatusCard({
+      decisionId: query.decisionId,
+      environment: query.environment,
+      policy: query.policy,
+    });
+    res.json({ success: true, card });
+  } catch (error) {
+    const id = logRouteError('RSC', req, error);
     res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
   }
 });

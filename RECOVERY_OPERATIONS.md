@@ -170,6 +170,8 @@ Before a release promotion:
 11. Capture `/api/release/bundle-summary?decisionId=<decision-id>` as the operator handoff record.
 12. Run `/api/release/drift?decisionId=<decision-id>` after promotion and treat degraded drift as a rollback or exception review trigger.
 13. Use `POST /api/release/evidence/retention` with `dryRun: true` before deleting old release evidence records.
+14. Generate `/api/release/supervision-card?decisionId=<decision-id>&environment=<local|staging|production>` for the active promotion window.
+15. If drift is operator-accepted, record the reason with `POST /api/release/drift-overrides` before continuing.
 
 ## Continuity Failure Response
 

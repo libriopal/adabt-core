@@ -44,6 +44,9 @@ Backend endpoints:
 - `POST /api/release/reconciliations`: records the commit, branch, PR, and source-thread metadata for an accepted release decision.
 - `GET /api/release/bundle-summary`: returns the operator-facing release bundle summary for a decision.
 - `GET /api/release/drift`: checks current monitor evidence against the accepted decision signature.
+- `POST /api/release/drift-overrides`: records operator drift exception overrides against the current drift checksum.
+- `GET /api/release/supervision-card`: returns an environment-owned release supervision status card.
+- `GET /api/release/evidence/retention/presets`: returns local, staging, and production retention presets.
 - `GET /api/diagnostics`: returns runtime, replay, database, continuity, demand, and reinforcement diagnostics.
 - `GET /api/continuity/status`: returns websocket clients, interrupted run IDs, and recent continuity events.
 - `POST /api/continuity/:runId/interrupt`: pauses a run when possible and broadcasts a continuity interrupt event.

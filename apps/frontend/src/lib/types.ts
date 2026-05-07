@@ -452,6 +452,56 @@ export interface ReleaseBundleSummary {
   bundleChecksum: string;
 }
 
+export type ReleaseEnvironment = 'local' | 'staging' | 'production';
+
+export interface ReleaseRetentionPolicyPreset {
+  name: ReleaseEnvironment;
+  environment: ReleaseEnvironment;
+  retainLatest: number;
+  dryRunDefault: boolean;
+  description: string;
+}
+
+export interface ReleaseDriftOverrideRecord {
+  id: string;
+  decisionId: string;
+  evidenceId: string;
+  stream: string;
+  provider: string;
+  environment: ReleaseEnvironment;
+  driftChecksum: string;
+  decisionSignature: string;
+  reason: string;
+  overriddenBy: string;
+  overrideSignature: string;
+  createdAt: number;
+}
+
+export interface ReleaseSupervisionStatusCard {
+  version: 'agros-release-supervision-card-v1';
+  title: string;
+  statusLabel: string;
+  statusTone: 'success' | 'warning' | 'danger';
+  summary: string;
+  environment: ReleaseEnvironment;
+  decisionId: string;
+  bundle: ReleaseBundleSummary;
+  retentionPolicy: ReleaseRetentionPolicyPreset;
+  latestOverride?: ReleaseDriftOverrideRecord;
+  sections: Array<{ title: string; body: string }>;
+  facts: Array<{ label: string; value: string }>;
+  links: Array<{ label: string; url: string }>;
+  actions: Array<{
+    type: 'prompt_run';
+    actionId: string;
+    label: string;
+    prompt: string;
+    style?: 'primary' | 'danger';
+  }>;
+  exampleReplies: Array<{ actionId: string; label: string; reply: string }>;
+  cardChecksum: string;
+}
+
 export interface SlotGPTOutput {
   id: string;
   transformedTheme: string;

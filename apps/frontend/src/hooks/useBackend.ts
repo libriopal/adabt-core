@@ -261,9 +261,35 @@ export function useBackend({ onError }: UseBackendOptions = {}) {
   const applyReleaseEvidenceRetention = useCallback((params: {
     stream?: string;
     provider?: string;
+    environment?: string;
+    policy?: string;
     retainLatest?: number;
     dryRun?: boolean;
   }) => request('/release/evidence/retention', { method: 'POST', body: JSON.stringify(params) }), [request]);
+
+  const getReleaseRetentionPolicyPresets = useCallback(() =>
+    request('/release/evidence/retention/presets'), [request]);
+
+  const getReleaseSupervisionCard = useCallback((params: {
+    decisionId: string;
+    environment?: string;
+    policy?: string;
+  }) => {
+    const qs = new URLSearchParams(
+      Object.entries(params)
+        .filter(([, value]) => value !== undefined && value !== '')
+        .map(([key, value]) => [key, String(value)]),
+    ).toString();
+    return request(`/release/supervision-card?${qs}`);
+  }, [request]);
+
+  const createReleaseDriftOverride = useCallback((params: {
+    decisionId: string;
+    environment?: string;
+    driftChecksum: string;
+    reason: string;
+    overriddenBy?: string;
+  }) => request('/release/drift-overrides', { method: 'POST', body: JSON.stringify(params) }), [request]);
 
   return {
     loading,
@@ -294,5 +320,8 @@ export function useBackend({ onError }: UseBackendOptions = {}) {
     getReleaseBundleSummary,
     getReleaseDrift,
     applyReleaseEvidenceRetention,
+    getReleaseRetentionPolicyPresets,
+    getReleaseSupervisionCard,
+    createReleaseDriftOverride,
   };
 }

@@ -125,7 +125,7 @@ See `DEPLOYMENT_GUIDE.md` for environment variables and provider-specific setup.
 
 ## State
 
-Backend SQLite runtime files are intentionally ignored. Local runtime defaults to `DATABASE_PROVIDER=sqlite` and `DATABASE_PATH=./data/slotgpt.db`. Phase 10 routes request-time storage, replay event history, replay checkpoints, monitor snapshots, continuity exports, checkpoint diffs, degraded replay exports, release readiness gates, release evidence archives, release decisions, decision reconciliation records, release bundle summaries, retention planning, and post-release drift checks through the operational replay path. Use `DATABASE_PROVIDER=postgres` plus `DATABASE_URL` for Postgres-backed request storage.
+Backend SQLite runtime files are intentionally ignored. Local runtime defaults to `DATABASE_PROVIDER=sqlite` and `DATABASE_PATH=./data/slotgpt.db`. Phase 11 routes request-time storage, replay event history, replay checkpoints, monitor snapshots, continuity exports, checkpoint diffs, degraded replay exports, release readiness gates, release evidence archives, release decisions, decision reconciliation records, release bundle summaries, retention planning, post-release drift checks, drift overrides, and release supervision cards through the operational replay path. Use `DATABASE_PROVIDER=postgres` plus `DATABASE_URL` for Postgres-backed request storage.
 
 ## Phase 8 Validation
 
@@ -148,3 +148,12 @@ npm run validate:phase10
 ```
 
 Phase 10 adds release closure endpoints for accepted decision reconciliation, release bundle summary generation, dry-run evidence retention planning, and post-release drift checks keyed to the accepted decision signature.
+
+## Phase 11 Validation
+
+```bash
+npm run validate:phase11
+npm run artifact:release-bundle -- --api-url=http://localhost:3001/api --decision-id=<decision-id> --environment=staging --output=/tmp/agros-release-bundle-summary.json
+```
+
+Phase 11 adds release supervision cards, drift override records, retention policy presets, and CI-driven bundle summary artifact publication.

@@ -5,11 +5,14 @@ import {
   ReleaseDecisionOutcome,
   ReleaseDecisionRecord,
   ReleaseDriftReport,
+  ReleaseEnvironment,
   ReleaseEvidenceComparison,
   ReleaseEvidenceRecord,
   ReleaseGateReport,
   ReleaseReadinessReport,
+  ReleaseRetentionPolicyPreset,
   ReleaseRetentionReport,
+  ReleaseSupervisionStatusCard,
 } from '../lib/types';
 
 const DEFAULT_STREAM = 'agros-replay-suite';
@@ -25,10 +28,14 @@ export const ReleaseReadinessPanel: React.FC = () => {
   const [bundle, setBundle] = useState<ReleaseBundleSummary | null>(null);
   const [drift, setDrift] = useState<ReleaseDriftReport | null>(null);
   const [retention, setRetention] = useState<ReleaseRetentionReport | null>(null);
+  const [retentionPolicies, setRetentionPolicies] = useState<ReleaseRetentionPolicyPreset[]>([]);
+  const [supervisionCard, setSupervisionCard] = useState<ReleaseSupervisionStatusCard | null>(null);
   const [historyStatus, setHistoryStatus] = useState('');
   const [historyRollbackStatus, setHistoryRollbackStatus] = useState('');
   const [decision, setDecision] = useState<ReleaseDecisionOutcome>('go');
   const [decisionReason, setDecisionReason] = useState('operator accepted release evidence');
+  const [environment, setEnvironment] = useState<ReleaseEnvironment>('staging');
+  const [overrideReason, setOverrideReason] = useState('operator accepted drift exception for supervised release');
   const [commitSha, setCommitSha] = useState('');
   const [branchName, setBranchName] = useState('');
   const [pullRequestUrl, setPullRequestUrl] = useState('');
@@ -39,6 +46,7 @@ export const ReleaseReadinessPanel: React.FC = () => {
     applyReleaseEvidenceRetention,
     compareReleaseEvidence,
     createReleaseDecision,
+    createReleaseDriftOverride,
     createReleaseReconciliation,
     getReleaseBundleSummary,
     getReleaseDrift,
@@ -46,6 +54,8 @@ export const ReleaseReadinessPanel: React.FC = () => {
     getReleaseEvidenceHistory,
     getReleaseDecisions,
     getReleaseReadiness,
+    getReleaseRetentionPolicyPresets,
+    getReleaseSupervisionCard,
     loading,
   } = useBackend({ onError: setError });
 
@@ -162,23 +172,70 @@ export const ReleaseReadinessPanel: React.FC = () => {
     const data = await applyReleaseEvidenceRetention({
       stream,
       provider,
+      environment,
+      policy: environment,
       retainLatest,
       dryRun: true,
     }) as any;
     if (data?.retention) setRetention(data.retention);
   };
 
+  const loadSupervisionCard = async () => {
+    const latestDecision = decisions[0];
+    if (!latestDecision) {
+      setError('Record a release decision before generating a supervision card.');
+      return;
+    }
+    setError(null);
+    const data = await getReleaseSupervisionCard({
+      decisionId: latestDecision.id,
+      environment,
+      policy: environment,
+    }) as any;
+    if (data?.card) {
+      setSupervisionCard(data.card);
+      setBundle(data.card.bundle);
+      setDrift(data.card.bundle.drift);
+      setRetainLatest(data.card.retentionPolicy.retainLatest);
+    }
+  };
+
+  const recordDriftOverride = async () => {
+    const latestDecision = decisions[0];
+    const activeDrift = drift || bundle?.drift;
+    if (!latestDecision || !activeDrift) {
+      setError('A release decision and drift checksum are required before recording an override.');
+      return;
+    }
+    if (!overrideReason.trim()) {
+      setError('Override reason is required.');
+      return;
+    }
+    setError(null);
+    const data = await createReleaseDriftOverride({
+      decisionId: latestDecision.id,
+      environment,
+      driftChecksum: activeDrift.driftChecksum,
+      reason: overrideReason,
+      overriddenBy: 'operator',
+    }) as any;
+    if (data?.override) await loadSupervisionCard();
+  };
+
   useEffect(() => {
     loadReleaseReadiness();
+    getReleaseRetentionPolicyPresets().then((data: any) => {
+      if (data?.presets) setRetentionPolicies(data.presets);
+    });
   }, []);
 
   return (
     <div style={{ background: '#12172B', borderRadius: 8, padding: 24, border: '1px solid #1E293B', marginBottom: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', marginBottom: 18 }}>
         <div>
-          <h2 style={{ color: '#94A3B8', fontSize: 14, marginTop: 0, marginBottom: 6 }}>Phase 10 Release Closure</h2>
+          <h2 style={{ color: '#94A3B8', fontSize: 14, marginTop: 0, marginBottom: 6 }}>Phase 11 Release Supervision</h2>
           <div style={{ color: '#64748B', fontSize: 12 }}>
-            Runtime gates, decision reconciliation, bundle summary, retention planning, and post-release drift.
+            Runtime gates, supervised status cards, bundle publication, retention presets, and drift overrides.
           </div>
         </div>
         <StatusBadge status={release?.status} />
@@ -196,6 +253,11 @@ export const ReleaseReadinessPanel: React.FC = () => {
           <option value="railway">railway</option>
           <option value="render">render</option>
           <option value="custom">custom</option>
+        </select>
+        <select value={environment} onChange={event => setEnvironment(event.target.value as ReleaseEnvironment)} style={inputStyle}>
+          <option value="local">local</option>
+          <option value="staging">staging</option>
+          <option value="production">production</option>
         </select>
         <select value={historyStatus} onChange={event => setHistoryStatus(event.target.value)} style={inputStyle}>
           <option value="">any status</option>
@@ -220,6 +282,9 @@ export const ReleaseReadinessPanel: React.FC = () => {
         </button>
         <button onClick={loadBundleSummary} disabled={loading || !stream.trim()} style={buttonStyle(loading || !stream.trim())}>
           Bundle
+        </button>
+        <button onClick={loadSupervisionCard} disabled={loading || !decisions[0]} style={buttonStyle(loading || !decisions[0])}>
+          Supervise
         </button>
       </div>
 
@@ -354,6 +419,11 @@ export const ReleaseReadinessPanel: React.FC = () => {
             Plan Retention
           </button>
         </div>
+        {retentionPolicies.find(policy => policy.environment === environment) && (
+          <div style={{ color: '#64748B', fontSize: 11, marginTop: 8 }}>
+            {retentionPolicies.find(policy => policy.environment === environment)?.description}
+          </div>
+        )}
         {retention && (
           <div style={{ color: '#CBD5E1', fontSize: 11, marginTop: 10 }}>
             Retaining {retention.retainLatest}; {retention.candidateCount} candidate records; checksum {retention.retentionChecksum}.
@@ -371,6 +441,26 @@ export const ReleaseReadinessPanel: React.FC = () => {
             <div>Decision: {bundle.decision.decision} | Reconciliation: {bundle.summary.reconciliationState}</div>
             <div>Drift: {bundle.drift.status} | Evidence retained: {bundle.summary.evidenceRetained}</div>
             <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Bundle checksum: {bundle.bundleChecksum}</div>
+          </div>
+        </div>
+      )}
+
+      {supervisionCard && (
+        <div style={{ ...panelStyle, marginTop: 12, borderColor: supervisionToneColor(supervisionCard.statusTone) }}>
+          <div style={panelTitleStyle}>Release Supervision Card</div>
+          <div style={{ color: supervisionToneColor(supervisionCard.statusTone), fontSize: 12, fontWeight: 800, marginBottom: 8 }}>
+            {supervisionCard.statusLabel}: {supervisionCard.summary}
+          </div>
+          <div style={{ display: 'grid', gap: 6, color: '#CBD5E1', fontSize: 11 }}>
+            <div>Environment: {supervisionCard.environment} | Policy: {supervisionCard.retentionPolicy.name}</div>
+            <div>Actions: {supervisionCard.actions.map(action => action.label).join(', ')}</div>
+            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Card checksum: {supervisionCard.cardChecksum}</div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px', gap: 10, marginTop: 10 }}>
+            <input value={overrideReason} onChange={event => setOverrideReason(event.target.value)} style={inputStyle} />
+            <button onClick={recordDriftOverride} disabled={loading || !overrideReason.trim()} style={buttonStyle(loading || !overrideReason.trim())}>
+              Override
+            </button>
           </div>
         </div>
       )}
@@ -416,6 +506,13 @@ function statusColor(status?: string): string {
   if (status === 'ready') return '#10B981';
   if (status === 'blocked') return '#EF4444';
   if (status === 'degraded') return '#F59E0B';
+  return '#64748B';
+}
+
+function supervisionToneColor(tone?: string): string {
+  if (tone === 'success') return '#10B981';
+  if (tone === 'danger') return '#EF4444';
+  if (tone === 'warning') return '#F59E0B';
   return '#64748B';
 }
 

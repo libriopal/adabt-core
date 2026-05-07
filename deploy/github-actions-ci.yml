@@ -52,3 +52,19 @@ jobs:
         with:
           name: release-evidence
           path: outputs/release-evidence.json
+
+      - name: Publish release bundle summary
+        if: ${{ env.AGROS_API_URL != '' && env.AGROS_RELEASE_DECISION_ID != '' }}
+        run: |
+          npm run artifact:release-bundle -- \
+            --api-url="$AGROS_API_URL" \
+            --decision-id="$AGROS_RELEASE_DECISION_ID" \
+            --environment="${AGROS_RELEASE_ENVIRONMENT:-staging}" \
+            --output=outputs/release-bundle-summary.json
+
+      - name: Upload release bundle summary
+        if: ${{ env.AGROS_API_URL != '' && env.AGROS_RELEASE_DECISION_ID != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-bundle-summary
+          path: outputs/release-bundle-summary.json
