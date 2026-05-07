@@ -324,6 +324,39 @@ export function useBackend({ onError }: UseBackendOptions = {}) {
   const getReleasePromotionTimeline = useCallback((promotionId: string) =>
     request(`/release/promotions/${promotionId}/timeline`), [request]);
 
+  const getReleaseRollbackCommands = useCallback((params?: { environment?: string }) => {
+    const qs = params ? new URLSearchParams(
+      Object.entries(params)
+        .filter(([, value]) => value !== undefined && value !== '')
+        .map(([key, value]) => [key, String(value)]),
+    ).toString() : '';
+    return request(`/release/rollback-commands${qs ? `?${qs}` : ''}`);
+  }, [request]);
+
+  const planReleaseRollback = useCallback((params: {
+    promotionId: string;
+    environment?: string;
+    commandId?: string;
+    actor?: string;
+  }) => request('/release/rollbacks', { method: 'POST', body: JSON.stringify(params) }), [request]);
+
+  const transitionReleaseRollback = useCallback((rollbackId: string, params: {
+    status: string;
+    actor?: string;
+    detail?: string;
+    outcome?: string;
+  }) => request(`/release/rollbacks/${rollbackId}/transition`, { method: 'POST', body: JSON.stringify(params) }), [request]);
+
+  const attachReleaseRollbackCiCheck = useCallback((rollbackId: string, params: {
+    name: string;
+    status: string;
+    url?: string;
+    detail?: string;
+  }) => request(`/release/rollbacks/${rollbackId}/ci-checks`, { method: 'POST', body: JSON.stringify(params) }), [request]);
+
+  const getReleaseRollbackTimeline = useCallback((rollbackId: string) =>
+    request(`/release/rollbacks/${rollbackId}/timeline`), [request]);
+
   return {
     loading,
     generateBatch,
@@ -361,5 +394,10 @@ export function useBackend({ onError }: UseBackendOptions = {}) {
     transitionReleasePromotion,
     attachReleasePromotionCiCheck,
     getReleasePromotionTimeline,
+    getReleaseRollbackCommands,
+    planReleaseRollback,
+    transitionReleaseRollback,
+    attachReleaseRollbackCiCheck,
+    getReleaseRollbackTimeline,
   };
 }

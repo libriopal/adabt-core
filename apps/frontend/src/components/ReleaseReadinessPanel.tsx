@@ -13,6 +13,10 @@ import {
   ReleasePromotionRecord,
   ReleasePromotionStatus,
   ReleasePromotionTimelineExport,
+  ReleaseRollbackCommandDescriptor,
+  ReleaseRollbackRecord,
+  ReleaseRollbackStatus,
+  ReleaseRollbackTimelineExport,
   ReleaseReadinessReport,
   ReleaseRetentionPolicyPreset,
   ReleaseRetentionReport,
@@ -38,6 +42,10 @@ export const ReleaseReadinessPanel: React.FC = () => {
   const [selectedCommandId, setSelectedCommandId] = useState('');
   const [promotion, setPromotion] = useState<ReleasePromotionRecord | null>(null);
   const [promotionTimeline, setPromotionTimeline] = useState<ReleasePromotionTimelineExport | null>(null);
+  const [rollbackCommands, setRollbackCommands] = useState<ReleaseRollbackCommandDescriptor[]>([]);
+  const [selectedRollbackCommandId, setSelectedRollbackCommandId] = useState('');
+  const [rollback, setRollback] = useState<ReleaseRollbackRecord | null>(null);
+  const [rollbackTimeline, setRollbackTimeline] = useState<ReleaseRollbackTimelineExport | null>(null);
   const [historyStatus, setHistoryStatus] = useState('');
   const [historyRollbackStatus, setHistoryRollbackStatus] = useState('');
   const [decision, setDecision] = useState<ReleaseDecisionOutcome>('go');
@@ -46,6 +54,8 @@ export const ReleaseReadinessPanel: React.FC = () => {
   const [overrideReason, setOverrideReason] = useState('operator accepted drift exception for supervised release');
   const [ciCheckName, setCiCheckName] = useState('release-ci');
   const [ciCheckUrl, setCiCheckUrl] = useState('');
+  const [rollbackCiCheckName, setRollbackCiCheckName] = useState('rollback-ci');
+  const [rollbackCiCheckUrl, setRollbackCiCheckUrl] = useState('');
   const [commitSha, setCommitSha] = useState('');
   const [branchName, setBranchName] = useState('');
   const [pullRequestUrl, setPullRequestUrl] = useState('');
@@ -59,17 +69,22 @@ export const ReleaseReadinessPanel: React.FC = () => {
     createReleaseDriftOverride,
     createReleaseReconciliation,
     attachReleasePromotionCiCheck,
+    attachReleaseRollbackCiCheck,
     getReleaseDeploymentCommands,
+    getReleaseRollbackCommands,
     getReleaseBundleSummary,
     getReleaseDrift,
     getReleaseEvidenceExport,
     getReleaseEvidenceHistory,
     getReleaseDecisions,
     getReleasePromotionTimeline,
+    getReleaseRollbackTimeline,
     getReleaseReadiness,
     getReleaseRetentionPolicyPresets,
     getReleaseSupervisionCard,
     startReleasePromotion,
+    planReleaseRollback,
+    transitionReleaseRollback,
     transitionReleasePromotion,
     loading,
   } = useBackend({ onError: setError });
@@ -225,6 +240,15 @@ export const ReleaseReadinessPanel: React.FC = () => {
     }
   };
 
+  const loadRollbackCommands = async () => {
+    setError(null);
+    const data = await getReleaseRollbackCommands({ environment }) as any;
+    if (data?.commands) {
+      setRollbackCommands(data.commands);
+      setSelectedRollbackCommandId(current => current || data.commands[0]?.id || '');
+    }
+  };
+
   const startPromotionRun = async () => {
     const latestDecision = decisions[0];
     if (!latestDecision) {
@@ -299,6 +323,79 @@ export const ReleaseReadinessPanel: React.FC = () => {
     }
   };
 
+  const planRollbackRun = async () => {
+    if (!promotion) {
+      setError('Start or load a failed promotion before planning rollback.');
+      return;
+    }
+    setError(null);
+    const data = await planReleaseRollback({
+      promotionId: promotion.id,
+      environment,
+      commandId: selectedRollbackCommandId || undefined,
+      actor: 'operator',
+    }) as any;
+    if (data?.rollback) {
+      setRollback(data.rollback);
+      const timeline = await getReleaseRollbackTimeline(data.rollback.id) as any;
+      if (timeline?.timeline) setRollbackTimeline(timeline.timeline);
+    }
+  };
+
+  const transitionRollbackRun = async (status: ReleaseRollbackStatus) => {
+    if (!rollback) {
+      setError('Plan a rollback before recording a transition.');
+      return;
+    }
+    setError(null);
+    const data = await transitionReleaseRollback(rollback.id, {
+      status,
+      actor: 'operator',
+      detail: `operator marked ${rollback.id} as ${status}`,
+    }) as any;
+    if (data?.rollback) {
+      setRollback(data.rollback);
+      const timeline = await getReleaseRollbackTimeline(data.rollback.id) as any;
+      if (timeline?.timeline) setRollbackTimeline(timeline.timeline);
+    }
+  };
+
+  const attachRollbackCiCheck = async () => {
+    if (!rollback) {
+      setError('Plan a rollback before attaching rollback CI evidence.');
+      return;
+    }
+    if (!rollbackCiCheckName.trim()) {
+      setError('Rollback CI check name is required.');
+      return;
+    }
+    setError(null);
+    const data = await attachReleaseRollbackCiCheck(rollback.id, {
+      name: rollbackCiCheckName.trim(),
+      status: 'passed',
+      url: rollbackCiCheckUrl.trim() || undefined,
+      detail: 'operator attached rollback CI monitor result',
+    }) as any;
+    if (data?.rollback) {
+      setRollback(data.rollback);
+      const timeline = await getReleaseRollbackTimeline(data.rollback.id) as any;
+      if (timeline?.timeline) setRollbackTimeline(timeline.timeline);
+    }
+  };
+
+  const exportRollbackTimeline = async () => {
+    if (!rollback) {
+      setError('Plan a rollback before exporting the rollback timeline.');
+      return;
+    }
+    setError(null);
+    const data = await getReleaseRollbackTimeline(rollback.id) as any;
+    if (data?.timeline) {
+      setRollbackTimeline(data.timeline);
+      downloadJson(`agros-release-rollback-timeline-${rollback.id}.json`, data.timeline);
+    }
+  };
+
   const recordDriftOverride = async () => {
     const latestDecision = decisions[0];
     const activeDrift = drift || bundle?.drift;
@@ -327,22 +424,27 @@ export const ReleaseReadinessPanel: React.FC = () => {
       if (data?.presets) setRetentionPolicies(data.presets);
     });
     loadDeploymentCommands();
+    loadRollbackCommands();
   }, []);
 
   useEffect(() => {
     setSelectedCommandId('');
     setPromotion(null);
     setPromotionTimeline(null);
+    setSelectedRollbackCommandId('');
+    setRollback(null);
+    setRollbackTimeline(null);
     loadDeploymentCommands();
+    loadRollbackCommands();
   }, [environment]);
 
   return (
     <div style={{ background: '#12172B', borderRadius: 8, padding: 24, border: '1px solid #1E293B', marginBottom: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', marginBottom: 18 }}>
         <div>
-          <h2 style={{ color: '#94A3B8', fontSize: 14, marginTop: 0, marginBottom: 6 }}>Phase 12 Managed Promotion</h2>
+          <h2 style={{ color: '#94A3B8', fontSize: 14, marginTop: 0, marginBottom: 6 }}>Phase 13 Rollback Supervision</h2>
           <div style={{ color: '#64748B', fontSize: 12 }}>
-            Runtime gates, supervised status cards, guarded deployment commands, CI evidence, and promotion timelines.
+            Runtime gates, managed promotions, rollback commands, CI evidence, and rollback timelines.
           </div>
         </div>
         <StatusBadge status={release?.status} />
@@ -395,6 +497,9 @@ export const ReleaseReadinessPanel: React.FC = () => {
         </button>
         <button onClick={loadDeploymentCommands} disabled={loading} style={buttonStyle(loading)}>
           Commands
+        </button>
+        <button onClick={loadRollbackCommands} disabled={loading} style={buttonStyle(loading)}>
+          Rollback
         </button>
       </div>
 
@@ -618,6 +723,56 @@ export const ReleaseReadinessPanel: React.FC = () => {
               {promotionTimeline && (
                 <div style={{ color: '#CBD5E1', fontSize: 11 }}>
                   Timeline events: {promotionTimeline.timeline.length} | CI checks: {promotionTimeline.ciChecks.length} | checksum {promotionTimeline.exportChecksum}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {rollbackCommands.length > 0 && promotion && (
+        <div style={{ ...panelStyle, marginTop: 12, borderColor: '#7C2D12' }}>
+          <div style={panelTitleStyle}>Rollback Supervision</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 150px', gap: 10 }}>
+            <select value={selectedRollbackCommandId} onChange={event => setSelectedRollbackCommandId(event.target.value)} style={inputStyle}>
+              {rollbackCommands.map(command => (
+                <option key={command.id} value={command.id}>{command.label}</option>
+              ))}
+            </select>
+            <button onClick={planRollbackRun} disabled={loading || !promotion} style={buttonStyle(loading || !promotion)}>
+              Plan Rollback
+            </button>
+          </div>
+          {rollbackCommands.find(command => command.id === selectedRollbackCommandId) && (
+            <div style={{ color: '#64748B', fontSize: 11, marginTop: 8 }}>
+              {rollbackCommands.find(command => command.id === selectedRollbackCommandId)?.command}
+            </div>
+          )}
+          {rollback && (
+            <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
+              <div style={{ color: rollback.status === 'failed' ? '#EF4444' : rollback.status === 'planned' ? '#F59E0B' : '#10B981', fontSize: 12, fontWeight: 800 }}>
+                {rollback.status}: {rollback.commandLabel || rollback.commandId}
+              </div>
+              <div style={{ color: '#64748B', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                Signature: {rollback.rollbackSignature} | Promotion timeline: {rollback.promotionTimelineChecksum}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(94px, 1fr))', gap: 8 }}>
+                <button onClick={() => transitionRollbackRun('approved')} disabled={loading} style={buttonStyle(loading)}>Approve</button>
+                <button onClick={() => transitionRollbackRun('rehearsed')} disabled={loading} style={buttonStyle(loading)}>Rehearse</button>
+                <button onClick={() => transitionRollbackRun('executed')} disabled={loading} style={buttonStyle(loading)}>Execute</button>
+                <button onClick={() => transitionRollbackRun('cancelled')} disabled={loading} style={buttonStyle(loading)}>Cancel</button>
+                <button onClick={exportRollbackTimeline} disabled={loading} style={buttonStyle(loading)}>Timeline</button>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 120px', gap: 8 }}>
+                <input value={rollbackCiCheckName} onChange={event => setRollbackCiCheckName(event.target.value)} placeholder="Rollback CI" style={inputStyle} />
+                <input value={rollbackCiCheckUrl} onChange={event => setRollbackCiCheckUrl(event.target.value)} placeholder="CI URL" style={inputStyle} />
+                <button onClick={attachRollbackCiCheck} disabled={loading || !rollbackCiCheckName.trim()} style={buttonStyle(loading || !rollbackCiCheckName.trim())}>
+                  Attach CI
+                </button>
+              </div>
+              {rollbackTimeline && (
+                <div style={{ color: '#CBD5E1', fontSize: 11 }}>
+                  Rollback events: {rollbackTimeline.timeline.length} | CI checks: {rollbackTimeline.ciChecks.length} | checksum {rollbackTimeline.exportChecksum}
                 </div>
               )}
             </div>

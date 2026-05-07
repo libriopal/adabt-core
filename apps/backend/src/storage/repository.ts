@@ -11,6 +11,7 @@ import {
   ReleaseReconciliationRecord,
   ReleaseDriftOverrideRecord,
   ReleasePromotionRecord,
+  ReleaseRollbackRecord,
   ReinforcementDecision,
   ReplayCheckpoint,
   ReplayMonitorSnapshot,
@@ -70,6 +71,11 @@ export type ReleasePromotionInput = Omit<ReleasePromotionRecord, 'createdAt' | '
   updatedAt?: number;
 };
 
+export type ReleaseRollbackInput = Omit<ReleaseRollbackRecord, 'createdAt' | 'updatedAt'> & {
+  createdAt?: number;
+  updatedAt?: number;
+};
+
 export interface ReleaseEvidenceFilters {
   provider?: string;
   status?: ReleaseEvidenceRecord['status'];
@@ -98,6 +104,14 @@ export interface ReleasePromotionFilters {
   decisionId?: string;
   environment?: ReleasePromotionRecord['environment'];
   status?: ReleasePromotionRecord['status'];
+}
+
+export interface ReleaseRollbackFilters {
+  provider?: string;
+  promotionId?: string;
+  decisionId?: string;
+  environment?: ReleaseRollbackRecord['environment'];
+  status?: ReleaseRollbackRecord['status'];
 }
 
 export interface StorageRepository {
@@ -162,6 +176,11 @@ export interface StorageRepository {
     save(promotion: ReleasePromotionInput): Promise<ReleasePromotionRecord>;
     getLatest(stream?: string, limit?: number, filters?: ReleasePromotionFilters): Promise<ReleasePromotionRecord[]>;
     getById(id: string): Promise<ReleasePromotionRecord | null>;
+  };
+  releaseRollbacks: {
+    save(rollback: ReleaseRollbackInput): Promise<ReleaseRollbackRecord>;
+    getLatest(stream?: string, limit?: number, filters?: ReleaseRollbackFilters): Promise<ReleaseRollbackRecord[]>;
+    getById(id: string): Promise<ReleaseRollbackRecord | null>;
   };
   close(): Promise<void>;
 }
@@ -388,6 +407,32 @@ function rowToReleasePromotion(row: any): ReleasePromotionRecord {
     commandLabel: row.command_label ?? undefined,
     supervisionCardChecksum: row.supervision_card_checksum,
     promotionSignature: row.promotion_signature,
+    timeline: JSON.parse(row.timeline),
+    ciChecks: JSON.parse(row.ci_checks),
+    createdAt: Number(row.created_at),
+    updatedAt: Number(row.updated_at),
+  };
+}
+
+function rowToReleaseRollback(row: any): ReleaseRollbackRecord {
+  return {
+    id: row.id,
+    promotionId: row.promotion_id,
+    decisionId: row.decision_id,
+    evidenceId: row.evidence_id,
+    stream: row.stream,
+    provider: row.provider,
+    environment: row.environment,
+    status: row.status,
+    plannedAt: Number(row.planned_at),
+    approvedAt: row.approved_at === null || row.approved_at === undefined ? undefined : Number(row.approved_at),
+    approvedBy: row.approved_by ?? undefined,
+    outcomeAt: row.outcome_at === null || row.outcome_at === undefined ? undefined : Number(row.outcome_at),
+    outcome: row.outcome ?? undefined,
+    commandId: row.command_id ?? undefined,
+    commandLabel: row.command_label ?? undefined,
+    promotionTimelineChecksum: row.promotion_timeline_checksum,
+    rollbackSignature: row.rollback_signature,
     timeline: JSON.parse(row.timeline),
     ciChecks: JSON.parse(row.ci_checks),
     createdAt: Number(row.created_at),
@@ -1039,6 +1084,88 @@ export class SqliteStorageRepository implements StorageRepository {
     getById: async (id: string): Promise<ReleasePromotionRecord | null> => {
       const row = getDB().prepare('SELECT * FROM release_promotions WHERE id = ?').get(id) as any;
       return row ? rowToReleasePromotion(row) : null;
+    },
+  };
+
+  releaseRollbacks = {
+    save: async (rollback: ReleaseRollbackInput): Promise<ReleaseRollbackRecord> => {
+      const createdAt = rollback.createdAt ?? Date.now();
+      const updatedAt = rollback.updatedAt ?? createdAt;
+      getDB().prepare(`
+        INSERT OR REPLACE INTO release_rollbacks
+          (id, promotion_id, decision_id, evidence_id, stream, provider, environment, status,
+           planned_at, approved_at, approved_by, outcome_at, outcome, command_id, command_label,
+           promotion_timeline_checksum, rollback_signature, timeline, ci_checks, created_at, updated_at)
+        VALUES
+          (@id, @promotion_id, @decision_id, @evidence_id, @stream, @provider, @environment, @status,
+           @planned_at, @approved_at, @approved_by, @outcome_at, @outcome, @command_id, @command_label,
+           @promotion_timeline_checksum, @rollback_signature, @timeline, @ci_checks, @created_at, @updated_at)
+      `).run({
+        id: rollback.id,
+        promotion_id: rollback.promotionId,
+        decision_id: rollback.decisionId,
+        evidence_id: rollback.evidenceId,
+        stream: rollback.stream,
+        provider: rollback.provider,
+        environment: rollback.environment,
+        status: rollback.status,
+        planned_at: rollback.plannedAt,
+        approved_at: rollback.approvedAt ?? null,
+        approved_by: rollback.approvedBy ?? null,
+        outcome_at: rollback.outcomeAt ?? null,
+        outcome: rollback.outcome ?? null,
+        command_id: rollback.commandId ?? null,
+        command_label: rollback.commandLabel ?? null,
+        promotion_timeline_checksum: rollback.promotionTimelineChecksum,
+        rollback_signature: rollback.rollbackSignature,
+        timeline: JSON.stringify(rollback.timeline),
+        ci_checks: JSON.stringify(rollback.ciChecks),
+        created_at: createdAt,
+        updated_at: updatedAt,
+      });
+
+      return { ...rollback, createdAt, updatedAt };
+    },
+    getLatest: async (
+      stream?: string,
+      limit = 20,
+      filters: ReleaseRollbackFilters = {},
+    ): Promise<ReleaseRollbackRecord[]> => {
+      const conditions: string[] = [];
+      const params: Record<string, unknown> = { limit };
+      if (stream) {
+        conditions.push('stream = @stream');
+        params.stream = stream;
+      }
+      if (filters.provider) {
+        conditions.push('provider = @provider');
+        params.provider = filters.provider;
+      }
+      if (filters.promotionId) {
+        conditions.push('promotion_id = @promotionId');
+        params.promotionId = filters.promotionId;
+      }
+      if (filters.decisionId) {
+        conditions.push('decision_id = @decisionId');
+        params.decisionId = filters.decisionId;
+      }
+      if (filters.environment) {
+        conditions.push('environment = @environment');
+        params.environment = filters.environment;
+      }
+      if (filters.status) {
+        conditions.push('status = @status');
+        params.status = filters.status;
+      }
+      const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+      const rows = getDB()
+        .prepare(`SELECT * FROM release_rollbacks ${where} ORDER BY updated_at DESC LIMIT @limit`)
+        .all(params) as any[];
+      return rows.map(rowToReleaseRollback);
+    },
+    getById: async (id: string): Promise<ReleaseRollbackRecord | null> => {
+      const row = getDB().prepare('SELECT * FROM release_rollbacks WHERE id = ?').get(id) as any;
+      return row ? rowToReleaseRollback(row) : null;
     },
   };
 
@@ -1799,6 +1926,101 @@ export class PostgresStorageRepository implements StorageRepository {
     getById: async (id: string): Promise<ReleasePromotionRecord | null> => {
       const result = await this.pool.query('SELECT * FROM release_promotions WHERE id = $1', [id]);
       return result.rows[0] ? rowToReleasePromotion(result.rows[0]) : null;
+    },
+  };
+
+  releaseRollbacks = {
+    save: async (rollback: ReleaseRollbackInput): Promise<ReleaseRollbackRecord> => {
+      const createdAt = rollback.createdAt ?? Date.now();
+      const updatedAt = rollback.updatedAt ?? createdAt;
+      await this.pool.query(`
+        INSERT INTO release_rollbacks
+          (id, promotion_id, decision_id, evidence_id, stream, provider, environment, status,
+           planned_at, approved_at, approved_by, outcome_at, outcome, command_id, command_label,
+           promotion_timeline_checksum, rollback_signature, timeline, ci_checks, created_at, updated_at)
+        VALUES
+          ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+           $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+        ON CONFLICT (id) DO UPDATE SET
+          status = EXCLUDED.status,
+          approved_at = EXCLUDED.approved_at,
+          approved_by = EXCLUDED.approved_by,
+          outcome_at = EXCLUDED.outcome_at,
+          outcome = EXCLUDED.outcome,
+          command_id = EXCLUDED.command_id,
+          command_label = EXCLUDED.command_label,
+          promotion_timeline_checksum = EXCLUDED.promotion_timeline_checksum,
+          timeline = EXCLUDED.timeline,
+          ci_checks = EXCLUDED.ci_checks,
+          updated_at = EXCLUDED.updated_at
+      `, [
+        rollback.id,
+        rollback.promotionId,
+        rollback.decisionId,
+        rollback.evidenceId,
+        rollback.stream,
+        rollback.provider,
+        rollback.environment,
+        rollback.status,
+        rollback.plannedAt,
+        rollback.approvedAt ?? null,
+        rollback.approvedBy ?? null,
+        rollback.outcomeAt ?? null,
+        rollback.outcome ?? null,
+        rollback.commandId ?? null,
+        rollback.commandLabel ?? null,
+        rollback.promotionTimelineChecksum,
+        rollback.rollbackSignature,
+        JSON.stringify(rollback.timeline),
+        JSON.stringify(rollback.ciChecks),
+        createdAt,
+        updatedAt,
+      ]);
+
+      return { ...rollback, createdAt, updatedAt };
+    },
+    getLatest: async (
+      stream?: string,
+      limit = 20,
+      filters: ReleaseRollbackFilters = {},
+    ): Promise<ReleaseRollbackRecord[]> => {
+      const conditions: string[] = [];
+      const values: unknown[] = [];
+      if (stream) {
+        values.push(stream);
+        conditions.push(`stream = $${values.length}`);
+      }
+      if (filters.provider) {
+        values.push(filters.provider);
+        conditions.push(`provider = $${values.length}`);
+      }
+      if (filters.promotionId) {
+        values.push(filters.promotionId);
+        conditions.push(`promotion_id = $${values.length}`);
+      }
+      if (filters.decisionId) {
+        values.push(filters.decisionId);
+        conditions.push(`decision_id = $${values.length}`);
+      }
+      if (filters.environment) {
+        values.push(filters.environment);
+        conditions.push(`environment = $${values.length}`);
+      }
+      if (filters.status) {
+        values.push(filters.status);
+        conditions.push(`status = $${values.length}`);
+      }
+      values.push(limit);
+      const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+      const result = await this.pool.query(
+        `SELECT * FROM release_rollbacks ${where} ORDER BY updated_at DESC LIMIT $${values.length}`,
+        values,
+      );
+      return result.rows.map(rowToReleaseRollback);
+    },
+    getById: async (id: string): Promise<ReleaseRollbackRecord | null> => {
+      const result = await this.pool.query('SELECT * FROM release_rollbacks WHERE id = $1', [id]);
+      return result.rows[0] ? rowToReleaseRollback(result.rows[0]) : null;
     },
   };
 

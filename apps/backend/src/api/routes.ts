@@ -20,6 +20,7 @@ import {
 import { runReplaySuite } from '../diagnostics/replaySuite';
 import {
   compareReleaseEvidenceByProvider,
+  attachReleaseRollbackCiCheck,
   attachReleasePromotionCiCheck,
   collectReleaseReadiness,
   collectPostReleaseDrift,
@@ -27,18 +28,23 @@ import {
   createReleaseBundleSummary,
   createReleaseEvidenceExport,
   exportReleasePromotionTimeline,
+  exportReleaseRollbackTimeline,
   applyReleaseEvidenceRetention,
   getReleaseDriftOverrideHistory,
   getReleaseDecisionHistory,
   getReleaseDeploymentCommandDescriptors,
   getReleaseEvidenceHistory,
   getReleasePromotionHistory,
+  getReleaseRollbackCommandDescriptors,
+  getReleaseRollbackHistory,
   getReleaseRetentionPolicyPresets,
   getReleaseReconciliationHistory,
   recordReleaseDriftOverride,
   reconcileReleaseDecision,
   recordReleaseDecision,
   startReleasePromotion,
+  planReleaseRollback,
+  transitionReleaseRollback,
   transitionReleasePromotion,
 } from '../diagnostics/releaseReadiness';
 import { collectSystemDiagnostics } from '../diagnostics/systemDiagnostics';
@@ -249,6 +255,39 @@ const ReleasePromotionTransitionSchema = z.object({
 });
 
 const ReleasePromotionCiCheckSchema = z.object({
+  name: z.string().min(1),
+  status: z.enum(['queued', 'running', 'passed', 'failed', 'skipped']),
+  url: z.string().min(1).optional(),
+  detail: z.string().min(1).optional(),
+});
+
+const ReleaseRollbackCommandsQuerySchema = z.object({
+  environment: z.enum(['local', 'staging', 'production']).default('staging'),
+});
+
+const ReleaseRollbackSchema = z.object({
+  promotionId: z.string().min(1),
+  environment: z.enum(['local', 'staging', 'production']).default('staging'),
+  commandId: z.string().min(1).optional(),
+  actor: z.string().min(1).default('operator'),
+});
+
+const ReleaseRollbackHistoryQuerySchema = ReplayHistoryQuerySchema.extend({
+  provider: z.string().min(1).optional(),
+  promotionId: z.string().min(1).optional(),
+  decisionId: z.string().min(1).optional(),
+  environment: z.enum(['local', 'staging', 'production']).optional(),
+  status: z.enum(['planned', 'approved', 'rehearsed', 'executed', 'failed', 'cancelled']).optional(),
+});
+
+const ReleaseRollbackTransitionSchema = z.object({
+  status: z.enum(['planned', 'approved', 'rehearsed', 'executed', 'failed', 'cancelled']),
+  actor: z.string().min(1).default('operator'),
+  detail: z.string().min(1).optional(),
+  outcome: z.enum(['succeeded', 'failed', 'cancelled']).optional(),
+});
+
+const ReleaseRollbackCiCheckSchema = z.object({
   name: z.string().min(1),
   status: z.enum(['queued', 'running', 'passed', 'failed', 'skipped']),
   url: z.string().min(1).optional(),
@@ -813,6 +852,82 @@ router.get('/release/promotions/:promotionId/timeline', async (req: RequestWithC
     res.json({ success: true, timeline });
   } catch (error) {
     const id = logRouteError('RPTL', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/rollback-commands', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReleaseRollbackCommandsQuerySchema.parse(req.query);
+    res.json({ success: true, commands: getReleaseRollbackCommandDescriptors(query.environment) });
+  } catch (error) {
+    const id = logRouteError('RRBC', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.post('/release/rollbacks', async (req: RequestWithContext, res) => {
+  try {
+    const body = ReleaseRollbackSchema.parse(req.body);
+    const rollback = await planReleaseRollback(body);
+    res.status(201).json({ success: true, rollback });
+  } catch (error) {
+    const id = logRouteError('RRBP', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/rollbacks', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReleaseRollbackHistoryQuerySchema.parse(req.query);
+    const rollbacks = await getReleaseRollbackHistory(query.stream, query.limit, {
+      provider: query.provider,
+      promotionId: query.promotionId,
+      decisionId: query.decisionId,
+      environment: query.environment,
+      status: query.status,
+    });
+    res.json({ success: true, rollbacks });
+  } catch (error) {
+    const id = logRouteError('RRBH', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.post('/release/rollbacks/:rollbackId/transition', async (req: RequestWithContext, res) => {
+  try {
+    const body = ReleaseRollbackTransitionSchema.parse(req.body);
+    const rollback = await transitionReleaseRollback({
+      rollbackId: req.params.rollbackId,
+      ...body,
+    });
+    res.json({ success: true, rollback });
+  } catch (error) {
+    const id = logRouteError('RRBT', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.post('/release/rollbacks/:rollbackId/ci-checks', async (req: RequestWithContext, res) => {
+  try {
+    const body = ReleaseRollbackCiCheckSchema.parse(req.body);
+    const rollback = await attachReleaseRollbackCiCheck({
+      rollbackId: req.params.rollbackId,
+      ...body,
+    });
+    res.json({ success: true, rollback });
+  } catch (error) {
+    const id = logRouteError('RRBCI', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/rollbacks/:rollbackId/timeline', async (req: RequestWithContext, res) => {
+  try {
+    const timeline = await exportReleaseRollbackTimeline(req.params.rollbackId);
+    res.json({ success: true, timeline });
+  } catch (error) {
+    const id = logRouteError('RRBTL', req, error);
     res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
   }
 });

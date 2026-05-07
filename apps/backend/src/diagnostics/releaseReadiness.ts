@@ -6,6 +6,8 @@ import {
   ReleasePromotionRecord,
   ReleasePromotionStatus,
   ReleasePromotionTimelineEntry,
+  ReleaseRollbackRecord,
+  ReleaseRollbackStatus,
   ReleaseReconciliationRecord,
   ReplayMonitorSnapshot,
 } from '../types';
@@ -270,6 +272,51 @@ export interface ReleasePromotionTimelineExport {
   exportedAt: number;
   promotion: ReleasePromotionRecord;
   supervisionCard: ReleaseSupervisionStatusCard;
+  timeline: ReleasePromotionTimelineEntry[];
+  ciChecks: ReleasePromotionCiCheck[];
+  exportChecksum: string;
+}
+
+export interface ReleaseRollbackCommandDescriptor {
+  id: string;
+  label: string;
+  environment: ReleaseEnvironment;
+  command: string;
+  description: string;
+  guardedBy: 'ReleasePromotionTimeline';
+  requiredPromotionStates: ReleasePromotionStatus[];
+  requiredTimelineSignals: string[];
+  requiredEnvironmentVariables: string[];
+}
+
+export interface ReleaseRollbackInput {
+  promotionId: string;
+  environment?: ReleaseEnvironment;
+  commandId?: string;
+  actor?: string;
+}
+
+export interface ReleaseRollbackTransitionInput {
+  rollbackId: string;
+  status: ReleaseRollbackStatus;
+  actor?: string;
+  detail?: string;
+  outcome?: ReleaseRollbackRecord['outcome'];
+}
+
+export interface ReleaseRollbackCiCheckInput {
+  rollbackId: string;
+  name: string;
+  status: ReleasePromotionCiCheck['status'];
+  url?: string;
+  detail?: string;
+}
+
+export interface ReleaseRollbackTimelineExport {
+  version: 'agros-release-rollback-timeline-v1';
+  exportedAt: number;
+  rollback: ReleaseRollbackRecord;
+  promotionTimeline: ReleasePromotionTimelineExport;
   timeline: ReleasePromotionTimelineEntry[];
   ciChecks: ReleasePromotionCiCheck[];
   exportChecksum: string;
@@ -1356,6 +1403,236 @@ export async function exportReleasePromotionTimeline(
     supervisionCard,
     timeline: promotion.timeline,
     ciChecks: promotion.ciChecks,
+    exportChecksum,
+  };
+}
+
+const RELEASE_ROLLBACK_COMMANDS: Record<ReleaseEnvironment, ReleaseRollbackCommandDescriptor[]> = {
+  local: [
+    {
+      id: 'rehearse_local_rollback',
+      label: 'Rehearse Local Rollback',
+      environment: 'local',
+      command: 'npm run validate:phase12',
+      description: 'Rehearse rollback handling locally against the latest promotion timeline.',
+      guardedBy: 'ReleasePromotionTimeline',
+      requiredPromotionStates: ['failed', 'deployed'],
+      requiredTimelineSignals: ['promotion_failed', 'ci_check_attached'],
+      requiredEnvironmentVariables: ['AGROS_RELEASE_PROMOTION_ID'],
+    },
+  ],
+  staging: [
+    {
+      id: 'rehearse_staging_rollback',
+      label: 'Rehearse Staging Rollback',
+      environment: 'staging',
+      command: 'npm run artifact:promotion-timeline -- --promotion-id=$AGROS_RELEASE_PROMOTION_ID',
+      description: 'Export and review the staging promotion timeline before rollback execution.',
+      guardedBy: 'ReleasePromotionTimeline',
+      requiredPromotionStates: ['failed', 'deployed'],
+      requiredTimelineSignals: ['promotion_failed', 'ci_check_attached'],
+      requiredEnvironmentVariables: ['AGROS_RELEASE_PROMOTION_ID'],
+    },
+  ],
+  production: [
+    {
+      id: 'execute_production_rollback',
+      label: 'Execute Production Rollback',
+      environment: 'production',
+      command: 'npm run artifact:rollback-timeline -- --rollback-id=$AGROS_RELEASE_ROLLBACK_ID',
+      description: 'Execute the supervised production rollback handoff and export the rollback timeline.',
+      guardedBy: 'ReleasePromotionTimeline',
+      requiredPromotionStates: ['failed'],
+      requiredTimelineSignals: ['promotion_failed', 'ci_check_attached'],
+      requiredEnvironmentVariables: ['AGROS_RELEASE_PROMOTION_ID', 'AGROS_RELEASE_ROLLBACK_ID'],
+    },
+  ],
+};
+
+export function getReleaseRollbackCommandDescriptors(
+  environment?: ReleaseEnvironment,
+): ReleaseRollbackCommandDescriptor[] {
+  const normalized = normalizeEnvironment(environment);
+  return RELEASE_ROLLBACK_COMMANDS[normalized];
+}
+
+function promotionTimelineIsRollbackEligible(timeline: ReleasePromotionTimelineExport): boolean {
+  return timeline.promotion.status === 'failed'
+    || timeline.promotion.outcome === 'failed'
+    || timeline.ciChecks.some(check => check.status === 'failed')
+    || timeline.timeline.some(event => event.type === 'promotion_failed');
+}
+
+function normalizeRollbackStatus(status: ReleaseRollbackStatus): ReleaseRollbackStatus {
+  if (['planned', 'approved', 'rehearsed', 'executed', 'failed', 'cancelled'].includes(status)) {
+    return status;
+  }
+  return 'planned';
+}
+
+export async function planReleaseRollback(
+  input: ReleaseRollbackInput,
+): Promise<ReleaseRollbackRecord> {
+  const promotionTimeline = await exportReleasePromotionTimeline(input.promotionId);
+  if (!promotionTimelineIsRollbackEligible(promotionTimeline)) {
+    throw new Error(`Promotion ${input.promotionId} is not failed or degraded enough for rollback planning.`);
+  }
+  const environment = normalizeEnvironment(input.environment ?? promotionTimeline.promotion.environment);
+  const commands = getReleaseRollbackCommandDescriptors(environment);
+  const command = commands.find(item => item.id === input.commandId) ?? commands[0];
+  if (
+    !command.requiredPromotionStates.includes(promotionTimeline.promotion.status)
+    && !promotionTimeline.ciChecks.some(check => check.status === 'failed')
+  ) {
+    throw new Error(`Rollback command ${command.label} is guarded by ${command.requiredPromotionStates.join(', ')} promotion states.`);
+  }
+
+  const plannedAt = Date.now();
+  const rollbackSignature = hashString(stableStringify({
+    commandId: command.id,
+    environment,
+    plannedAt,
+    promotionId: promotionTimeline.promotion.id,
+    promotionSignature: promotionTimeline.promotion.promotionSignature,
+    promotionTimelineChecksum: promotionTimeline.exportChecksum,
+  }));
+  const timeline = [
+    promotionTimelineEvent(
+      'rollback_planned',
+      `${command.label} linked to promotion timeline ${promotionTimeline.exportChecksum}`,
+      input.actor ?? 'operator',
+      plannedAt,
+    ),
+  ];
+
+  return getStorageRepository().releaseRollbacks.save({
+    id: `rollback_${rollbackSignature}`,
+    promotionId: promotionTimeline.promotion.id,
+    decisionId: promotionTimeline.promotion.decisionId,
+    evidenceId: promotionTimeline.promotion.evidenceId,
+    stream: promotionTimeline.promotion.stream,
+    provider: promotionTimeline.promotion.provider,
+    environment,
+    status: 'planned',
+    plannedAt,
+    commandId: command.id,
+    commandLabel: command.label,
+    promotionTimelineChecksum: promotionTimeline.exportChecksum,
+    rollbackSignature,
+    timeline,
+    ciChecks: [],
+  });
+}
+
+export async function getReleaseRollbackHistory(
+  stream?: string,
+  limit = 20,
+  filters: {
+    provider?: string;
+    promotionId?: string;
+    decisionId?: string;
+    environment?: ReleaseEnvironment;
+    status?: ReleaseRollbackStatus;
+  } = {},
+): Promise<ReleaseRollbackRecord[]> {
+  return getStorageRepository().releaseRollbacks.getLatest(stream, limit, filters);
+}
+
+export async function transitionReleaseRollback(
+  input: ReleaseRollbackTransitionInput,
+): Promise<ReleaseRollbackRecord> {
+  const rollback = await getStorageRepository().releaseRollbacks.getById(input.rollbackId);
+  if (!rollback) {
+    throw new Error(`Release rollback not found: ${input.rollbackId}`);
+  }
+  const now = Date.now();
+  const status = normalizeRollbackStatus(input.status);
+  const detail = input.detail ?? `Rollback ${rollback.id} moved to ${status}.`;
+  const next: ReleaseRollbackRecord = {
+    ...rollback,
+    status,
+    approvedAt: status === 'approved' ? now : rollback.approvedAt,
+    approvedBy: status === 'approved' ? input.actor ?? 'operator' : rollback.approvedBy,
+    outcomeAt: status === 'executed' || status === 'failed' || status === 'cancelled' ? now : rollback.outcomeAt,
+    outcome: input.outcome ?? (
+      status === 'executed'
+        ? 'succeeded'
+        : status === 'failed'
+          ? 'failed'
+          : status === 'cancelled'
+            ? 'cancelled'
+            : rollback.outcome
+    ),
+    timeline: [
+      ...rollback.timeline,
+      promotionTimelineEvent(`rollback_${status}`, detail, input.actor ?? 'operator', now),
+    ],
+    updatedAt: now,
+  };
+
+  return getStorageRepository().releaseRollbacks.save(next);
+}
+
+export async function attachReleaseRollbackCiCheck(
+  input: ReleaseRollbackCiCheckInput,
+): Promise<ReleaseRollbackRecord> {
+  const rollback = await getStorageRepository().releaseRollbacks.getById(input.rollbackId);
+  if (!rollback) {
+    throw new Error(`Release rollback not found: ${input.rollbackId}`);
+  }
+  const checkedAt = Date.now();
+  const ciCheck: ReleasePromotionCiCheck = {
+    name: input.name,
+    status: input.status,
+    url: input.url,
+    detail: input.detail,
+    checkedAt,
+    checksum: hashString(stableStringify({
+      checkedAt,
+      detail: input.detail ?? null,
+      name: input.name,
+      status: input.status,
+      url: input.url ?? null,
+    })),
+  };
+  const next: ReleaseRollbackRecord = {
+    ...rollback,
+    ciChecks: [...rollback.ciChecks, ciCheck],
+    timeline: [
+      ...rollback.timeline,
+      promotionTimelineEvent('rollback_ci_check_attached', `${input.name} reported ${input.status}.`, 'ci-monitor', checkedAt),
+    ],
+    updatedAt: checkedAt,
+  };
+
+  return getStorageRepository().releaseRollbacks.save(next);
+}
+
+export async function exportReleaseRollbackTimeline(
+  rollbackId: string,
+): Promise<ReleaseRollbackTimelineExport> {
+  const rollback = await getStorageRepository().releaseRollbacks.getById(rollbackId);
+  if (!rollback) {
+    throw new Error(`Release rollback not found: ${rollbackId}`);
+  }
+  const promotionTimeline = await exportReleasePromotionTimeline(rollback.promotionId);
+  const exportedAt = Date.now();
+  const exportChecksum = hashString(stableStringify({
+    ciChecks: rollback.ciChecks.map(check => check.checksum),
+    exportedAt,
+    promotionTimelineChecksum: promotionTimeline.exportChecksum,
+    rollbackSignature: rollback.rollbackSignature,
+    status: rollback.status,
+    timeline: rollback.timeline.map(event => event.checksum),
+  }));
+
+  return {
+    version: 'agros-release-rollback-timeline-v1',
+    exportedAt,
+    rollback,
+    promotionTimeline,
+    timeline: rollback.timeline,
+    ciChecks: rollback.ciChecks,
     exportChecksum,
   };
 }

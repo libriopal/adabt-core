@@ -94,3 +94,29 @@ jobs:
         with:
           name: release-promotion-timeline
           path: outputs/release-promotion-timeline.json
+
+      - name: Attach release rollback CI check
+        if: ${{ env.AGROS_API_URL != '' && env.AGROS_RELEASE_ROLLBACK_ID != '' }}
+        run: |
+          npm run release:rollback-ci-check -- \
+            --api-url="$AGROS_API_URL" \
+            --rollback-id="$AGROS_RELEASE_ROLLBACK_ID" \
+            --name=github-actions-rollback \
+            --status=passed \
+            --url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --detail="GitHub Actions rollback validation passed"
+
+      - name: Export release rollback timeline
+        if: ${{ env.AGROS_API_URL != '' && env.AGROS_RELEASE_ROLLBACK_ID != '' }}
+        run: |
+          npm run artifact:rollback-timeline -- \
+            --api-url="$AGROS_API_URL" \
+            --rollback-id="$AGROS_RELEASE_ROLLBACK_ID" \
+            --output=outputs/release-rollback-timeline.json
+
+      - name: Upload release rollback timeline
+        if: ${{ env.AGROS_API_URL != '' && env.AGROS_RELEASE_ROLLBACK_ID != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-rollback-timeline
+          path: outputs/release-rollback-timeline.json

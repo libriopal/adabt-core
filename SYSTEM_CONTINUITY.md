@@ -52,6 +52,11 @@ Backend endpoints:
 - `POST /api/release/promotions/:promotionId/transition`: records approval, stop, deployment, failure, or rejection transitions.
 - `POST /api/release/promotions/:promotionId/ci-checks`: attaches CI monitor results to a promotion run.
 - `GET /api/release/promotions/:promotionId/timeline`: exports the promotion timeline with CI checks and supervision card checksum.
+- `GET /api/release/rollback-commands`: returns rollback command descriptors guarded by failed or degraded promotion timelines.
+- `POST /api/release/rollbacks`: plans a rollback linked to a promotion timeline checksum.
+- `POST /api/release/rollbacks/:rollbackId/transition`: records rollback approval, rehearsal, execution, failure, or cancellation.
+- `POST /api/release/rollbacks/:rollbackId/ci-checks`: attaches rollback CI monitor results.
+- `GET /api/release/rollbacks/:rollbackId/timeline`: exports rollback timelines with linked promotion timeline evidence.
 - `GET /api/diagnostics`: returns runtime, replay, database, continuity, demand, and reinforcement diagnostics.
 - `GET /api/continuity/status`: returns websocket clients, interrupted run IDs, and recent continuity events.
 - `POST /api/continuity/:runId/interrupt`: pauses a run when possible and broadcasts a continuity interrupt event.
@@ -84,6 +89,7 @@ Backend continuity is preserved through:
 - degraded replay recovery exports with recommendations
 - release-readiness gates for controlled go/no-go decisions
 - managed promotion windows with CI-backed timeline export
+- rollback records linked to failed or degraded promotion timelines
 - demand cache records
 - structured request IDs
 

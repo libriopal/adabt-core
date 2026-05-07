@@ -167,3 +167,13 @@ npm run artifact:promotion-timeline -- --api-url=http://localhost:3001/api --pro
 ```
 
 Phase 12 adds managed promotion windows, environment-specific deployment command descriptors, CI check attachment hooks, and promotion timeline exports for audit and incident handoff.
+
+## Phase 13 Validation
+
+```bash
+npm run validate:phase13
+npm run release:rollback-ci-check -- --api-url=http://localhost:3001/api --rollback-id=<rollback-id> --name=github-actions-rollback --status=passed
+npm run artifact:rollback-timeline -- --api-url=http://localhost:3001/api --rollback-id=<rollback-id> --output=/tmp/agros-release-rollback-timeline.json
+```
+
+Phase 13 adds post-promotion rollback records, rollback command descriptors guarded by failed promotion timelines, rollback CI evidence hooks, and rollback timeline exports for audit and incident handoff.

@@ -567,6 +567,54 @@ export interface ReleasePromotionTimelineExport {
   exportChecksum: string;
 }
 
+export type ReleaseRollbackStatus = 'planned' | 'approved' | 'rehearsed' | 'executed' | 'failed' | 'cancelled';
+
+export interface ReleaseRollbackCommandDescriptor {
+  id: string;
+  label: string;
+  environment: ReleaseEnvironment;
+  command: string;
+  description: string;
+  guardedBy: 'ReleasePromotionTimeline';
+  requiredPromotionStates: ReleasePromotionStatus[];
+  requiredTimelineSignals: string[];
+  requiredEnvironmentVariables: string[];
+}
+
+export interface ReleaseRollbackRecord {
+  id: string;
+  promotionId: string;
+  decisionId: string;
+  evidenceId: string;
+  stream: string;
+  provider: string;
+  environment: ReleaseEnvironment;
+  status: ReleaseRollbackStatus;
+  plannedAt: number;
+  approvedAt?: number;
+  approvedBy?: string;
+  outcomeAt?: number;
+  outcome?: 'succeeded' | 'failed' | 'cancelled';
+  commandId?: string;
+  commandLabel?: string;
+  promotionTimelineChecksum: string;
+  rollbackSignature: string;
+  timeline: ReleasePromotionTimelineEntry[];
+  ciChecks: ReleasePromotionCiCheck[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ReleaseRollbackTimelineExport {
+  version: 'agros-release-rollback-timeline-v1';
+  exportedAt: number;
+  rollback: ReleaseRollbackRecord;
+  promotionTimeline: ReleasePromotionTimelineExport;
+  timeline: ReleasePromotionTimelineEntry[];
+  ciChecks: ReleasePromotionCiCheck[];
+  exportChecksum: string;
+}
+
 export interface SlotGPTOutput {
   id: string;
   transformedTheme: string;

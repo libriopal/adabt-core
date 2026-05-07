@@ -250,6 +250,32 @@ export interface ReleasePromotionRecord {
   updatedAt: number;
 }
 
+export type ReleaseRollbackStatus = 'planned' | 'approved' | 'rehearsed' | 'executed' | 'failed' | 'cancelled';
+
+export interface ReleaseRollbackRecord {
+  id: string;
+  promotionId: string;
+  decisionId: string;
+  evidenceId: string;
+  stream: string;
+  provider: string;
+  environment: 'local' | 'staging' | 'production';
+  status: ReleaseRollbackStatus;
+  plannedAt: number;
+  approvedAt?: number;
+  approvedBy?: string;
+  outcomeAt?: number;
+  outcome?: 'succeeded' | 'failed' | 'cancelled';
+  commandId?: string;
+  commandLabel?: string;
+  promotionTimelineChecksum: string;
+  rollbackSignature: string;
+  timeline: ReleasePromotionTimelineEntry[];
+  ciChecks: ReleasePromotionCiCheck[];
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface Design {
   id: string;
   seed: string;

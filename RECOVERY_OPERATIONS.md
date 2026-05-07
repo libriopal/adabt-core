@@ -176,6 +176,10 @@ Before a release promotion:
 17. Start the promotion window with `POST /api/release/promotions`, then transition it through approval, stop, deployment, or failure with `POST /api/release/promotions/<promotion-id>/transition`.
 18. Attach CI monitor evidence with `POST /api/release/promotions/<promotion-id>/ci-checks` before final deployment transition.
 19. Export `/api/release/promotions/<promotion-id>/timeline` and store it with incident, audit, or release handoff artifacts.
+20. For failed or degraded promotions, fetch `/api/release/rollback-commands?environment=<local|staging|production>`.
+21. Plan rollback with `POST /api/release/rollbacks`, then transition it through approval, rehearsal, execution, failure, or cancellation with `POST /api/release/rollbacks/<rollback-id>/transition`.
+22. Attach rollback CI monitor evidence with `POST /api/release/rollbacks/<rollback-id>/ci-checks`.
+23. Export `/api/release/rollbacks/<rollback-id>/timeline` and store it with incident, audit, or rollback handoff artifacts.
 
 ## Continuity Failure Response
 
