@@ -1,6 +1,6 @@
 import { BatchConfig, Design, IntentVector, SlotMechanics } from '../types';
 import { DeterministicPRNG } from '../utils/prng';
-import { DesignDB } from '../storage/db';
+import { getStorageRepository } from '../storage/repository';
 import { demandEngine } from './demandEngine';
 
 export class BatchGenerator {
@@ -17,9 +17,9 @@ export class BatchGenerator {
       designs.push(design);
     }
 
-    designs.forEach(d => {
-      try { DesignDB.create(d as any); } catch { /* non-fatal in tests */ }
-    });
+    await Promise.all(designs.map(async d => {
+      try { await getStorageRepository().designs.create(d as any); } catch { /* non-fatal in tests */ }
+    }));
 
     return designs;
   }

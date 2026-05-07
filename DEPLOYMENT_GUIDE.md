@@ -21,9 +21,9 @@ Important variables:
 
 - `FRONTEND_URL`: deployed frontend origin.
 - `VITE_API_URL`: frontend API base URL, usually `https://<backend>/api`.
-- `DATABASE_PROVIDER`: `sqlite` for the current runtime fallback or `postgres` for migration preparation.
+- `DATABASE_PROVIDER`: `sqlite` for deterministic local/runtime fallback or `postgres` for Postgres-backed request storage.
 - `DATABASE_PATH`: backend SQLite path. In production SQLite fallback mode, use a persistent volume, for example `/data/slotgpt.db`.
-- `DATABASE_URL`: Postgres connection string used by the Phase 1 migration adapter when `DATABASE_PROVIDER=postgres`.
+- `DATABASE_URL`: Postgres connection string used by migrations and request-time storage when `DATABASE_PROVIDER=postgres`.
 - `RUN_MIGRATIONS`: set to `false` only when migrations are handled externally.
 - `ENABLE_WORKERS`: set `true` only when Redis is configured.
 - `REDIS_HOST` and `REDIS_PORT`: worker queue backend.
@@ -86,6 +86,16 @@ REDIS_PORT=<railway-redis-port>
 ```
 
 Mount persistent storage at `/data`.
+
+For Postgres-backed production storage, set:
+
+```text
+DATABASE_PROVIDER=postgres
+DATABASE_URL=<postgres-connection-string>
+RUN_MIGRATIONS=true
+```
+
+Production startup fails when `DATABASE_PROVIDER=postgres` is selected without `DATABASE_URL`.
 
 ## Render Backend
 

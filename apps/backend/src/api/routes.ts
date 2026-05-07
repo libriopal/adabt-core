@@ -4,7 +4,7 @@ import { batchGenerator } from '../services/batchGenerator';
 import { evolutionEngine } from '../services/evolutionEngine';
 import { demandEngine } from '../services/demandEngine';
 import { reinforcementEngine } from '../services/reinforcementEngine';
-import { DesignDB, ReinforcementDB } from '../storage/db';
+import { getStorageRepository } from '../storage/repository';
 import { Design } from '../types';
 import { continuityHub } from '../diagnostics/continuityHub';
 import { logger } from '../diagnostics/logger';
@@ -67,7 +67,7 @@ router.post('/generate-batch', async (req: RequestWithContext, res) => {
       meta: {
         count: designs.length,
         executionTime: Date.now() - startTime,
-        cacheSize: DesignDB.getStats().total,
+        cacheSize: (await getStorageRepository().designs.getStats()).total,
       },
     });
   } catch (error) {
@@ -93,7 +93,7 @@ router.post('/evolve', async (req: RequestWithContext, res) => {
     } else {
       let seeds = body.seedDesigns || [];
       if (seeds.length === 0) {
-        seeds = DesignDB.getAll({ limit: body.populationSize, minScore: 0.5 });
+        seeds = await getStorageRepository().designs.getAll({ limit: body.populationSize, minScore: 0.5 });
       }
       if (seeds.length === 0) {
         const id = dbgId('EVO', req);
@@ -118,8 +118,8 @@ router.post('/evolve', async (req: RequestWithContext, res) => {
   }
 });
 
-router.get('/evolve/:runId', (req: RequestWithContext, res) => {
-  const state = evolutionEngine.getState(req.params.runId);
+router.get('/evolve/:runId', async (req: RequestWithContext, res) => {
+  const state = await evolutionEngine.getStateFromStore(req.params.runId);
   if (!state) {
     const id = dbgId('EVO', req);
     return res.status(404).json({ success: false, debugId: id, error: 'Evolution run not found' });
@@ -138,8 +138,8 @@ router.get('/evolve/:runId', (req: RequestWithContext, res) => {
   });
 });
 
-router.post('/evolve/:runId/pause', (req: RequestWithContext, res) => {
-  const paused = evolutionEngine.pauseEvolution(req.params.runId);
+router.post('/evolve/:runId/pause', async (req: RequestWithContext, res) => {
+  const paused = await evolutionEngine.pauseEvolution(req.params.runId);
   if (!paused) {
     const id = dbgId('EVO', req);
     return res.status(404).json({ success: false, debugId: id, error: 'Evolution run not running' });
@@ -148,18 +148,19 @@ router.post('/evolve/:runId/pause', (req: RequestWithContext, res) => {
   res.json({ success: true, status: 'paused' });
 });
 
-router.get('/designs', (req, res) => {
+router.get('/designs', async (req, res) => {
   const minScore = req.query.minScore ? parseFloat(req.query.minScore as string) : undefined;
   const generation = req.query.generation ? parseInt(req.query.generation as string) : undefined;
   const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
   const offset = req.query.offset ? parseInt(req.query.offset as string) : 0;
 
-  const designs = DesignDB.getAll({ minScore, generation, limit, offset });
-  res.json({ success: true, designs, stats: DesignDB.getStats() });
+  const designs = await getStorageRepository().designs.getAll({ minScore, generation, limit, offset });
+  const stats = await getStorageRepository().designs.getStats();
+  res.json({ success: true, designs, stats });
 });
 
-router.get('/designs/:id', (req: RequestWithContext, res) => {
-  const design = DesignDB.getById(req.params.id);
+router.get('/designs/:id', async (req: RequestWithContext, res) => {
+  const design = await getStorageRepository().designs.getById(req.params.id);
   if (!design) {
     const id = dbgId('DES', req);
     return res.status(404).json({ success: false, debugId: id, error: 'Design not found' });
@@ -167,17 +168,17 @@ router.get('/designs/:id', (req: RequestWithContext, res) => {
   res.json({ success: true, design });
 });
 
-router.post('/import', (req: RequestWithContext, res) => {
+router.post('/import', async (req: RequestWithContext, res) => {
   try {
     const body = ImportSchema.parse(req.body);
-    const imported = body.designs.map((design: Design) => {
+    const imported = await Promise.all(body.designs.map(async (design: Design) => {
       const toImport = body.preserveIds ? design : {
         ...design,
         id: `imported_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
       };
-      DesignDB.create(toImport as any);
+      await getStorageRepository().designs.create(toImport as any);
       return toImport;
-    });
+    }));
     res.json({ success: true, imported: imported.length, designs: imported });
   } catch (error) {
     const id = logRouteError('IMP', req, error);
@@ -185,13 +186,13 @@ router.post('/import', (req: RequestWithContext, res) => {
   }
 });
 
-router.get('/export/:id', (req: RequestWithContext, res) => {
-  const design = DesignDB.getById(req.params.id);
+router.get('/export/:id', async (req: RequestWithContext, res) => {
+  const design = await getStorageRepository().designs.getById(req.params.id);
   if (!design) {
     const id = dbgId('DES', req);
     return res.status(404).json({ success: false, debugId: id, error: 'Design not found' });
   }
-  DesignDB.updateExported(design.id, true);
+  await getStorageRepository().designs.updateExported(design.id, true);
   res.json({ success: true, export: { version: '1.0.0', exportedAt: Date.now(), design } });
 });
 
@@ -211,7 +212,7 @@ router.get('/demand', async (req: RequestWithContext, res) => {
 router.get('/reinforcement/replay', async (req: RequestWithContext, res) => {
   try {
     const replay = await reinforcementEngine.verifyReplay();
-    res.json({ success: true, replay, recent: ReinforcementDB.getLatest(8) });
+    res.json({ success: true, replay, recent: await getStorageRepository().reinforcement.getLatest(8) });
   } catch (error) {
     const id = logRouteError('RFR', req, error);
     res.status(500).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
@@ -232,8 +233,8 @@ router.get('/continuity/status', (_req, res) => {
   res.json({ success: true, continuity: continuityHub.getStatus() });
 });
 
-router.post('/continuity/:runId/interrupt', (req: RequestWithContext, res) => {
-  const paused = evolutionEngine.pauseEvolution(req.params.runId);
+router.post('/continuity/:runId/interrupt', async (req: RequestWithContext, res) => {
+  const paused = await evolutionEngine.pauseEvolution(req.params.runId);
   const event = continuityHub.interrupt(req.params.runId, typeof req.body?.reason === 'string' ? req.body.reason : 'manual');
   res.status(paused ? 200 : 202).json({ success: true, paused, event });
 });
@@ -249,7 +250,7 @@ router.post('/continuity/:runId/resume', async (req: RequestWithContext, res) =>
   }
 });
 
-router.get('/ready', (req, res) => {
+router.get('/ready', async (req, res) => {
   const runtime = validateRuntimeEnvironment();
   const status = runtime.status === 'ready' ? 'ready' : 'degraded';
   res.status(status === 'ready' ? 200 : 503).json({
@@ -257,7 +258,7 @@ router.get('/ready', (req, res) => {
     status,
     timestamp: Date.now(),
     runtime,
-    database: DesignDB.getStats(),
+    database: await getStorageRepository().designs.getStats(),
     requestId: (req as RequestWithContext).requestId,
   });
 });
@@ -272,7 +273,7 @@ router.get('/diagnostics', async (req: RequestWithContext, res) => {
   }
 });
 
-router.get('/health', (req, res) => {
+router.get('/health', async (req, res) => {
   const runtime = validateRuntimeEnvironment();
   res.json({
     status: runtime.status === 'ready' ? 'healthy' : 'degraded',
@@ -281,7 +282,7 @@ router.get('/health', (req, res) => {
     activeEvolutions: evolutionEngine.getActiveRuns().length,
     continuity: continuityHub.getStatus(),
     runtime,
-    database: DesignDB.getStats(),
+    database: await getStorageRepository().designs.getStats(),
     requestId: (req as RequestWithContext).requestId,
   });
 });

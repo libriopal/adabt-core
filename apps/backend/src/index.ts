@@ -3,7 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import { createServer } from 'http';
 import { router } from './api/routes';
-import { initDatabase } from './storage/db';
+import { initializeStorageRepository } from './storage/repository';
 import { continuityHub } from './diagnostics/continuityHub';
 import { logger } from './diagnostics/logger';
 import { requestContext, runtimeGuard, validateRuntimeEnvironment } from './diagnostics/runtimeValidation';
@@ -37,24 +37,33 @@ app.use((err: any, req: express.Request, res: express.Response, _next: any) => {
   });
 });
 
-const runtime = validateRuntimeEnvironment();
-initDatabase(process.env.DATABASE_PATH);
-const startup = validateStartup();
+async function bootstrap(): Promise<void> {
+  await initializeStorageRepository();
+  const runtime = validateRuntimeEnvironment();
+  const startup = await validateStartup();
 
-const workersEnabled = process.env.ENABLE_WORKERS === 'true';
-if (workersEnabled) {
-  import('./workers').then(({ startWorkers }) => startWorkers());
+  const workersEnabled = process.env.ENABLE_WORKERS === 'true';
+  if (workersEnabled) {
+    import('./workers').then(({ startWorkers }) => startWorkers());
+  }
+
+  const server = createServer(app);
+  continuityHub.attach(server);
+
+  server.listen(PORT, () => {
+    logger.info('server_started', {
+      port: PORT,
+      workersEnabled,
+      runtimeStatus: runtime.status,
+      startupStatus: startup.status,
+      warnings: runtime.warnings,
+    });
+  });
 }
 
-const server = createServer(app);
-continuityHub.attach(server);
-
-server.listen(PORT, () => {
-  logger.info('server_started', {
-    port: PORT,
-    workersEnabled,
-    runtimeStatus: runtime.status,
-    startupStatus: startup.status,
-    warnings: runtime.warnings,
+bootstrap().catch(error => {
+  logger.error('server_start_failed', {
+    error: error instanceof Error ? error.message : String(error),
   });
+  process.exit(1);
 });

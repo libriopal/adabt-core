@@ -1,6 +1,6 @@
 import { DemandResult, DemandSignal, DemandSourceBreakdown, Design } from '../types';
 import { DeterministicPRNG, hashString } from '../utils/prng';
-import { DemandDB } from '../storage/db';
+import { getStorageRepository } from '../storage/repository';
 
 type DemandSourceId =
   | 'slotcatalog'
@@ -359,7 +359,7 @@ export class DemandEngine {
     this.lastUpdateTime = now;
 
     try {
-      DemandDB.save(result);
+      await getStorageRepository().demand.save(result);
     } catch {
       // DB may not be ready in tests - non-fatal.
     }

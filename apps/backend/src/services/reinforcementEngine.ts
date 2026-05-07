@@ -8,7 +8,7 @@ import {
   ReinforcementReplaySummary,
   ReinforcementWeights,
 } from '../types';
-import { DemandDB, ReinforcementDB } from '../storage/db';
+import { getStorageRepository } from '../storage/repository';
 import { demandEngine } from './demandEngine';
 import { hashString } from '../utils/prng';
 
@@ -78,7 +78,7 @@ export class ReinforcementEngine {
 
     if (options.persist !== false) {
       try {
-        ReinforcementDB.save(decision);
+        await getStorageRepository().reinforcement.save(decision);
       } catch {
         // Tests and replay can run before a DB is initialized.
       }
@@ -161,7 +161,7 @@ export class ReinforcementEngine {
 
   private async getDemand(): Promise<DemandResult> {
     try {
-      const latest = DemandDB.getLatest();
+      const latest = await getStorageRepository().demand.getLatest();
       if (latest) return latest;
     } catch {
       // Database is optional for deterministic replay.

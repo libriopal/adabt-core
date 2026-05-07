@@ -1,4 +1,4 @@
-import { DesignDB, ReinforcementDB } from '../storage/db';
+import { getStorageRepository } from '../storage/repository';
 import { demandEngine } from '../services/demandEngine';
 import { evolutionEngine } from '../services/evolutionEngine';
 import { validateRuntimeEnvironment } from './runtimeValidation';
@@ -9,13 +9,15 @@ export async function collectSystemDiagnostics() {
   const runtime = validateRuntimeEnvironment();
   const replay = await runReplaySuite();
   const latestDemand = await demandEngine.updateDemand('production readiness');
+  const database = await getStorageRepository().designs.getStats();
+  const recentDecisions = await getStorageRepository().reinforcement.getLatest(5);
 
   return {
     status: runtime.status === 'ready' && replay.stable ? 'ready' : 'degraded',
     timestamp: Date.now(),
     runtime,
     replay,
-    database: DesignDB.getStats(),
+    database,
     activeEvolutions: evolutionEngine.getActiveRuns(),
     continuity: continuityHub.getStatus(),
     demand: {
@@ -24,7 +26,7 @@ export async function collectSystemDiagnostics() {
       reinforcementInputs: latestDemand.reinforcementInputs,
     },
     reinforcement: {
-      recentDecisions: ReinforcementDB.getLatest(5).length,
+      recentDecisions: recentDecisions.length,
     },
   };
 }

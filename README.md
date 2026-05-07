@@ -44,6 +44,12 @@ Phase 1 database and queue runtime plumbing can be checked with:
 npm run validate:phase1
 ```
 
+Phase 2 async repository and production storage guardrails can be checked with:
+
+```bash
+npm run validate:phase2
+```
+
 ## Deployment
 
 - Frontend: Vercel with `vercel.json`.
@@ -75,4 +81,4 @@ See `DEPLOYMENT_GUIDE.md` for environment variables and provider-specific setup.
 
 ## State
 
-Backend SQLite runtime files are intentionally ignored. Local runtime defaults to `DATABASE_PROVIDER=sqlite` and `DATABASE_PATH=./data/slotgpt.db`. Phase 1 also includes a Postgres migration adapter using `DATABASE_PROVIDER=postgres` and `DATABASE_URL`, while request storage remains on the deterministic SQLite fallback until the production adapter cutover phase.
+Backend SQLite runtime files are intentionally ignored. Local runtime defaults to `DATABASE_PROVIDER=sqlite` and `DATABASE_PATH=./data/slotgpt.db`. Phase 2 routes request-time storage through an async repository interface with SQLite and Postgres implementations. Use `DATABASE_PROVIDER=postgres` plus `DATABASE_URL` for Postgres-backed request storage.

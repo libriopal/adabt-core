@@ -1,4 +1,6 @@
 import { getDB } from '../storage/db';
+import { resolveDatabaseRuntimeConfig } from '../storage/databaseConfig';
+import { getStorageRepository } from '../storage/repository';
 import { logger } from './logger';
 import { validateRuntimeEnvironment } from './runtimeValidation';
 
@@ -19,8 +21,9 @@ const REQUIRED_TABLES = [
   'reinforcement_events',
 ];
 
-export function validateStartup(): StartupValidationReport {
+export async function validateStartup(): Promise<StartupValidationReport> {
   const runtime = validateRuntimeEnvironment();
+  const databaseConfig = resolveDatabaseRuntimeConfig();
   const checks: StartupValidationReport['checks'] = [
     {
       name: 'runtime_environment',
@@ -30,6 +33,19 @@ export function validateStartup(): StartupValidationReport {
   ];
 
   try {
+    if (databaseConfig.provider === 'postgres') {
+      const stats = await getStorageRepository().designs.getStats();
+      await getStorageRepository().reinforcement.getLatest(1);
+      checks.push({
+        name: 'postgres_repository',
+        passed: true,
+        detail: `repository ready; designs=${stats.total}`,
+      });
+      const status = checks.every(check => check.passed) ? 'ready' : 'degraded';
+      logger.info('startup_validation_complete', { status, checks });
+      return { status, checks };
+    }
+
     const database = getDB();
     const journal = database.pragma('journal_mode', { simple: true });
     checks.push({
