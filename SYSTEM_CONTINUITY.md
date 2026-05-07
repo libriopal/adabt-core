@@ -47,6 +47,11 @@ Backend endpoints:
 - `POST /api/release/drift-overrides`: records operator drift exception overrides against the current drift checksum.
 - `GET /api/release/supervision-card`: returns an environment-owned release supervision status card.
 - `GET /api/release/evidence/retention/presets`: returns local, staging, and production retention presets.
+- `GET /api/release/deployment-commands`: returns environment-specific deployment command descriptors guarded by release supervision status cards.
+- `POST /api/release/promotions`: starts a managed promotion window for a supervised go decision.
+- `POST /api/release/promotions/:promotionId/transition`: records approval, stop, deployment, failure, or rejection transitions.
+- `POST /api/release/promotions/:promotionId/ci-checks`: attaches CI monitor results to a promotion run.
+- `GET /api/release/promotions/:promotionId/timeline`: exports the promotion timeline with CI checks and supervision card checksum.
 - `GET /api/diagnostics`: returns runtime, replay, database, continuity, demand, and reinforcement diagnostics.
 - `GET /api/continuity/status`: returns websocket clients, interrupted run IDs, and recent continuity events.
 - `POST /api/continuity/:runId/interrupt`: pauses a run when possible and broadcasts a continuity interrupt event.
@@ -78,6 +83,7 @@ Backend continuity is preserved through:
 - persisted replay monitor snapshots and alert acknowledgements
 - degraded replay recovery exports with recommendations
 - release-readiness gates for controlled go/no-go decisions
+- managed promotion windows with CI-backed timeline export
 - demand cache records
 - structured request IDs
 

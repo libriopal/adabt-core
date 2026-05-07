@@ -20,20 +20,26 @@ import {
 import { runReplaySuite } from '../diagnostics/replaySuite';
 import {
   compareReleaseEvidenceByProvider,
+  attachReleasePromotionCiCheck,
   collectReleaseReadiness,
   collectPostReleaseDrift,
   createReleaseSupervisionStatusCard,
   createReleaseBundleSummary,
   createReleaseEvidenceExport,
+  exportReleasePromotionTimeline,
   applyReleaseEvidenceRetention,
   getReleaseDriftOverrideHistory,
   getReleaseDecisionHistory,
+  getReleaseDeploymentCommandDescriptors,
   getReleaseEvidenceHistory,
+  getReleasePromotionHistory,
   getReleaseRetentionPolicyPresets,
   getReleaseReconciliationHistory,
   recordReleaseDriftOverride,
   reconcileReleaseDecision,
   recordReleaseDecision,
+  startReleasePromotion,
+  transitionReleasePromotion,
 } from '../diagnostics/releaseReadiness';
 import { collectSystemDiagnostics } from '../diagnostics/systemDiagnostics';
 import { RequestWithContext, validateRuntimeEnvironment } from '../diagnostics/runtimeValidation';
@@ -215,6 +221,38 @@ const ReleaseDriftOverrideHistoryQuerySchema = ReplayHistoryQuerySchema.extend({
   provider: z.string().min(1).optional(),
   decisionId: z.string().min(1).optional(),
   environment: z.enum(['local', 'staging', 'production']).optional(),
+});
+
+const ReleaseDeploymentCommandsQuerySchema = z.object({
+  environment: z.enum(['local', 'staging', 'production']).default('staging'),
+});
+
+const ReleasePromotionSchema = z.object({
+  decisionId: z.string().min(1),
+  environment: z.enum(['local', 'staging', 'production']).default('staging'),
+  commandId: z.string().min(1).optional(),
+  actor: z.string().min(1).default('operator'),
+});
+
+const ReleasePromotionHistoryQuerySchema = ReplayHistoryQuerySchema.extend({
+  provider: z.string().min(1).optional(),
+  decisionId: z.string().min(1).optional(),
+  environment: z.enum(['local', 'staging', 'production']).optional(),
+  status: z.enum(['started', 'stopped', 'approved', 'rejected', 'deployed', 'failed']).optional(),
+});
+
+const ReleasePromotionTransitionSchema = z.object({
+  status: z.enum(['started', 'stopped', 'approved', 'rejected', 'deployed', 'failed']),
+  actor: z.string().min(1).default('operator'),
+  detail: z.string().min(1).optional(),
+  outcome: z.enum(['succeeded', 'failed', 'cancelled']).optional(),
+});
+
+const ReleasePromotionCiCheckSchema = z.object({
+  name: z.string().min(1),
+  status: z.enum(['queued', 'running', 'passed', 'failed', 'skipped']),
+  url: z.string().min(1).optional(),
+  detail: z.string().min(1).optional(),
 });
 
 router.post('/generate-batch', async (req: RequestWithContext, res) => {
@@ -700,6 +738,81 @@ router.get('/release/supervision-card', async (req: RequestWithContext, res) => 
     res.json({ success: true, card });
   } catch (error) {
     const id = logRouteError('RSC', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/deployment-commands', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReleaseDeploymentCommandsQuerySchema.parse(req.query);
+    res.json({ success: true, commands: getReleaseDeploymentCommandDescriptors(query.environment) });
+  } catch (error) {
+    const id = logRouteError('RDCM', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.post('/release/promotions', async (req: RequestWithContext, res) => {
+  try {
+    const body = ReleasePromotionSchema.parse(req.body);
+    const promotion = await startReleasePromotion(body);
+    res.status(201).json({ success: true, promotion });
+  } catch (error) {
+    const id = logRouteError('RPMO', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/promotions', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReleasePromotionHistoryQuerySchema.parse(req.query);
+    const promotions = await getReleasePromotionHistory(query.stream, query.limit, {
+      provider: query.provider,
+      decisionId: query.decisionId,
+      environment: query.environment,
+      status: query.status,
+    });
+    res.json({ success: true, promotions });
+  } catch (error) {
+    const id = logRouteError('RPMH', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.post('/release/promotions/:promotionId/transition', async (req: RequestWithContext, res) => {
+  try {
+    const body = ReleasePromotionTransitionSchema.parse(req.body);
+    const promotion = await transitionReleasePromotion({
+      promotionId: req.params.promotionId,
+      ...body,
+    });
+    res.json({ success: true, promotion });
+  } catch (error) {
+    const id = logRouteError('RPT', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.post('/release/promotions/:promotionId/ci-checks', async (req: RequestWithContext, res) => {
+  try {
+    const body = ReleasePromotionCiCheckSchema.parse(req.body);
+    const promotion = await attachReleasePromotionCiCheck({
+      promotionId: req.params.promotionId,
+      ...body,
+    });
+    res.json({ success: true, promotion });
+  } catch (error) {
+    const id = logRouteError('RPC', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/promotions/:promotionId/timeline', async (req: RequestWithContext, res) => {
+  try {
+    const timeline = await exportReleasePromotionTimeline(req.params.promotionId);
+    res.json({ success: true, timeline });
+  } catch (error) {
+    const id = logRouteError('RPTL', req, error);
     res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
   }
 });

@@ -502,6 +502,71 @@ export interface ReleaseSupervisionStatusCard {
   cardChecksum: string;
 }
 
+export type ReleasePromotionStatus = 'started' | 'stopped' | 'approved' | 'rejected' | 'deployed' | 'failed';
+
+export interface ReleaseDeploymentCommandDescriptor {
+  id: string;
+  label: string;
+  environment: ReleaseEnvironment;
+  command: string;
+  description: string;
+  guardedBy: 'ReleaseSupervisionCard';
+  requiredDecision: ReleaseDecisionOutcome;
+  requiredStatusLabels: string[];
+  requiredEnvironmentVariables: string[];
+}
+
+export interface ReleasePromotionTimelineEntry {
+  type: string;
+  at: number;
+  actor?: string;
+  detail: string;
+  checksum: string;
+}
+
+export interface ReleasePromotionCiCheck {
+  name: string;
+  status: 'queued' | 'running' | 'passed' | 'failed' | 'skipped';
+  url?: string;
+  checkedAt: number;
+  detail?: string;
+  checksum: string;
+}
+
+export interface ReleasePromotionRecord {
+  id: string;
+  decisionId: string;
+  evidenceId: string;
+  stream: string;
+  provider: string;
+  environment: ReleaseEnvironment;
+  status: ReleasePromotionStatus;
+  startedAt: number;
+  stoppedAt?: number;
+  approvedAt?: number;
+  approvedBy?: string;
+  outcomeAt?: number;
+  outcome?: 'succeeded' | 'failed' | 'cancelled';
+  commandId?: string;
+  commandLabel?: string;
+  supervisionCardChecksum: string;
+  promotionSignature: string;
+  timeline: ReleasePromotionTimelineEntry[];
+  ciChecks: ReleasePromotionCiCheck[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ReleasePromotionTimelineExport {
+  version: 'agros-release-promotion-timeline-v1';
+  exportedAt: number;
+  promotion: ReleasePromotionRecord;
+  supervisionCard: ReleaseSupervisionStatusCard;
+  timeline: ReleasePromotionTimelineEntry[];
+  ciChecks: ReleasePromotionCiCheck[];
+  exportChecksum: string;
+}
+
 export interface SlotGPTOutput {
   id: string;
   transformedTheme: string;

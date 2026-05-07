@@ -68,3 +68,29 @@ jobs:
         with:
           name: release-bundle-summary
           path: outputs/release-bundle-summary.json
+
+      - name: Attach release promotion CI check
+        if: ${{ env.AGROS_API_URL != '' && env.AGROS_RELEASE_PROMOTION_ID != '' }}
+        run: |
+          npm run release:ci-check -- \
+            --api-url="$AGROS_API_URL" \
+            --promotion-id="$AGROS_RELEASE_PROMOTION_ID" \
+            --name=github-actions \
+            --status=passed \
+            --url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --detail="GitHub Actions validation passed"
+
+      - name: Export release promotion timeline
+        if: ${{ env.AGROS_API_URL != '' && env.AGROS_RELEASE_PROMOTION_ID != '' }}
+        run: |
+          npm run artifact:promotion-timeline -- \
+            --api-url="$AGROS_API_URL" \
+            --promotion-id="$AGROS_RELEASE_PROMOTION_ID" \
+            --output=outputs/release-promotion-timeline.json
+
+      - name: Upload release promotion timeline
+        if: ${{ env.AGROS_API_URL != '' && env.AGROS_RELEASE_PROMOTION_ID != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-promotion-timeline
+          path: outputs/release-promotion-timeline.json

@@ -291,6 +291,39 @@ export function useBackend({ onError }: UseBackendOptions = {}) {
     overriddenBy?: string;
   }) => request('/release/drift-overrides', { method: 'POST', body: JSON.stringify(params) }), [request]);
 
+  const getReleaseDeploymentCommands = useCallback((params?: { environment?: string }) => {
+    const qs = params ? new URLSearchParams(
+      Object.entries(params)
+        .filter(([, value]) => value !== undefined && value !== '')
+        .map(([key, value]) => [key, String(value)]),
+    ).toString() : '';
+    return request(`/release/deployment-commands${qs ? `?${qs}` : ''}`);
+  }, [request]);
+
+  const startReleasePromotion = useCallback((params: {
+    decisionId: string;
+    environment?: string;
+    commandId?: string;
+    actor?: string;
+  }) => request('/release/promotions', { method: 'POST', body: JSON.stringify(params) }), [request]);
+
+  const transitionReleasePromotion = useCallback((promotionId: string, params: {
+    status: string;
+    actor?: string;
+    detail?: string;
+    outcome?: string;
+  }) => request(`/release/promotions/${promotionId}/transition`, { method: 'POST', body: JSON.stringify(params) }), [request]);
+
+  const attachReleasePromotionCiCheck = useCallback((promotionId: string, params: {
+    name: string;
+    status: string;
+    url?: string;
+    detail?: string;
+  }) => request(`/release/promotions/${promotionId}/ci-checks`, { method: 'POST', body: JSON.stringify(params) }), [request]);
+
+  const getReleasePromotionTimeline = useCallback((promotionId: string) =>
+    request(`/release/promotions/${promotionId}/timeline`), [request]);
+
   return {
     loading,
     generateBatch,
@@ -323,5 +356,10 @@ export function useBackend({ onError }: UseBackendOptions = {}) {
     getReleaseRetentionPolicyPresets,
     getReleaseSupervisionCard,
     createReleaseDriftOverride,
+    getReleaseDeploymentCommands,
+    startReleasePromotion,
+    transitionReleasePromotion,
+    attachReleasePromotionCiCheck,
+    getReleasePromotionTimeline,
   };
 }

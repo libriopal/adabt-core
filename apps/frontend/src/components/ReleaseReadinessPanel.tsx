@@ -4,11 +4,15 @@ import {
   ReleaseBundleSummary,
   ReleaseDecisionOutcome,
   ReleaseDecisionRecord,
+  ReleaseDeploymentCommandDescriptor,
   ReleaseDriftReport,
   ReleaseEnvironment,
   ReleaseEvidenceComparison,
   ReleaseEvidenceRecord,
   ReleaseGateReport,
+  ReleasePromotionRecord,
+  ReleasePromotionStatus,
+  ReleasePromotionTimelineExport,
   ReleaseReadinessReport,
   ReleaseRetentionPolicyPreset,
   ReleaseRetentionReport,
@@ -30,12 +34,18 @@ export const ReleaseReadinessPanel: React.FC = () => {
   const [retention, setRetention] = useState<ReleaseRetentionReport | null>(null);
   const [retentionPolicies, setRetentionPolicies] = useState<ReleaseRetentionPolicyPreset[]>([]);
   const [supervisionCard, setSupervisionCard] = useState<ReleaseSupervisionStatusCard | null>(null);
+  const [deploymentCommands, setDeploymentCommands] = useState<ReleaseDeploymentCommandDescriptor[]>([]);
+  const [selectedCommandId, setSelectedCommandId] = useState('');
+  const [promotion, setPromotion] = useState<ReleasePromotionRecord | null>(null);
+  const [promotionTimeline, setPromotionTimeline] = useState<ReleasePromotionTimelineExport | null>(null);
   const [historyStatus, setHistoryStatus] = useState('');
   const [historyRollbackStatus, setHistoryRollbackStatus] = useState('');
   const [decision, setDecision] = useState<ReleaseDecisionOutcome>('go');
   const [decisionReason, setDecisionReason] = useState('operator accepted release evidence');
   const [environment, setEnvironment] = useState<ReleaseEnvironment>('staging');
   const [overrideReason, setOverrideReason] = useState('operator accepted drift exception for supervised release');
+  const [ciCheckName, setCiCheckName] = useState('release-ci');
+  const [ciCheckUrl, setCiCheckUrl] = useState('');
   const [commitSha, setCommitSha] = useState('');
   const [branchName, setBranchName] = useState('');
   const [pullRequestUrl, setPullRequestUrl] = useState('');
@@ -48,14 +58,19 @@ export const ReleaseReadinessPanel: React.FC = () => {
     createReleaseDecision,
     createReleaseDriftOverride,
     createReleaseReconciliation,
+    attachReleasePromotionCiCheck,
+    getReleaseDeploymentCommands,
     getReleaseBundleSummary,
     getReleaseDrift,
     getReleaseEvidenceExport,
     getReleaseEvidenceHistory,
     getReleaseDecisions,
+    getReleasePromotionTimeline,
     getReleaseReadiness,
     getReleaseRetentionPolicyPresets,
     getReleaseSupervisionCard,
+    startReleasePromotion,
+    transitionReleasePromotion,
     loading,
   } = useBackend({ onError: setError });
 
@@ -197,6 +212,90 @@ export const ReleaseReadinessPanel: React.FC = () => {
       setBundle(data.card.bundle);
       setDrift(data.card.bundle.drift);
       setRetainLatest(data.card.retentionPolicy.retainLatest);
+      await loadDeploymentCommands();
+    }
+  };
+
+  const loadDeploymentCommands = async () => {
+    setError(null);
+    const data = await getReleaseDeploymentCommands({ environment }) as any;
+    if (data?.commands) {
+      setDeploymentCommands(data.commands);
+      setSelectedCommandId(current => current || data.commands[0]?.id || '');
+    }
+  };
+
+  const startPromotionRun = async () => {
+    const latestDecision = decisions[0];
+    if (!latestDecision) {
+      setError('Record a release decision before starting a promotion window.');
+      return;
+    }
+    setError(null);
+    const data = await startReleasePromotion({
+      decisionId: latestDecision.id,
+      environment,
+      commandId: selectedCommandId || undefined,
+      actor: 'operator',
+    }) as any;
+    if (data?.promotion) {
+      setPromotion(data.promotion);
+      const timeline = await getReleasePromotionTimeline(data.promotion.id) as any;
+      if (timeline?.timeline) setPromotionTimeline(timeline.timeline);
+    }
+  };
+
+  const transitionPromotionRun = async (status: ReleasePromotionStatus) => {
+    if (!promotion) {
+      setError('Start a promotion window before recording a transition.');
+      return;
+    }
+    setError(null);
+    const data = await transitionReleasePromotion(promotion.id, {
+      status,
+      actor: 'operator',
+      detail: `operator marked ${promotion.id} as ${status}`,
+    }) as any;
+    if (data?.promotion) {
+      setPromotion(data.promotion);
+      const timeline = await getReleasePromotionTimeline(data.promotion.id) as any;
+      if (timeline?.timeline) setPromotionTimeline(timeline.timeline);
+    }
+  };
+
+  const attachCiCheck = async () => {
+    if (!promotion) {
+      setError('Start a promotion window before attaching CI evidence.');
+      return;
+    }
+    if (!ciCheckName.trim()) {
+      setError('CI check name is required.');
+      return;
+    }
+    setError(null);
+    const data = await attachReleasePromotionCiCheck(promotion.id, {
+      name: ciCheckName.trim(),
+      status: 'passed',
+      url: ciCheckUrl.trim() || undefined,
+      detail: 'operator attached CI monitor result',
+    }) as any;
+    if (data?.promotion) {
+      setPromotion(data.promotion);
+      const timeline = await getReleasePromotionTimeline(data.promotion.id) as any;
+      if (timeline?.timeline) setPromotionTimeline(timeline.timeline);
+    }
+  };
+
+  const exportPromotionTimeline = async () => {
+    if (!promotion) {
+      setError('Start a promotion window before exporting the timeline.');
+      return;
+    }
+    setError(null);
+    const data = await getReleasePromotionTimeline(promotion.id) as any;
+    if (data?.timeline) {
+      setPromotionTimeline(data.timeline);
+      downloadJson(`agros-release-promotion-timeline-${promotion.id}.json`, data.timeline);
     }
   };
 
@@ -227,15 +326,23 @@ export const ReleaseReadinessPanel: React.FC = () => {
     getReleaseRetentionPolicyPresets().then((data: any) => {
       if (data?.presets) setRetentionPolicies(data.presets);
     });
+    loadDeploymentCommands();
   }, []);
+
+  useEffect(() => {
+    setSelectedCommandId('');
+    setPromotion(null);
+    setPromotionTimeline(null);
+    loadDeploymentCommands();
+  }, [environment]);
 
   return (
     <div style={{ background: '#12172B', borderRadius: 8, padding: 24, border: '1px solid #1E293B', marginBottom: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', marginBottom: 18 }}>
         <div>
-          <h2 style={{ color: '#94A3B8', fontSize: 14, marginTop: 0, marginBottom: 6 }}>Phase 11 Release Supervision</h2>
+          <h2 style={{ color: '#94A3B8', fontSize: 14, marginTop: 0, marginBottom: 6 }}>Phase 12 Managed Promotion</h2>
           <div style={{ color: '#64748B', fontSize: 12 }}>
-            Runtime gates, supervised status cards, bundle publication, retention presets, and drift overrides.
+            Runtime gates, supervised status cards, guarded deployment commands, CI evidence, and promotion timelines.
           </div>
         </div>
         <StatusBadge status={release?.status} />
@@ -285,6 +392,9 @@ export const ReleaseReadinessPanel: React.FC = () => {
         </button>
         <button onClick={loadSupervisionCard} disabled={loading || !decisions[0]} style={buttonStyle(loading || !decisions[0])}>
           Supervise
+        </button>
+        <button onClick={loadDeploymentCommands} disabled={loading} style={buttonStyle(loading)}>
+          Commands
         </button>
       </div>
 
@@ -462,6 +572,56 @@ export const ReleaseReadinessPanel: React.FC = () => {
               Override
             </button>
           </div>
+        </div>
+      )}
+
+      {deploymentCommands.length > 0 && decisions.length > 0 && (
+        <div style={{ ...panelStyle, marginTop: 12, borderColor: '#155E75' }}>
+          <div style={panelTitleStyle}>Managed Promotion</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 150px', gap: 10 }}>
+            <select value={selectedCommandId} onChange={event => setSelectedCommandId(event.target.value)} style={inputStyle}>
+              {deploymentCommands.map(command => (
+                <option key={command.id} value={command.id}>{command.label}</option>
+              ))}
+            </select>
+            <button onClick={startPromotionRun} disabled={loading || !decisions[0]} style={buttonStyle(loading || !decisions[0])}>
+              Start Window
+            </button>
+          </div>
+          {deploymentCommands.find(command => command.id === selectedCommandId) && (
+            <div style={{ color: '#64748B', fontSize: 11, marginTop: 8 }}>
+              {deploymentCommands.find(command => command.id === selectedCommandId)?.command}
+            </div>
+          )}
+          {promotion && (
+            <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
+              <div style={{ color: statusColor(promotion.status === 'failed' ? 'blocked' : promotion.status === 'started' ? 'degraded' : 'ready'), fontSize: 12, fontWeight: 800 }}>
+                {promotion.status}: {promotion.commandLabel || promotion.commandId}
+              </div>
+              <div style={{ color: '#64748B', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                Signature: {promotion.promotionSignature} | Card: {promotion.supervisionCardChecksum}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(94px, 1fr))', gap: 8 }}>
+                <button onClick={() => transitionPromotionRun('approved')} disabled={loading} style={buttonStyle(loading)}>Approve</button>
+                <button onClick={() => transitionPromotionRun('stopped')} disabled={loading} style={buttonStyle(loading)}>Stop</button>
+                <button onClick={() => transitionPromotionRun('deployed')} disabled={loading} style={buttonStyle(loading)}>Deploy</button>
+                <button onClick={() => transitionPromotionRun('failed')} disabled={loading} style={buttonStyle(loading)}>Fail</button>
+                <button onClick={exportPromotionTimeline} disabled={loading} style={buttonStyle(loading)}>Timeline</button>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 120px', gap: 8 }}>
+                <input value={ciCheckName} onChange={event => setCiCheckName(event.target.value)} placeholder="CI check" style={inputStyle} />
+                <input value={ciCheckUrl} onChange={event => setCiCheckUrl(event.target.value)} placeholder="CI URL" style={inputStyle} />
+                <button onClick={attachCiCheck} disabled={loading || !ciCheckName.trim()} style={buttonStyle(loading || !ciCheckName.trim())}>
+                  Attach CI
+                </button>
+              </div>
+              {promotionTimeline && (
+                <div style={{ color: '#CBD5E1', fontSize: 11 }}>
+                  Timeline events: {promotionTimeline.timeline.length} | CI checks: {promotionTimeline.ciChecks.length} | checksum {promotionTimeline.exportChecksum}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

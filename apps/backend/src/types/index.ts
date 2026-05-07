@@ -207,6 +207,49 @@ export interface ReleaseDriftOverrideRecord {
   createdAt: number;
 }
 
+export type ReleasePromotionStatus = 'started' | 'stopped' | 'approved' | 'rejected' | 'deployed' | 'failed';
+
+export interface ReleasePromotionTimelineEntry {
+  type: string;
+  at: number;
+  actor?: string;
+  detail: string;
+  checksum: string;
+}
+
+export interface ReleasePromotionCiCheck {
+  name: string;
+  status: 'queued' | 'running' | 'passed' | 'failed' | 'skipped';
+  url?: string;
+  checkedAt: number;
+  detail?: string;
+  checksum: string;
+}
+
+export interface ReleasePromotionRecord {
+  id: string;
+  decisionId: string;
+  evidenceId: string;
+  stream: string;
+  provider: string;
+  environment: 'local' | 'staging' | 'production';
+  status: ReleasePromotionStatus;
+  startedAt: number;
+  stoppedAt?: number;
+  approvedAt?: number;
+  approvedBy?: string;
+  outcomeAt?: number;
+  outcome?: 'succeeded' | 'failed' | 'cancelled';
+  commandId?: string;
+  commandLabel?: string;
+  supervisionCardChecksum: string;
+  promotionSignature: string;
+  timeline: ReleasePromotionTimelineEntry[];
+  ciChecks: ReleasePromotionCiCheck[];
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface Design {
   id: string;
   seed: string;

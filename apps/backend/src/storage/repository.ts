@@ -10,6 +10,7 @@ import {
   ReleaseDecisionRecord,
   ReleaseReconciliationRecord,
   ReleaseDriftOverrideRecord,
+  ReleasePromotionRecord,
   ReinforcementDecision,
   ReplayCheckpoint,
   ReplayMonitorSnapshot,
@@ -64,6 +65,11 @@ export type ReleaseDriftOverrideInput = Omit<ReleaseDriftOverrideRecord, 'create
   createdAt?: number;
 };
 
+export type ReleasePromotionInput = Omit<ReleasePromotionRecord, 'createdAt' | 'updatedAt'> & {
+  createdAt?: number;
+  updatedAt?: number;
+};
+
 export interface ReleaseEvidenceFilters {
   provider?: string;
   status?: ReleaseEvidenceRecord['status'];
@@ -85,6 +91,13 @@ export interface ReleaseDriftOverrideFilters {
   provider?: string;
   decisionId?: string;
   environment?: ReleaseDriftOverrideRecord['environment'];
+}
+
+export interface ReleasePromotionFilters {
+  provider?: string;
+  decisionId?: string;
+  environment?: ReleasePromotionRecord['environment'];
+  status?: ReleasePromotionRecord['status'];
 }
 
 export interface StorageRepository {
@@ -144,6 +157,11 @@ export interface StorageRepository {
     save(override: ReleaseDriftOverrideInput): Promise<ReleaseDriftOverrideRecord>;
     getLatest(stream?: string, limit?: number, filters?: ReleaseDriftOverrideFilters): Promise<ReleaseDriftOverrideRecord[]>;
     getById(id: string): Promise<ReleaseDriftOverrideRecord | null>;
+  };
+  releasePromotions: {
+    save(promotion: ReleasePromotionInput): Promise<ReleasePromotionRecord>;
+    getLatest(stream?: string, limit?: number, filters?: ReleasePromotionFilters): Promise<ReleasePromotionRecord[]>;
+    getById(id: string): Promise<ReleasePromotionRecord | null>;
   };
   close(): Promise<void>;
 }
@@ -348,6 +366,32 @@ function rowToReleaseDriftOverride(row: any): ReleaseDriftOverrideRecord {
     overriddenBy: row.overridden_by,
     overrideSignature: row.override_signature,
     createdAt: Number(row.created_at),
+  };
+}
+
+function rowToReleasePromotion(row: any): ReleasePromotionRecord {
+  return {
+    id: row.id,
+    decisionId: row.decision_id,
+    evidenceId: row.evidence_id,
+    stream: row.stream,
+    provider: row.provider,
+    environment: row.environment,
+    status: row.status,
+    startedAt: Number(row.started_at),
+    stoppedAt: row.stopped_at === null || row.stopped_at === undefined ? undefined : Number(row.stopped_at),
+    approvedAt: row.approved_at === null || row.approved_at === undefined ? undefined : Number(row.approved_at),
+    approvedBy: row.approved_by ?? undefined,
+    outcomeAt: row.outcome_at === null || row.outcome_at === undefined ? undefined : Number(row.outcome_at),
+    outcome: row.outcome ?? undefined,
+    commandId: row.command_id ?? undefined,
+    commandLabel: row.command_label ?? undefined,
+    supervisionCardChecksum: row.supervision_card_checksum,
+    promotionSignature: row.promotion_signature,
+    timeline: JSON.parse(row.timeline),
+    ciChecks: JSON.parse(row.ci_checks),
+    createdAt: Number(row.created_at),
+    updatedAt: Number(row.updated_at),
   };
 }
 
@@ -915,6 +959,86 @@ export class SqliteStorageRepository implements StorageRepository {
     getById: async (id: string): Promise<ReleaseDriftOverrideRecord | null> => {
       const row = getDB().prepare('SELECT * FROM release_drift_overrides WHERE id = ?').get(id) as any;
       return row ? rowToReleaseDriftOverride(row) : null;
+    },
+  };
+
+  releasePromotions = {
+    save: async (promotion: ReleasePromotionInput): Promise<ReleasePromotionRecord> => {
+      const createdAt = promotion.createdAt ?? Date.now();
+      const updatedAt = promotion.updatedAt ?? createdAt;
+      getDB().prepare(`
+        INSERT OR REPLACE INTO release_promotions
+          (id, decision_id, evidence_id, stream, provider, environment, status,
+           started_at, stopped_at, approved_at, approved_by, outcome_at, outcome,
+           command_id, command_label, supervision_card_checksum, promotion_signature,
+           timeline, ci_checks, created_at, updated_at)
+        VALUES
+          (@id, @decision_id, @evidence_id, @stream, @provider, @environment, @status,
+           @started_at, @stopped_at, @approved_at, @approved_by, @outcome_at, @outcome,
+           @command_id, @command_label, @supervision_card_checksum, @promotion_signature,
+           @timeline, @ci_checks, @created_at, @updated_at)
+      `).run({
+        id: promotion.id,
+        decision_id: promotion.decisionId,
+        evidence_id: promotion.evidenceId,
+        stream: promotion.stream,
+        provider: promotion.provider,
+        environment: promotion.environment,
+        status: promotion.status,
+        started_at: promotion.startedAt,
+        stopped_at: promotion.stoppedAt ?? null,
+        approved_at: promotion.approvedAt ?? null,
+        approved_by: promotion.approvedBy ?? null,
+        outcome_at: promotion.outcomeAt ?? null,
+        outcome: promotion.outcome ?? null,
+        command_id: promotion.commandId ?? null,
+        command_label: promotion.commandLabel ?? null,
+        supervision_card_checksum: promotion.supervisionCardChecksum,
+        promotion_signature: promotion.promotionSignature,
+        timeline: JSON.stringify(promotion.timeline),
+        ci_checks: JSON.stringify(promotion.ciChecks),
+        created_at: createdAt,
+        updated_at: updatedAt,
+      });
+
+      return { ...promotion, createdAt, updatedAt };
+    },
+    getLatest: async (
+      stream?: string,
+      limit = 20,
+      filters: ReleasePromotionFilters = {},
+    ): Promise<ReleasePromotionRecord[]> => {
+      const conditions: string[] = [];
+      const params: Record<string, unknown> = { limit };
+      if (stream) {
+        conditions.push('stream = @stream');
+        params.stream = stream;
+      }
+      if (filters.provider) {
+        conditions.push('provider = @provider');
+        params.provider = filters.provider;
+      }
+      if (filters.decisionId) {
+        conditions.push('decision_id = @decisionId');
+        params.decisionId = filters.decisionId;
+      }
+      if (filters.environment) {
+        conditions.push('environment = @environment');
+        params.environment = filters.environment;
+      }
+      if (filters.status) {
+        conditions.push('status = @status');
+        params.status = filters.status;
+      }
+      const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+      const rows = getDB()
+        .prepare(`SELECT * FROM release_promotions ${where} ORDER BY updated_at DESC LIMIT @limit`)
+        .all(params) as any[];
+      return rows.map(rowToReleasePromotion);
+    },
+    getById: async (id: string): Promise<ReleasePromotionRecord | null> => {
+      const row = getDB().prepare('SELECT * FROM release_promotions WHERE id = ?').get(id) as any;
+      return row ? rowToReleasePromotion(row) : null;
     },
   };
 
@@ -1582,6 +1706,99 @@ export class PostgresStorageRepository implements StorageRepository {
     getById: async (id: string): Promise<ReleaseDriftOverrideRecord | null> => {
       const result = await this.pool.query('SELECT * FROM release_drift_overrides WHERE id = $1', [id]);
       return result.rows[0] ? rowToReleaseDriftOverride(result.rows[0]) : null;
+    },
+  };
+
+  releasePromotions = {
+    save: async (promotion: ReleasePromotionInput): Promise<ReleasePromotionRecord> => {
+      const createdAt = promotion.createdAt ?? Date.now();
+      const updatedAt = promotion.updatedAt ?? createdAt;
+      await this.pool.query(`
+        INSERT INTO release_promotions
+          (id, decision_id, evidence_id, stream, provider, environment, status,
+           started_at, stopped_at, approved_at, approved_by, outcome_at, outcome,
+           command_id, command_label, supervision_card_checksum, promotion_signature,
+           timeline, ci_checks, created_at, updated_at)
+        VALUES
+          ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+           $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+        ON CONFLICT (id) DO UPDATE SET
+          status = EXCLUDED.status,
+          stopped_at = EXCLUDED.stopped_at,
+          approved_at = EXCLUDED.approved_at,
+          approved_by = EXCLUDED.approved_by,
+          outcome_at = EXCLUDED.outcome_at,
+          outcome = EXCLUDED.outcome,
+          command_id = EXCLUDED.command_id,
+          command_label = EXCLUDED.command_label,
+          supervision_card_checksum = EXCLUDED.supervision_card_checksum,
+          timeline = EXCLUDED.timeline,
+          ci_checks = EXCLUDED.ci_checks,
+          updated_at = EXCLUDED.updated_at
+      `, [
+        promotion.id,
+        promotion.decisionId,
+        promotion.evidenceId,
+        promotion.stream,
+        promotion.provider,
+        promotion.environment,
+        promotion.status,
+        promotion.startedAt,
+        promotion.stoppedAt ?? null,
+        promotion.approvedAt ?? null,
+        promotion.approvedBy ?? null,
+        promotion.outcomeAt ?? null,
+        promotion.outcome ?? null,
+        promotion.commandId ?? null,
+        promotion.commandLabel ?? null,
+        promotion.supervisionCardChecksum,
+        promotion.promotionSignature,
+        JSON.stringify(promotion.timeline),
+        JSON.stringify(promotion.ciChecks),
+        createdAt,
+        updatedAt,
+      ]);
+
+      return { ...promotion, createdAt, updatedAt };
+    },
+    getLatest: async (
+      stream?: string,
+      limit = 20,
+      filters: ReleasePromotionFilters = {},
+    ): Promise<ReleasePromotionRecord[]> => {
+      const conditions: string[] = [];
+      const values: unknown[] = [];
+      if (stream) {
+        values.push(stream);
+        conditions.push(`stream = $${values.length}`);
+      }
+      if (filters.provider) {
+        values.push(filters.provider);
+        conditions.push(`provider = $${values.length}`);
+      }
+      if (filters.decisionId) {
+        values.push(filters.decisionId);
+        conditions.push(`decision_id = $${values.length}`);
+      }
+      if (filters.environment) {
+        values.push(filters.environment);
+        conditions.push(`environment = $${values.length}`);
+      }
+      if (filters.status) {
+        values.push(filters.status);
+        conditions.push(`status = $${values.length}`);
+      }
+      values.push(limit);
+      const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+      const result = await this.pool.query(
+        `SELECT * FROM release_promotions ${where} ORDER BY updated_at DESC LIMIT $${values.length}`,
+        values,
+      );
+      return result.rows.map(rowToReleasePromotion);
+    },
+    getById: async (id: string): Promise<ReleasePromotionRecord | null> => {
+      const result = await this.pool.query('SELECT * FROM release_promotions WHERE id = $1', [id]);
+      return result.rows[0] ? rowToReleasePromotion(result.rows[0]) : null;
     },
   };
 

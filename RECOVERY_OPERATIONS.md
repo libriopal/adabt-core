@@ -172,6 +172,10 @@ Before a release promotion:
 13. Use `POST /api/release/evidence/retention` with `dryRun: true` before deleting old release evidence records.
 14. Generate `/api/release/supervision-card?decisionId=<decision-id>&environment=<local|staging|production>` for the active promotion window.
 15. If drift is operator-accepted, record the reason with `POST /api/release/drift-overrides` before continuing.
+16. Fetch `/api/release/deployment-commands?environment=<local|staging|production>` and choose the command guarded by the supervised card.
+17. Start the promotion window with `POST /api/release/promotions`, then transition it through approval, stop, deployment, or failure with `POST /api/release/promotions/<promotion-id>/transition`.
+18. Attach CI monitor evidence with `POST /api/release/promotions/<promotion-id>/ci-checks` before final deployment transition.
+19. Export `/api/release/promotions/<promotion-id>/timeline` and store it with incident, audit, or release handoff artifacts.
 
 ## Continuity Failure Response
 

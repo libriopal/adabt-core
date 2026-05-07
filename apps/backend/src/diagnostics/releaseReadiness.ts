@@ -2,6 +2,10 @@ import {
   ReleaseDecisionRecord,
   ReleaseDriftOverrideRecord,
   ReleaseEvidenceRecord,
+  ReleasePromotionCiCheck,
+  ReleasePromotionRecord,
+  ReleasePromotionStatus,
+  ReleasePromotionTimelineEntry,
   ReleaseReconciliationRecord,
   ReplayMonitorSnapshot,
 } from '../types';
@@ -224,6 +228,51 @@ export interface ReleaseSupervisionStatusCard {
   actions: ReleaseSupervisionCardAction[];
   exampleReplies: Array<{ actionId: string; label: string; reply: string }>;
   cardChecksum: string;
+}
+
+export interface ReleaseDeploymentCommandDescriptor {
+  id: string;
+  label: string;
+  environment: ReleaseEnvironment;
+  command: string;
+  description: string;
+  guardedBy: 'ReleaseSupervisionCard';
+  requiredDecision: ReleaseDecisionOutcome;
+  requiredStatusLabels: string[];
+  requiredEnvironmentVariables: string[];
+}
+
+export interface ReleasePromotionInput {
+  decisionId: string;
+  environment?: ReleaseEnvironment;
+  commandId?: string;
+  actor?: string;
+}
+
+export interface ReleasePromotionTransitionInput {
+  promotionId: string;
+  status: ReleasePromotionStatus;
+  actor?: string;
+  detail?: string;
+  outcome?: ReleasePromotionRecord['outcome'];
+}
+
+export interface ReleasePromotionCiCheckInput {
+  promotionId: string;
+  name: string;
+  status: ReleasePromotionCiCheck['status'];
+  url?: string;
+  detail?: string;
+}
+
+export interface ReleasePromotionTimelineExport {
+  version: 'agros-release-promotion-timeline-v1';
+  exportedAt: number;
+  promotion: ReleasePromotionRecord;
+  supervisionCard: ReleaseSupervisionStatusCard;
+  timeline: ReleasePromotionTimelineEntry[];
+  ciChecks: ReleasePromotionCiCheck[];
+  exportChecksum: string;
 }
 
 const PROVIDERS = new Set(['local-docker', 'railway', 'render', 'custom']);
@@ -1067,5 +1116,246 @@ export async function createReleaseSupervisionStatusCard(options: {
       },
     ],
     cardChecksum,
+  };
+}
+
+const RELEASE_DEPLOYMENT_COMMANDS: Record<ReleaseEnvironment, ReleaseDeploymentCommandDescriptor[]> = {
+  local: [
+    {
+      id: 'validate_local_release',
+      label: 'Validate Local Release',
+      environment: 'local',
+      command: 'npm run validate:phase11',
+      description: 'Run the local deterministic release supervision validation before promotion.',
+      guardedBy: 'ReleaseSupervisionCard',
+      requiredDecision: 'go',
+      requiredStatusLabels: ['Supervised'],
+      requiredEnvironmentVariables: [],
+    },
+  ],
+  staging: [
+    {
+      id: 'publish_staging_bundle',
+      label: 'Publish Staging Bundle',
+      environment: 'staging',
+      command: 'npm run artifact:release-bundle -- --environment=staging',
+      description: 'Publish the staging release supervision bundle after the card is supervised.',
+      guardedBy: 'ReleaseSupervisionCard',
+      requiredDecision: 'go',
+      requiredStatusLabels: ['Supervised'],
+      requiredEnvironmentVariables: ['AGROS_RELEASE_DECISION_ID'],
+    },
+  ],
+  production: [
+    {
+      id: 'publish_production_bundle',
+      label: 'Publish Production Bundle',
+      environment: 'production',
+      command: 'npm run artifact:release-bundle -- --environment=production',
+      description: 'Publish the production release supervision bundle under explicit operator approval.',
+      guardedBy: 'ReleaseSupervisionCard',
+      requiredDecision: 'go',
+      requiredStatusLabels: ['Supervised'],
+      requiredEnvironmentVariables: ['AGROS_RELEASE_DECISION_ID'],
+    },
+  ],
+};
+
+export function getReleaseDeploymentCommandDescriptors(
+  environment?: ReleaseEnvironment,
+): ReleaseDeploymentCommandDescriptor[] {
+  const normalized = normalizeEnvironment(environment);
+  return RELEASE_DEPLOYMENT_COMMANDS[normalized];
+}
+
+function promotionTimelineEvent(
+  type: string,
+  detail: string,
+  actor?: string,
+  at = Date.now(),
+): ReleasePromotionTimelineEntry {
+  return {
+    type,
+    at,
+    actor,
+    detail,
+    checksum: hashString(stableStringify({ actor: actor ?? null, at, detail, type })),
+  };
+}
+
+function normalizePromotionStatus(status: ReleasePromotionStatus): ReleasePromotionStatus {
+  if (['started', 'stopped', 'approved', 'rejected', 'deployed', 'failed'].includes(status)) {
+    return status;
+  }
+  return 'started';
+}
+
+export async function startReleasePromotion(
+  input: ReleasePromotionInput,
+): Promise<ReleasePromotionRecord> {
+  const environment = normalizeEnvironment(input.environment);
+  const card = await createReleaseSupervisionStatusCard({
+    decisionId: input.decisionId,
+    environment,
+    policy: environment,
+  });
+  if (card.bundle.decision.decision !== 'go') {
+    throw new Error(`Release promotion requires a go decision: ${card.bundle.decision.id}`);
+  }
+  const commands = getReleaseDeploymentCommandDescriptors(environment);
+  const command = commands.find(item => item.id === input.commandId) ?? commands[0];
+  if (!command.requiredStatusLabels.includes(card.statusLabel)) {
+    throw new Error(`Release supervision card is ${card.statusLabel}; ${command.label} requires ${command.requiredStatusLabels.join(', ')}`);
+  }
+
+  const startedAt = Date.now();
+  const promotionSignature = hashString(stableStringify({
+    cardChecksum: card.cardChecksum,
+    commandId: command.id,
+    decisionSignature: card.bundle.decision.decisionSignature,
+    environment,
+    startedAt,
+  }));
+  const timeline = [
+    promotionTimelineEvent(
+      'promotion_started',
+      `${command.label} guarded by release supervision card ${card.cardChecksum}`,
+      input.actor ?? 'operator',
+      startedAt,
+    ),
+  ];
+
+  return getStorageRepository().releasePromotions.save({
+    id: `promotion_${promotionSignature}`,
+    decisionId: card.bundle.decision.id,
+    evidenceId: card.bundle.evidence.id,
+    stream: card.bundle.stream,
+    provider: card.bundle.provider,
+    environment,
+    status: 'started',
+    startedAt,
+    commandId: command.id,
+    commandLabel: command.label,
+    supervisionCardChecksum: card.cardChecksum,
+    promotionSignature,
+    timeline,
+    ciChecks: [],
+  });
+}
+
+export async function getReleasePromotionHistory(
+  stream?: string,
+  limit = 20,
+  filters: {
+    provider?: string;
+    decisionId?: string;
+    environment?: ReleaseEnvironment;
+    status?: ReleasePromotionStatus;
+  } = {},
+): Promise<ReleasePromotionRecord[]> {
+  return getStorageRepository().releasePromotions.getLatest(stream, limit, filters);
+}
+
+export async function transitionReleasePromotion(
+  input: ReleasePromotionTransitionInput,
+): Promise<ReleasePromotionRecord> {
+  const promotion = await getStorageRepository().releasePromotions.getById(input.promotionId);
+  if (!promotion) {
+    throw new Error(`Release promotion not found: ${input.promotionId}`);
+  }
+  const now = Date.now();
+  const status = normalizePromotionStatus(input.status);
+  const detail = input.detail ?? `Promotion ${promotion.id} moved to ${status}.`;
+  const next: ReleasePromotionRecord = {
+    ...promotion,
+    status,
+    stoppedAt: status === 'stopped' ? now : promotion.stoppedAt,
+    approvedAt: status === 'approved' ? now : promotion.approvedAt,
+    approvedBy: status === 'approved' ? input.actor ?? 'operator' : promotion.approvedBy,
+    outcomeAt: status === 'deployed' || status === 'failed' || status === 'rejected' ? now : promotion.outcomeAt,
+    outcome: input.outcome ?? (
+      status === 'deployed'
+        ? 'succeeded'
+        : status === 'failed'
+          ? 'failed'
+          : status === 'stopped' || status === 'rejected'
+            ? 'cancelled'
+            : promotion.outcome
+    ),
+    timeline: [
+      ...promotion.timeline,
+      promotionTimelineEvent(`promotion_${status}`, detail, input.actor ?? 'operator', now),
+    ],
+    updatedAt: now,
+  };
+
+  return getStorageRepository().releasePromotions.save(next);
+}
+
+export async function attachReleasePromotionCiCheck(
+  input: ReleasePromotionCiCheckInput,
+): Promise<ReleasePromotionRecord> {
+  const promotion = await getStorageRepository().releasePromotions.getById(input.promotionId);
+  if (!promotion) {
+    throw new Error(`Release promotion not found: ${input.promotionId}`);
+  }
+  const checkedAt = Date.now();
+  const ciCheck: ReleasePromotionCiCheck = {
+    name: input.name,
+    status: input.status,
+    url: input.url,
+    detail: input.detail,
+    checkedAt,
+    checksum: hashString(stableStringify({
+      checkedAt,
+      detail: input.detail ?? null,
+      name: input.name,
+      status: input.status,
+      url: input.url ?? null,
+    })),
+  };
+  const next: ReleasePromotionRecord = {
+    ...promotion,
+    ciChecks: [...promotion.ciChecks, ciCheck],
+    timeline: [
+      ...promotion.timeline,
+      promotionTimelineEvent('ci_check_attached', `${input.name} reported ${input.status}.`, 'ci-monitor', checkedAt),
+    ],
+    updatedAt: checkedAt,
+  };
+
+  return getStorageRepository().releasePromotions.save(next);
+}
+
+export async function exportReleasePromotionTimeline(
+  promotionId: string,
+): Promise<ReleasePromotionTimelineExport> {
+  const promotion = await getStorageRepository().releasePromotions.getById(promotionId);
+  if (!promotion) {
+    throw new Error(`Release promotion not found: ${promotionId}`);
+  }
+  const supervisionCard = await createReleaseSupervisionStatusCard({
+    decisionId: promotion.decisionId,
+    environment: promotion.environment,
+    policy: promotion.environment,
+  });
+  const exportedAt = Date.now();
+  const exportChecksum = hashString(stableStringify({
+    ciChecks: promotion.ciChecks.map(check => check.checksum),
+    exportedAt,
+    promotionSignature: promotion.promotionSignature,
+    status: promotion.status,
+    supervisionCardChecksum: supervisionCard.cardChecksum,
+    timeline: promotion.timeline.map(event => event.checksum),
+  }));
+
+  return {
+    version: 'agros-release-promotion-timeline-v1',
+    exportedAt,
+    promotion,
+    supervisionCard,
+    timeline: promotion.timeline,
+    ciChecks: promotion.ciChecks,
+    exportChecksum,
   };
 }

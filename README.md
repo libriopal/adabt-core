@@ -157,3 +157,13 @@ npm run artifact:release-bundle -- --api-url=http://localhost:3001/api --decisio
 ```
 
 Phase 11 adds release supervision cards, drift override records, retention policy presets, and CI-driven bundle summary artifact publication.
+
+## Phase 12 Validation
+
+```bash
+npm run validate:phase12
+npm run release:ci-check -- --api-url=http://localhost:3001/api --promotion-id=<promotion-id> --name=github-actions --status=passed
+npm run artifact:promotion-timeline -- --api-url=http://localhost:3001/api --promotion-id=<promotion-id> --output=/tmp/agros-release-promotion-timeline.json
+```
+
+Phase 12 adds managed promotion windows, environment-specific deployment command descriptors, CI check attachment hooks, and promotion timeline exports for audit and incident handoff.
