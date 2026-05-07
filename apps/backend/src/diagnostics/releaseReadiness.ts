@@ -1,4 +1,4 @@
-import { ReleaseEvidenceRecord, ReplayMonitorSnapshot } from '../types';
+import { ReleaseDecisionRecord, ReleaseEvidenceRecord, ReplayMonitorSnapshot } from '../types';
 import { createDegradedReplayExport, DegradedReplayExportBundle } from './continuityExport';
 import { DEFAULT_REPLAY_STREAM, getReplayMonitorHistory, monitorReplayHistory, stableStringify } from './replayHistory';
 import { RuntimeValidationReport, validateRuntimeEnvironment } from './runtimeValidation';
@@ -50,6 +50,12 @@ export interface ReleaseEvidenceExportOptions extends ReleaseReadinessOptions {
   limit?: number;
 }
 
+export interface ReleaseEvidenceHistoryFilters {
+  provider?: string;
+  status?: ReleaseGateStatus;
+  rollbackStatus?: ReleaseGateStatus;
+}
+
 export interface ReleaseEvidenceExportBundle {
   version: 'agros-release-evidence-v1';
   id: string;
@@ -61,6 +67,33 @@ export interface ReleaseEvidenceExportBundle {
   history: ReleaseEvidenceRecord[];
   degradedReplayExport: DegradedReplayExportBundle | null;
   exportChecksum: string;
+}
+
+export type ReleaseDecisionOutcome = 'go' | 'no-go' | 'exception';
+
+export interface ReleaseDecisionInput {
+  evidenceId: string;
+  decision: ReleaseDecisionOutcome;
+  reason: string;
+  decidedBy?: string;
+}
+
+export interface ReleaseEvidenceComparison {
+  stream: string;
+  providers: string[];
+  comparedAt: number;
+  allMatched: boolean;
+  baselineChecksum?: string;
+  records: Array<{
+    provider: string;
+    evidenceId?: string;
+    status?: ReleaseGateStatus;
+    rollbackStatus?: ReleaseGateStatus;
+    checkedAt?: number;
+    evidenceChecksum?: string;
+    providerSignature?: string;
+    missing: boolean;
+  }>;
 }
 
 const PROVIDERS = new Set(['local-docker', 'railway', 'render', 'custom']);
@@ -296,8 +329,9 @@ export async function collectReleaseReadiness(
 export async function getReleaseEvidenceHistory(
   stream?: string,
   limit = 20,
+  filters: ReleaseEvidenceHistoryFilters = {},
 ): Promise<ReleaseEvidenceRecord[]> {
-  return getStorageRepository().releaseEvidence.getLatest(stream, limit);
+  return getStorageRepository().releaseEvidence.getLatest(stream, limit, filters);
 }
 
 export async function createReleaseEvidenceExport(
@@ -341,4 +375,116 @@ export async function createReleaseEvidenceExport(
       stream: release.stream,
     })),
   };
+}
+
+function normalizedReleaseEvidencePayload(evidence: ReleaseEvidenceRecord): Record<string, unknown> {
+  const report = evidence.report as Partial<ReleaseReadinessReport>;
+  return {
+    stream: evidence.stream,
+    status: evidence.status,
+    gateCount: evidence.gateCount,
+    blockedGateCount: evidence.blockedGateCount,
+    degradedGateCount: evidence.degradedGateCount,
+    rollbackStatus: evidence.rollbackStatus,
+    gates: (report.gates ?? []).map(gate => ({
+      name: gate.name,
+      status: gate.status,
+      detail: gate.detail,
+    })),
+    recommendations: [...(report.recommendations ?? [])].sort(),
+  };
+}
+
+export function signReleaseEvidence(evidence: ReleaseEvidenceRecord): {
+  evidenceChecksum: string;
+  providerSignature: string;
+} {
+  const evidenceChecksum = hashString(stableStringify(normalizedReleaseEvidencePayload(evidence)));
+  const providerSignature = hashString(stableStringify({
+    evidenceChecksum,
+    evidenceId: evidence.id,
+    provider: evidence.provider,
+    stream: evidence.stream,
+  }));
+  return { evidenceChecksum, providerSignature };
+}
+
+export async function compareReleaseEvidenceByProvider(
+  stream = DEFAULT_REPLAY_STREAM,
+  providers: string[] = ['local-docker', 'railway', 'render'],
+): Promise<ReleaseEvidenceComparison> {
+  const normalizedProviders = providers.map(normalizeProvider);
+  const records = await Promise.all(normalizedProviders.map(async provider => {
+    const evidence = (await getReleaseEvidenceHistory(stream, 1, { provider }))[0];
+    if (!evidence) return { provider, missing: true };
+    const signed = signReleaseEvidence(evidence);
+    return {
+      provider,
+      evidenceId: evidence.id,
+      status: evidence.status,
+      rollbackStatus: evidence.rollbackStatus,
+      checkedAt: evidence.checkedAt,
+      evidenceChecksum: signed.evidenceChecksum,
+      providerSignature: signed.providerSignature,
+      missing: false,
+    };
+  }));
+  const presentChecksums = records.flatMap(record => (
+    record.evidenceChecksum ? [record.evidenceChecksum] : []
+  ));
+  const baselineChecksum = presentChecksums[0];
+
+  return {
+    stream,
+    providers: normalizedProviders,
+    comparedAt: Date.now(),
+    allMatched: records.every(record => !record.missing)
+      && presentChecksums.every(checksum => checksum === baselineChecksum),
+    baselineChecksum,
+    records,
+  };
+}
+
+export async function recordReleaseDecision(
+  input: ReleaseDecisionInput,
+): Promise<ReleaseDecisionRecord> {
+  const evidence = await getStorageRepository().releaseEvidence.getById(input.evidenceId);
+  if (!evidence) {
+    throw new Error(`Release evidence not found: ${input.evidenceId}`);
+  }
+
+  const decidedAt = Date.now();
+  const { evidenceChecksum, providerSignature } = signReleaseEvidence(evidence);
+  const decisionSignature = hashString(stableStringify({
+    decidedAt,
+    decidedBy: input.decidedBy ?? 'operator',
+    decision: input.decision,
+    evidenceChecksum,
+    evidenceId: evidence.id,
+    provider: evidence.provider,
+    reason: input.reason,
+    stream: evidence.stream,
+  }));
+
+  return getStorageRepository().releaseDecisions.save({
+    id: `decision_${decisionSignature}`,
+    evidenceId: evidence.id,
+    stream: evidence.stream,
+    provider: evidence.provider,
+    decision: input.decision,
+    reason: input.reason,
+    decidedBy: input.decidedBy ?? 'operator',
+    decidedAt,
+    evidenceChecksum,
+    providerSignature,
+    decisionSignature,
+  });
+}
+
+export async function getReleaseDecisionHistory(
+  stream?: string,
+  limit = 20,
+  filters: { provider?: string; decision?: ReleaseDecisionOutcome } = {},
+): Promise<ReleaseDecisionRecord[]> {
+  return getStorageRepository().releaseDecisions.getLatest(stream, limit, filters);
 }

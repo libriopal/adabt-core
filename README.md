@@ -106,7 +106,10 @@ See `DEPLOYMENT_GUIDE.md` for environment variables and provider-specific setup.
 - `GET /api/release/readiness`
 - `GET /api/release/evidence`
 - `GET /api/release/evidence/export`
+- `GET /api/release/evidence/compare`
 - `GET /api/release/evidence/:evidenceId`
+- `POST /api/release/decisions`
+- `GET /api/release/decisions`
 - `GET /api/replay/verify`
 - `GET /api/replay/history`
 - `GET /api/replay/monitor`
@@ -129,4 +132,11 @@ Backend SQLite runtime files are intentionally ignored. Local runtime defaults t
 ```bash
 npm run validate:phase8
 npm run preflight:docker -- --api-url=http://localhost:3001/api --rollback-check=true
+```
+
+## Phase 9 Validation
+
+```bash
+npm run validate:phase9
+npm run artifact:release-evidence -- --api-url=http://localhost:3001/api --provider=railway --output=/tmp/agros-release-evidence.json
 ```

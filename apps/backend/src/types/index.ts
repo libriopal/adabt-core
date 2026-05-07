@@ -159,6 +159,21 @@ export interface ReleaseEvidenceRecord {
   createdAt: number;
 }
 
+export interface ReleaseDecisionRecord {
+  id: string;
+  evidenceId: string;
+  stream: string;
+  provider: string;
+  decision: 'go' | 'no-go' | 'exception';
+  reason: string;
+  decidedBy: string;
+  decidedAt: number;
+  evidenceChecksum: string;
+  providerSignature: string;
+  decisionSignature: string;
+  createdAt: number;
+}
+
 export interface Design {
   id: string;
   seed: string;

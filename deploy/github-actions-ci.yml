@@ -37,3 +37,18 @@ jobs:
 
       - name: Validate production readiness
         run: node scripts/validate-production.mjs
+
+      - name: Generate release evidence artifact
+        if: ${{ env.AGROS_API_URL != '' }}
+        run: |
+          npm run artifact:release-evidence -- \
+            --api-url="$AGROS_API_URL" \
+            --provider="${AGROS_RELEASE_PROVIDER:-railway}" \
+            --output=outputs/release-evidence.json
+
+      - name: Upload release evidence artifact
+        if: ${{ env.AGROS_API_URL != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-evidence
+          path: outputs/release-evidence.json

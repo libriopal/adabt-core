@@ -7,6 +7,7 @@ import {
   EventLogEntry,
   EvolutionState,
   ReleaseEvidenceRecord,
+  ReleaseDecisionRecord,
   ReinforcementDecision,
   ReplayCheckpoint,
   ReplayMonitorSnapshot,
@@ -49,6 +50,21 @@ export type ReleaseEvidenceInput = Omit<ReleaseEvidenceRecord, 'createdAt'> & {
   createdAt?: number;
 };
 
+export type ReleaseDecisionInput = Omit<ReleaseDecisionRecord, 'createdAt'> & {
+  createdAt?: number;
+};
+
+export interface ReleaseEvidenceFilters {
+  provider?: string;
+  status?: ReleaseEvidenceRecord['status'];
+  rollbackStatus?: ReleaseEvidenceRecord['rollbackStatus'];
+}
+
+export interface ReleaseDecisionFilters {
+  provider?: string;
+  decision?: ReleaseDecisionRecord['decision'];
+}
+
 export interface StorageRepository {
   provider: DatabaseProvider;
   designs: {
@@ -88,8 +104,13 @@ export interface StorageRepository {
   };
   releaseEvidence: {
     save(evidence: ReleaseEvidenceInput): Promise<ReleaseEvidenceRecord>;
-    getLatest(stream?: string, limit?: number): Promise<ReleaseEvidenceRecord[]>;
+    getLatest(stream?: string, limit?: number, filters?: ReleaseEvidenceFilters): Promise<ReleaseEvidenceRecord[]>;
     getById(id: string): Promise<ReleaseEvidenceRecord | null>;
+  };
+  releaseDecisions: {
+    save(decision: ReleaseDecisionInput): Promise<ReleaseDecisionRecord>;
+    getLatest(stream?: string, limit?: number, filters?: ReleaseDecisionFilters): Promise<ReleaseDecisionRecord[]>;
+    getById(id: string): Promise<ReleaseDecisionRecord | null>;
   };
   close(): Promise<void>;
 }
@@ -239,6 +260,23 @@ function rowToReleaseEvidence(row: any): ReleaseEvidenceRecord {
     rollbackStatus: row.rollback_status,
     latestDegradedExportChecksum: row.latest_degraded_export_checksum ?? undefined,
     report: JSON.parse(row.report),
+    createdAt: Number(row.created_at),
+  };
+}
+
+function rowToReleaseDecision(row: any): ReleaseDecisionRecord {
+  return {
+    id: row.id,
+    evidenceId: row.evidence_id,
+    stream: row.stream,
+    provider: row.provider,
+    decision: row.decision,
+    reason: row.reason,
+    decidedBy: row.decided_by,
+    decidedAt: Number(row.decided_at),
+    evidenceChecksum: row.evidence_checksum,
+    providerSignature: row.provider_signature,
+    decisionSignature: row.decision_signature,
     createdAt: Number(row.created_at),
   };
 }
@@ -566,19 +604,100 @@ export class SqliteStorageRepository implements StorageRepository {
 
       return { ...evidence, createdAt };
     },
-    getLatest: async (stream?: string, limit = 20): Promise<ReleaseEvidenceRecord[]> => {
-      const rows = stream
-        ? getDB()
-          .prepare('SELECT * FROM release_evidence WHERE stream = ? ORDER BY checked_at DESC LIMIT ?')
-          .all(stream, limit) as any[]
-        : getDB()
-          .prepare('SELECT * FROM release_evidence ORDER BY checked_at DESC LIMIT ?')
-          .all(limit) as any[];
+    getLatest: async (
+      stream?: string,
+      limit = 20,
+      filters: ReleaseEvidenceFilters = {},
+    ): Promise<ReleaseEvidenceRecord[]> => {
+      const conditions: string[] = [];
+      const params: Record<string, unknown> = { limit };
+      if (stream) {
+        conditions.push('stream = @stream');
+        params.stream = stream;
+      }
+      if (filters.provider) {
+        conditions.push('provider = @provider');
+        params.provider = filters.provider;
+      }
+      if (filters.status) {
+        conditions.push('status = @status');
+        params.status = filters.status;
+      }
+      if (filters.rollbackStatus) {
+        conditions.push('rollback_status = @rollbackStatus');
+        params.rollbackStatus = filters.rollbackStatus;
+      }
+      const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+      const rows = getDB()
+        .prepare(`SELECT * FROM release_evidence ${where} ORDER BY checked_at DESC LIMIT @limit`)
+        .all(params) as any[];
       return rows.map(rowToReleaseEvidence);
     },
     getById: async (id: string): Promise<ReleaseEvidenceRecord | null> => {
       const row = getDB().prepare('SELECT * FROM release_evidence WHERE id = ?').get(id) as any;
       return row ? rowToReleaseEvidence(row) : null;
+    },
+  };
+
+  releaseDecisions = {
+    save: async (decision: ReleaseDecisionInput): Promise<ReleaseDecisionRecord> => {
+      const existing = getDB().prepare('SELECT id FROM release_decisions WHERE id = ?').get(decision.id);
+      if (existing) {
+        throw new Error(`Release decision already exists: ${decision.id}`);
+      }
+      const createdAt = decision.createdAt ?? Date.now();
+      getDB().prepare(`
+        INSERT INTO release_decisions
+          (id, evidence_id, stream, provider, decision, reason, decided_by, decided_at,
+           evidence_checksum, provider_signature, decision_signature, created_at)
+        VALUES
+          (@id, @evidence_id, @stream, @provider, @decision, @reason, @decided_by, @decided_at,
+           @evidence_checksum, @provider_signature, @decision_signature, @created_at)
+      `).run({
+        id: decision.id,
+        evidence_id: decision.evidenceId,
+        stream: decision.stream,
+        provider: decision.provider,
+        decision: decision.decision,
+        reason: decision.reason,
+        decided_by: decision.decidedBy,
+        decided_at: decision.decidedAt,
+        evidence_checksum: decision.evidenceChecksum,
+        provider_signature: decision.providerSignature,
+        decision_signature: decision.decisionSignature,
+        created_at: createdAt,
+      });
+
+      return { ...decision, createdAt };
+    },
+    getLatest: async (
+      stream?: string,
+      limit = 20,
+      filters: ReleaseDecisionFilters = {},
+    ): Promise<ReleaseDecisionRecord[]> => {
+      const conditions: string[] = [];
+      const params: Record<string, unknown> = { limit };
+      if (stream) {
+        conditions.push('stream = @stream');
+        params.stream = stream;
+      }
+      if (filters.provider) {
+        conditions.push('provider = @provider');
+        params.provider = filters.provider;
+      }
+      if (filters.decision) {
+        conditions.push('decision = @decision');
+        params.decision = filters.decision;
+      }
+      const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+      const rows = getDB()
+        .prepare(`SELECT * FROM release_decisions ${where} ORDER BY decided_at DESC LIMIT @limit`)
+        .all(params) as any[];
+      return rows.map(rowToReleaseDecision);
+    },
+    getById: async (id: string): Promise<ReleaseDecisionRecord | null> => {
+      const row = getDB().prepare('SELECT * FROM release_decisions WHERE id = ?').get(id) as any;
+      return row ? rowToReleaseDecision(row) : null;
     },
   };
 
@@ -1005,21 +1124,103 @@ export class PostgresStorageRepository implements StorageRepository {
 
       return { ...evidence, createdAt };
     },
-    getLatest: async (stream?: string, limit = 20): Promise<ReleaseEvidenceRecord[]> => {
-      const result = stream
-        ? await this.pool.query(
-          'SELECT * FROM release_evidence WHERE stream = $1 ORDER BY checked_at DESC LIMIT $2',
-          [stream, limit],
-        )
-        : await this.pool.query(
-          'SELECT * FROM release_evidence ORDER BY checked_at DESC LIMIT $1',
-          [limit],
-        );
+    getLatest: async (
+      stream?: string,
+      limit = 20,
+      filters: ReleaseEvidenceFilters = {},
+    ): Promise<ReleaseEvidenceRecord[]> => {
+      const conditions: string[] = [];
+      const values: unknown[] = [];
+      if (stream) {
+        values.push(stream);
+        conditions.push(`stream = $${values.length}`);
+      }
+      if (filters.provider) {
+        values.push(filters.provider);
+        conditions.push(`provider = $${values.length}`);
+      }
+      if (filters.status) {
+        values.push(filters.status);
+        conditions.push(`status = $${values.length}`);
+      }
+      if (filters.rollbackStatus) {
+        values.push(filters.rollbackStatus);
+        conditions.push(`rollback_status = $${values.length}`);
+      }
+      values.push(limit);
+      const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+      const result = await this.pool.query(
+        `SELECT * FROM release_evidence ${where} ORDER BY checked_at DESC LIMIT $${values.length}`,
+        values,
+      );
       return result.rows.map(rowToReleaseEvidence);
     },
     getById: async (id: string): Promise<ReleaseEvidenceRecord | null> => {
       const result = await this.pool.query('SELECT * FROM release_evidence WHERE id = $1', [id]);
       return result.rows[0] ? rowToReleaseEvidence(result.rows[0]) : null;
+    },
+  };
+
+  releaseDecisions = {
+    save: async (decision: ReleaseDecisionInput): Promise<ReleaseDecisionRecord> => {
+      const existing = await this.pool.query('SELECT id FROM release_decisions WHERE id = $1', [decision.id]);
+      if (existing.rows[0]) {
+        throw new Error(`Release decision already exists: ${decision.id}`);
+      }
+      const createdAt = decision.createdAt ?? Date.now();
+      await this.pool.query(`
+        INSERT INTO release_decisions
+          (id, evidence_id, stream, provider, decision, reason, decided_by, decided_at,
+           evidence_checksum, provider_signature, decision_signature, created_at)
+        VALUES
+          ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      `, [
+        decision.id,
+        decision.evidenceId,
+        decision.stream,
+        decision.provider,
+        decision.decision,
+        decision.reason,
+        decision.decidedBy,
+        decision.decidedAt,
+        decision.evidenceChecksum,
+        decision.providerSignature,
+        decision.decisionSignature,
+        createdAt,
+      ]);
+
+      return { ...decision, createdAt };
+    },
+    getLatest: async (
+      stream?: string,
+      limit = 20,
+      filters: ReleaseDecisionFilters = {},
+    ): Promise<ReleaseDecisionRecord[]> => {
+      const conditions: string[] = [];
+      const values: unknown[] = [];
+      if (stream) {
+        values.push(stream);
+        conditions.push(`stream = $${values.length}`);
+      }
+      if (filters.provider) {
+        values.push(filters.provider);
+        conditions.push(`provider = $${values.length}`);
+      }
+      if (filters.decision) {
+        values.push(filters.decision);
+        conditions.push(`decision = $${values.length}`);
+      }
+      values.push(limit);
+      const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+      const result = await this.pool.query(
+        `SELECT * FROM release_decisions ${where} ORDER BY decided_at DESC LIMIT $${values.length}`,
+        values,
+      );
+      return result.rows.map(rowToReleaseDecision);
+    },
+    getById: async (id: string): Promise<ReleaseDecisionRecord | null> => {
+      const result = await this.pool.query('SELECT * FROM release_decisions WHERE id = $1', [id]);
+      return result.rows[0] ? rowToReleaseDecision(result.rows[0]) : null;
     },
   };
 

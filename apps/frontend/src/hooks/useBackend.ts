@@ -164,13 +164,28 @@ export function useBackend({ onError }: UseBackendOptions = {}) {
     return request(`/release/readiness${qs ? `?${qs}` : ''}`);
   }, [request]);
 
-  const getReleaseEvidenceHistory = useCallback((params?: { stream?: string; limit?: number }) => {
+  const getReleaseEvidenceHistory = useCallback((params?: {
+    stream?: string;
+    provider?: string;
+    status?: string;
+    rollbackStatus?: string;
+    limit?: number;
+  }) => {
     const qs = params ? new URLSearchParams(
       Object.entries(params)
         .filter(([, value]) => value !== undefined && value !== '')
         .map(([key, value]) => [key, String(value)]),
     ).toString() : '';
     return request(`/release/evidence${qs ? `?${qs}` : ''}`);
+  }, [request]);
+
+  const compareReleaseEvidence = useCallback((params?: { stream?: string; providers?: string }) => {
+    const qs = params ? new URLSearchParams(
+      Object.entries(params)
+        .filter(([, value]) => value !== undefined && value !== '')
+        .map(([key, value]) => [key, String(value)]),
+    ).toString() : '';
+    return request(`/release/evidence/compare${qs ? `?${qs}` : ''}`);
   }, [request]);
 
   const getReleaseEvidenceExport = useCallback((params?: {
@@ -185,6 +200,27 @@ export function useBackend({ onError }: UseBackendOptions = {}) {
         .map(([key, value]) => [key, String(value)]),
     ).toString() : '';
     return request(`/release/evidence/export${qs ? `?${qs}` : ''}`);
+  }, [request]);
+
+  const createReleaseDecision = useCallback((params: {
+    evidenceId: string;
+    decision: 'go' | 'no-go' | 'exception';
+    reason: string;
+    decidedBy?: string;
+  }) => request('/release/decisions', { method: 'POST', body: JSON.stringify(params) }), [request]);
+
+  const getReleaseDecisions = useCallback((params?: {
+    stream?: string;
+    provider?: string;
+    decision?: string;
+    limit?: number;
+  }) => {
+    const qs = params ? new URLSearchParams(
+      Object.entries(params)
+        .filter(([, value]) => value !== undefined && value !== '')
+        .map(([key, value]) => [key, String(value)]),
+    ).toString() : '';
+    return request(`/release/decisions${qs ? `?${qs}` : ''}`);
   }, [request]);
 
   return {
@@ -208,6 +244,9 @@ export function useBackend({ onError }: UseBackendOptions = {}) {
     getDegradedReplayExport,
     getReleaseReadiness,
     getReleaseEvidenceHistory,
+    compareReleaseEvidence,
     getReleaseEvidenceExport,
+    createReleaseDecision,
+    getReleaseDecisions,
   };
 }

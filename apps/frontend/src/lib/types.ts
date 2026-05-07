@@ -340,6 +340,41 @@ export interface ReleaseEvidenceExportBundle {
   exportChecksum: string;
 }
 
+export type ReleaseDecisionOutcome = 'go' | 'no-go' | 'exception';
+
+export interface ReleaseDecisionRecord {
+  id: string;
+  evidenceId: string;
+  stream: string;
+  provider: string;
+  decision: ReleaseDecisionOutcome;
+  reason: string;
+  decidedBy: string;
+  decidedAt: number;
+  evidenceChecksum: string;
+  providerSignature: string;
+  decisionSignature: string;
+  createdAt: number;
+}
+
+export interface ReleaseEvidenceComparison {
+  stream: string;
+  providers: string[];
+  comparedAt: number;
+  allMatched: boolean;
+  baselineChecksum?: string;
+  records: Array<{
+    provider: string;
+    evidenceId?: string;
+    status?: ReleaseGateStatus;
+    rollbackStatus?: ReleaseGateStatus;
+    checkedAt?: number;
+    evidenceChecksum?: string;
+    providerSignature?: string;
+    missing: boolean;
+  }>;
+}
+
 export interface SlotGPTOutput {
   id: string;
   transformedTheme: string;

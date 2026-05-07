@@ -19,9 +19,12 @@ import {
 } from '../diagnostics/replayHistory';
 import { runReplaySuite } from '../diagnostics/replaySuite';
 import {
+  compareReleaseEvidenceByProvider,
   collectReleaseReadiness,
   createReleaseEvidenceExport,
+  getReleaseDecisionHistory,
   getReleaseEvidenceHistory,
+  recordReleaseDecision,
 } from '../diagnostics/releaseReadiness';
 import { collectSystemDiagnostics } from '../diagnostics/systemDiagnostics';
 import { RequestWithContext, validateRuntimeEnvironment } from '../diagnostics/runtimeValidation';
@@ -117,9 +120,34 @@ const ReleaseReadinessQuerySchema = z.object({
 
 const ReleaseEvidenceQuerySchema = ReplayHistoryQuerySchema.extend({
   provider: z.string().min(1).default('local-docker'),
+  status: z.enum(['ready', 'degraded', 'blocked']).optional(),
+  rollbackStatus: z.enum(['ready', 'degraded', 'blocked']).optional(),
   includeRollbackPreflight: z.preprocess(value => (
     value === undefined ? true : !['false', '0', 'no'].includes(String(value).toLowerCase())
   ), z.boolean()).default(true),
+});
+
+const ReleaseEvidenceHistoryQuerySchema = ReplayHistoryQuerySchema.extend({
+  provider: z.string().min(1).optional(),
+  status: z.enum(['ready', 'degraded', 'blocked']).optional(),
+  rollbackStatus: z.enum(['ready', 'degraded', 'blocked']).optional(),
+});
+
+const ReleaseEvidenceCompareQuerySchema = z.object({
+  stream: z.string().min(1).default(DEFAULT_REPLAY_STREAM),
+  providers: z.string().min(1).default('local-docker,railway,render'),
+});
+
+const ReleaseDecisionSchema = z.object({
+  evidenceId: z.string().min(1),
+  decision: z.enum(['go', 'no-go', 'exception']),
+  reason: z.string().min(1),
+  decidedBy: z.string().min(1).default('operator'),
+});
+
+const ReleaseDecisionHistoryQuerySchema = ReplayHistoryQuerySchema.extend({
+  provider: z.string().min(1).optional(),
+  decision: z.enum(['go', 'no-go', 'exception']).optional(),
 });
 
 router.post('/generate-batch', async (req: RequestWithContext, res) => {
@@ -415,8 +443,12 @@ router.get('/release/readiness', async (req: RequestWithContext, res) => {
 
 router.get('/release/evidence', async (req: RequestWithContext, res) => {
   try {
-    const query = ReplayHistoryQuerySchema.parse(req.query);
-    const evidence = await getReleaseEvidenceHistory(query.stream, query.limit);
+    const query = ReleaseEvidenceHistoryQuerySchema.parse(req.query);
+    const evidence = await getReleaseEvidenceHistory(query.stream, query.limit, {
+      provider: query.provider,
+      status: query.status,
+      rollbackStatus: query.rollbackStatus,
+    });
     res.json({ success: true, evidence });
   } catch (error) {
     const id = logRouteError('REV', req, error);
@@ -443,6 +475,20 @@ router.get('/release/evidence/export', async (req: RequestWithContext, res) => {
   }
 });
 
+router.get('/release/evidence/compare', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReleaseEvidenceCompareQuerySchema.parse(req.query);
+    const comparison = await compareReleaseEvidenceByProvider(
+      query.stream,
+      query.providers.split(',').map(provider => provider.trim()).filter(Boolean),
+    );
+    res.status(comparison.allMatched ? 200 : 409).json({ success: true, comparison });
+  } catch (error) {
+    const id = logRouteError('REC', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
 router.get('/release/evidence/:evidenceId', async (req: RequestWithContext, res) => {
   try {
     const evidence = await getStorageRepository().releaseEvidence.getById(req.params.evidenceId);
@@ -453,6 +499,31 @@ router.get('/release/evidence/:evidenceId', async (req: RequestWithContext, res)
     res.json({ success: true, evidence });
   } catch (error) {
     const id = logRouteError('REI', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.post('/release/decisions', async (req: RequestWithContext, res) => {
+  try {
+    const body = ReleaseDecisionSchema.parse(req.body);
+    const decision = await recordReleaseDecision(body);
+    res.status(201).json({ success: true, decision });
+  } catch (error) {
+    const id = logRouteError('RDC', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/decisions', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReleaseDecisionHistoryQuerySchema.parse(req.query);
+    const decisions = await getReleaseDecisionHistory(query.stream, query.limit, {
+      provider: query.provider,
+      decision: query.decision,
+    });
+    res.json({ success: true, decisions });
+  } catch (error) {
+    const id = logRouteError('RDH', req, error);
     res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
   }
 });

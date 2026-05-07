@@ -164,6 +164,8 @@ Before a release promotion:
    ```
 
 7. If release status is `degraded` or `blocked`, confirm the release evidence export includes a degraded replay bundle checksum before rollback or exception handling.
+8. Record the final go/no-go/exception outcome with `POST /api/release/decisions`.
+9. For multi-provider promotions, compare `/api/release/evidence/compare?providers=railway,render,local-docker` before final handoff.
 
 ## Continuity Failure Response
 

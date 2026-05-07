@@ -146,6 +146,7 @@ Provider release preflight:
 ```bash
 npm run preflight:release -- --provider=railway --api-url=https://<backend>/api
 npm run preflight:release -- --provider=railway --api-url=https://<backend>/api --rollback-check=true
+npm run artifact:release-evidence -- --provider=railway --api-url=https://<backend>/api --output=outputs/release-evidence.json
 ```
 
 This validates:
@@ -161,3 +162,5 @@ This validates:
 ## CI Template
 
 `deploy/github-actions-ci.yml` contains the GitHub Actions workflow template for repository maintainers to install under `.github/workflows/ci.yml`. It is kept under `deploy/` because GitHub App credentials without workflow permission cannot push directly to `.github/workflows`.
+
+Set `AGROS_API_URL` and optionally `AGROS_RELEASE_PROVIDER` in CI to upload a release evidence artifact after validation.

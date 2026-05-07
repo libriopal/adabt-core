@@ -38,6 +38,8 @@ Backend endpoints:
 - `GET /api/continuity/export`: exports replay-checkpoint-anchored continuity state for recovery.
 - `GET /api/release/readiness`: returns release go/no-go gates for runtime, replay monitor, and alert acknowledgement state.
 - `GET /api/release/evidence/export`: persists provider-tagged release readiness evidence with rollback preflight checks.
+- `GET /api/release/evidence/compare`: compares signed release evidence checksums across providers.
+- `POST /api/release/decisions`: records immutable go/no-go/exception decisions for release evidence.
 - `GET /api/diagnostics`: returns runtime, replay, database, continuity, demand, and reinforcement diagnostics.
 - `GET /api/continuity/status`: returns websocket clients, interrupted run IDs, and recent continuity events.
 - `POST /api/continuity/:runId/interrupt`: pauses a run when possible and broadcasts a continuity interrupt event.

@@ -1,6 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useBackend } from '../hooks/useBackend';
-import { ReleaseEvidenceRecord, ReleaseGateReport, ReleaseReadinessReport } from '../lib/types';
+import {
+  ReleaseDecisionOutcome,
+  ReleaseDecisionRecord,
+  ReleaseEvidenceComparison,
+  ReleaseEvidenceRecord,
+  ReleaseGateReport,
+  ReleaseReadinessReport,
+} from '../lib/types';
 
 const DEFAULT_STREAM = 'agros-replay-suite';
 const DEFAULT_PROVIDER = 'local-docker';
@@ -10,11 +17,20 @@ export const ReleaseReadinessPanel: React.FC = () => {
   const [provider, setProvider] = useState(DEFAULT_PROVIDER);
   const [release, setRelease] = useState<ReleaseReadinessReport | null>(null);
   const [evidenceHistory, setEvidenceHistory] = useState<ReleaseEvidenceRecord[]>([]);
+  const [decisions, setDecisions] = useState<ReleaseDecisionRecord[]>([]);
+  const [comparison, setComparison] = useState<ReleaseEvidenceComparison | null>(null);
+  const [historyStatus, setHistoryStatus] = useState('');
+  const [historyRollbackStatus, setHistoryRollbackStatus] = useState('');
+  const [decision, setDecision] = useState<ReleaseDecisionOutcome>('go');
+  const [decisionReason, setDecisionReason] = useState('operator accepted release evidence');
   const [evidenceExportId, setEvidenceExportId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const {
+    compareReleaseEvidence,
+    createReleaseDecision,
     getReleaseEvidenceExport,
     getReleaseEvidenceHistory,
+    getReleaseDecisions,
     getReleaseReadiness,
     loading,
   } = useBackend({ onError: setError });
@@ -28,8 +44,16 @@ export const ReleaseReadinessPanel: React.FC = () => {
       includeRollbackPreflight: true,
     }) as any;
     if (data?.release) setRelease(data.release);
-    const history = await getReleaseEvidenceHistory({ stream, limit: 4 }) as any;
+    const history = await getReleaseEvidenceHistory({
+      stream,
+      provider,
+      status: historyStatus,
+      rollbackStatus: historyRollbackStatus,
+      limit: 4,
+    }) as any;
     if (history?.evidence) setEvidenceHistory(history.evidence);
+    const decisionData = await getReleaseDecisions({ stream, provider, limit: 4 }) as any;
+    if (decisionData?.decisions) setDecisions(decisionData.decisions);
   };
 
   const exportReleaseEvidence = async () => {
@@ -45,6 +69,28 @@ export const ReleaseReadinessPanel: React.FC = () => {
     setRelease(data.export.release);
     setEvidenceHistory(data.export.history || []);
     downloadJson(`agros-release-evidence-${data.export.id}.json`, data.export);
+  };
+
+  const compareProviders = async () => {
+    setError(null);
+    const data = await compareReleaseEvidence({ stream, providers: 'local-docker,railway,render' }) as any;
+    if (data?.comparison) setComparison(data.comparison);
+  };
+
+  const recordDecision = async () => {
+    const latestEvidence = evidenceHistory[0];
+    if (!latestEvidence) {
+      setError('No release evidence record is available for decision capture.');
+      return;
+    }
+    setError(null);
+    const data = await createReleaseDecision({
+      evidenceId: latestEvidence.id,
+      decision,
+      reason: decisionReason,
+      decidedBy: 'operator',
+    }) as any;
+    if (data?.decision) setDecisions([data.decision, ...decisions].slice(0, 4));
   };
 
   useEffect(() => {
@@ -76,11 +122,26 @@ export const ReleaseReadinessPanel: React.FC = () => {
           <option value="render">render</option>
           <option value="custom">custom</option>
         </select>
+        <select value={historyStatus} onChange={event => setHistoryStatus(event.target.value)} style={inputStyle}>
+          <option value="">any status</option>
+          <option value="ready">ready</option>
+          <option value="degraded">degraded</option>
+          <option value="blocked">blocked</option>
+        </select>
+        <select value={historyRollbackStatus} onChange={event => setHistoryRollbackStatus(event.target.value)} style={inputStyle}>
+          <option value="">any rollback</option>
+          <option value="ready">rollback ready</option>
+          <option value="degraded">rollback degraded</option>
+          <option value="blocked">rollback blocked</option>
+        </select>
         <button onClick={loadReleaseReadiness} disabled={loading || !stream.trim()} style={buttonStyle(loading || !stream.trim())}>
           Check Gate
         </button>
         <button onClick={exportReleaseEvidence} disabled={loading || !stream.trim()} style={buttonStyle(loading || !stream.trim())}>
           Export JSON
+        </button>
+        <button onClick={compareProviders} disabled={loading || !stream.trim()} style={buttonStyle(loading || !stream.trim())}>
+          Compare
         </button>
       </div>
 
@@ -136,6 +197,50 @@ export const ReleaseReadinessPanel: React.FC = () => {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {comparison && (
+        <div style={{ ...panelStyle, marginTop: 12 }}>
+          <div style={panelTitleStyle}>Provider Checksum Comparison</div>
+          <div style={{ color: comparison.allMatched ? '#A3E635' : '#FDBA74', fontSize: 12, marginBottom: 8 }}>
+            {comparison.allMatched ? 'All provider evidence checksums match.' : 'Provider evidence requires review.'}
+          </div>
+          <div style={{ display: 'grid', gap: 6 }}>
+            {comparison.records.map(record => (
+              <div key={record.provider} style={{ display: 'grid', gridTemplateColumns: '96px 76px 1fr', gap: 10, color: '#CBD5E1', fontSize: 11 }}>
+                <span>{record.provider}</span>
+                <span style={{ color: record.missing ? '#EF4444' : statusColor(record.status) }}>{record.missing ? 'missing' : record.status}</span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{record.evidenceChecksum || 'no checksum'}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {evidenceHistory.length > 0 && (
+        <div style={{ ...panelStyle, marginTop: 12 }}>
+          <div style={panelTitleStyle}>Release Decision</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr 118px', gap: 10 }}>
+            <select value={decision} onChange={event => setDecision(event.target.value as ReleaseDecisionOutcome)} style={inputStyle}>
+              <option value="go">go</option>
+              <option value="no-go">no-go</option>
+              <option value="exception">exception</option>
+            </select>
+            <input value={decisionReason} onChange={event => setDecisionReason(event.target.value)} style={inputStyle} />
+            <button onClick={recordDecision} disabled={loading || !decisionReason.trim()} style={buttonStyle(loading || !decisionReason.trim())}>
+              Record
+            </button>
+          </div>
+          {decisions.length > 0 && (
+            <div style={{ display: 'grid', gap: 6, marginTop: 10 }}>
+              {decisions.map(item => (
+                <div key={item.id} style={{ color: '#CBD5E1', fontSize: 11 }}>
+                  <strong style={{ color: item.decision === 'go' ? '#A3E635' : '#FDBA74' }}>{item.decision}</strong> by {item.decidedBy}: {item.reason}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
