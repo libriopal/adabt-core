@@ -16,6 +16,7 @@
     "validate:phase1": "node scripts/validate-phase1.mjs",
     "validate:phase2": "node scripts/validate-phase2.mjs",
     "validate:phase3": "node scripts/validate-phase3.mjs",
+    "validate:phase4": "node scripts/validate-phase4.mjs",
     "dev:frontend": "npm run dev --prefix apps/frontend",
     "dev:backend": "npm run dev --prefix apps/backend"
   }

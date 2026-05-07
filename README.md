@@ -56,6 +56,12 @@ Phase 3 replay event history and checkpoint persistence can be checked with:
 npm run validate:phase3
 ```
 
+Phase 4 replay operations and continuity export anchoring can be checked with:
+
+```bash
+npm run validate:phase4
+```
+
 ## Deployment
 
 - Frontend: Vercel with `vercel.json`.
@@ -82,10 +88,11 @@ See `DEPLOYMENT_GUIDE.md` for environment variables and provider-specific setup.
 - `GET /api/replay/verify`
 - `GET /api/replay/history`
 - `GET /api/continuity/status`
+- `GET /api/continuity/export`
 - `POST /api/continuity/:runId/interrupt`
 - `POST /api/continuity/:runId/resume`
 - `WS /ws/continuity`
 
 ## State
 
-Backend SQLite runtime files are intentionally ignored. Local runtime defaults to `DATABASE_PROVIDER=sqlite` and `DATABASE_PATH=./data/slotgpt.db`. Phase 3 routes request-time storage, replay event history, and replay checkpoints through an async repository interface with SQLite and Postgres implementations. Use `DATABASE_PROVIDER=postgres` plus `DATABASE_URL` for Postgres-backed request storage.
+Backend SQLite runtime files are intentionally ignored. Local runtime defaults to `DATABASE_PROVIDER=sqlite` and `DATABASE_PATH=./data/slotgpt.db`. Phase 4 routes request-time storage, replay event history, replay checkpoints, and continuity exports through the operational replay path. Use `DATABASE_PROVIDER=postgres` plus `DATABASE_URL` for Postgres-backed request storage.

@@ -7,6 +7,7 @@ import { reinforcementEngine } from '../services/reinforcementEngine';
 import { getStorageRepository } from '../storage/repository';
 import { Design } from '../types';
 import { continuityHub } from '../diagnostics/continuityHub';
+import { createContinuityExport } from '../diagnostics/continuityExport';
 import { logger } from '../diagnostics/logger';
 import { DEFAULT_REPLAY_STREAM, getReplayHistory } from '../diagnostics/replayHistory';
 import { runReplaySuite } from '../diagnostics/replaySuite';
@@ -53,6 +54,10 @@ const ImportSchema = z.object({
 const ReplayHistoryQuerySchema = z.object({
   stream: z.string().min(1).default(DEFAULT_REPLAY_STREAM),
   limit: z.coerce.number().int().min(1).max(500).default(50),
+});
+
+const ContinuityExportQuerySchema = ReplayHistoryQuerySchema.extend({
+  checkpointId: z.string().min(1).optional(),
 });
 
 router.post('/generate-batch', async (req: RequestWithContext, res) => {
@@ -251,6 +256,17 @@ router.get('/replay/history', async (req: RequestWithContext, res) => {
 
 router.get('/continuity/status', (_req, res) => {
   res.json({ success: true, continuity: continuityHub.getStatus() });
+});
+
+router.get('/continuity/export', async (req: RequestWithContext, res) => {
+  try {
+    const query = ContinuityExportQuerySchema.parse(req.query);
+    const continuityExport = await createContinuityExport(query);
+    res.json({ success: true, export: continuityExport });
+  } catch (error) {
+    const id = logRouteError('CTX', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
 });
 
 router.post('/continuity/:runId/interrupt', async (req: RequestWithContext, res) => {

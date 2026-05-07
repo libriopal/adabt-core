@@ -159,6 +159,64 @@ export interface ReinforcementReplaySummary {
   gateStatuses: Record<string, number>;
 }
 
+export interface EventLogEntry {
+  id: string;
+  stream: string;
+  type: string;
+  sequence: number;
+  payload: Record<string, unknown>;
+  replayChecksum: string;
+  createdAt: number;
+}
+
+export interface ReplayCheckpoint {
+  id: string;
+  stream: string;
+  label: string;
+  eventCount: number;
+  replayChecksum: string;
+  state: Record<string, unknown>;
+  createdAt: number;
+}
+
+export interface ReplayHistoryVerification {
+  stable: boolean;
+  stream: string;
+  eventCount: number;
+  checkpointCount: number;
+  latestChecksum: string;
+  latestCheckpointId?: string;
+  failures: string[];
+}
+
+export interface ReplayHistoryResult {
+  stream: string;
+  events: EventLogEntry[];
+  checkpoints: ReplayCheckpoint[];
+  verification: ReplayHistoryVerification;
+}
+
+export interface ContinuityEvent {
+  type: string;
+  timestamp: number;
+  payload: Record<string, unknown>;
+}
+
+export interface ContinuityExportBundle {
+  version: 'agros-continuity-export-v1';
+  exportedAt: number;
+  stream: string;
+  anchor: ReplayCheckpoint | null;
+  replay: ReplayHistoryResult;
+  continuity: {
+    interruptedRuns: string[];
+    connectedClients: number;
+    events: ContinuityEvent[];
+  };
+  verification: ReplayHistoryVerification;
+  exportChecksum: string;
+}
+
 export interface SlotGPTOutput {
   id: string;
   transformedTheme: string;

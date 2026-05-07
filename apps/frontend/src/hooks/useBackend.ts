@@ -75,5 +75,43 @@ export function useBackend({ onError }: UseBackendOptions = {}) {
 
   const getReinforcementReplay = useCallback(() => request('/reinforcement/replay'), [request]);
 
-  return { loading, generateBatch, startEvolution, getEvolutionState, pauseEvolution, getDesigns, importDesigns, exportDesign, getDemand, getReinforcementReplay };
+  const runReplayVerify = useCallback(() => request('/replay/verify'), [request]);
+
+  const getReplayHistory = useCallback((params?: { stream?: string; limit?: number }) => {
+    const qs = params ? new URLSearchParams(
+      Object.entries(params)
+        .filter(([, value]) => value !== undefined && value !== '')
+        .map(([key, value]) => [key, String(value)]),
+    ).toString() : '';
+    return request(`/replay/history${qs ? `?${qs}` : ''}`);
+  }, [request]);
+
+  const getContinuityExport = useCallback((params?: {
+    stream?: string;
+    checkpointId?: string;
+    limit?: number;
+  }) => {
+    const qs = params ? new URLSearchParams(
+      Object.entries(params)
+        .filter(([, value]) => value !== undefined && value !== '')
+        .map(([key, value]) => [key, String(value)]),
+    ).toString() : '';
+    return request(`/continuity/export${qs ? `?${qs}` : ''}`);
+  }, [request]);
+
+  return {
+    loading,
+    generateBatch,
+    startEvolution,
+    getEvolutionState,
+    pauseEvolution,
+    getDesigns,
+    importDesigns,
+    exportDesign,
+    getDemand,
+    getReinforcementReplay,
+    runReplayVerify,
+    getReplayHistory,
+    getContinuityExport,
+  };
 }

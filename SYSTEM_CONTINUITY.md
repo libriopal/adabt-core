@@ -28,6 +28,8 @@ Seed
 Backend endpoints:
 
 - `GET /api/replay/verify`: verifies deterministic demand and reinforcement replay.
+- `GET /api/replay/history`: returns replay events, replay checkpoints, and stored-history verification.
+- `GET /api/continuity/export`: exports replay-checkpoint-anchored continuity state for recovery.
 - `GET /api/diagnostics`: returns runtime, replay, database, continuity, demand, and reinforcement diagnostics.
 - `GET /api/continuity/status`: returns websocket clients, interrupted run IDs, and recent continuity events.
 - `POST /api/continuity/:runId/interrupt`: pauses a run when possible and broadcasts a continuity interrupt event.
@@ -52,6 +54,8 @@ Backend continuity is preserved through:
 - SQLite WAL persistence
 - evolution run records
 - reinforcement replay checksums
+- replay event history and replay checkpoints
+- continuity exports anchored to replay checkpoints
 - demand cache records
 - structured request IDs
 
@@ -64,4 +68,3 @@ A production run is stable only when:
 - cocoon reconstruction returns stable
 - cocoon replay returns stable
 - checkpoint restore returns the same topology checksum
-
