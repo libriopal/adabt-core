@@ -177,3 +177,13 @@ npm run artifact:rollback-timeline -- --api-url=http://localhost:3001/api --roll
 ```
 
 Phase 13 adds post-promotion rollback records, rollback command descriptors guarded by failed promotion timelines, rollback CI evidence hooks, and rollback timeline exports for audit and incident handoff.
+
+## Phase 14 Validation
+
+```bash
+npm run validate:phase14
+npm run artifact:evidence-manifest -- --api-url=http://localhost:3001/api --decision-id=<decision-id> --promotion-id=<promotion-id> --rollback-id=<rollback-id> --output=/tmp/agros-release-evidence-manifest.json
+npm run release:verify-artifacts -- --api-url=http://localhost:3001/api --manifest=/tmp/agros-release-evidence-manifest.json --release-bundle=/tmp/agros-release-bundle-summary.json --promotion-timeline=/tmp/agros-release-promotion-timeline.json --rollback-timeline=/tmp/agros-release-rollback-timeline.json
+```
+
+Phase 14 adds signed release evidence manifests, uploaded artifact verification, dashboard mismatch triage, and CI verification for handoff artifacts before publication.

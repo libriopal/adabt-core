@@ -24,6 +24,7 @@ import {
   attachReleasePromotionCiCheck,
   collectReleaseReadiness,
   collectPostReleaseDrift,
+  createReleaseEvidenceBundleManifest,
   createReleaseSupervisionStatusCard,
   createReleaseBundleSummary,
   createReleaseEvidenceExport,
@@ -46,6 +47,7 @@ import {
   planReleaseRollback,
   transitionReleaseRollback,
   transitionReleasePromotion,
+  verifyReleaseHandoffArtifacts,
 } from '../diagnostics/releaseReadiness';
 import { collectSystemDiagnostics } from '../diagnostics/systemDiagnostics';
 import { RequestWithContext, validateRuntimeEnvironment } from '../diagnostics/runtimeValidation';
@@ -157,6 +159,20 @@ const ReleaseEvidenceHistoryQuerySchema = ReplayHistoryQuerySchema.extend({
 const ReleaseEvidenceCompareQuerySchema = z.object({
   stream: z.string().min(1).default(DEFAULT_REPLAY_STREAM),
   providers: z.string().min(1).default('local-docker,railway,render'),
+});
+
+const ReleaseEvidenceManifestQuerySchema = z.object({
+  decisionId: z.string().min(1).optional(),
+  stream: z.string().min(1).default(DEFAULT_REPLAY_STREAM),
+  provider: z.string().min(1).optional(),
+  promotionId: z.string().min(1).optional(),
+  rollbackId: z.string().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(8),
+});
+
+const ReleaseEvidenceArtifactVerificationSchema = z.object({
+  manifest: z.any(),
+  artifacts: z.record(z.string(), z.any()).optional(),
 });
 
 const ReleaseDecisionSchema = z.object({
@@ -629,6 +645,41 @@ router.get('/release/evidence/compare', async (req: RequestWithContext, res) => 
     res.status(comparison.allMatched ? 200 : 409).json({ success: true, comparison });
   } catch (error) {
     const id = logRouteError('REC', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/release/evidence/manifest', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReleaseEvidenceManifestQuerySchema.parse(req.query);
+    const manifest = await createReleaseEvidenceBundleManifest({
+      decisionId: query.decisionId,
+      stream: query.stream,
+      provider: query.provider,
+      promotionId: query.promotionId,
+      rollbackId: query.rollbackId,
+      limit: query.limit,
+    });
+    res.status(manifest.triage.status === 'ready' ? 200 : 409).json({ success: true, manifest });
+  } catch (error) {
+    const id = logRouteError('REM', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.post('/release/evidence/verify-artifacts', async (req: RequestWithContext, res) => {
+  try {
+    const body = ReleaseEvidenceArtifactVerificationSchema.parse(req.body ?? {}) as {
+      manifest: any;
+      artifacts?: Record<string, unknown>;
+    };
+    const verification = verifyReleaseHandoffArtifacts({
+      manifest: body.manifest,
+      artifacts: body.artifacts,
+    });
+    res.status(verification.status === 'ready' ? 200 : 409).json({ success: true, verification });
+  } catch (error) {
+    const id = logRouteError('REVF', req, error);
     res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
   }
 });

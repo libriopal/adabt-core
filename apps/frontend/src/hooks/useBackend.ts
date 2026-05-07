@@ -246,6 +246,27 @@ export function useBackend({ onError }: UseBackendOptions = {}) {
     return request(`/release/bundle-summary${qs ? `?${qs}` : ''}`);
   }, [request]);
 
+  const getReleaseEvidenceManifest = useCallback((params?: {
+    decisionId?: string;
+    stream?: string;
+    provider?: string;
+    promotionId?: string;
+    rollbackId?: string;
+    limit?: number;
+  }) => {
+    const qs = params ? new URLSearchParams(
+      Object.entries(params)
+        .filter(([, value]) => value !== undefined && value !== '')
+        .map(([key, value]) => [key, String(value)]),
+    ).toString() : '';
+    return request(`/release/evidence/manifest${qs ? `?${qs}` : ''}`);
+  }, [request]);
+
+  const verifyReleaseArtifacts = useCallback((params: {
+    manifest: unknown;
+    artifacts?: Record<string, unknown>;
+  }) => request('/release/evidence/verify-artifacts', { method: 'POST', body: JSON.stringify(params) }), [request]);
+
   const getReleaseDrift = useCallback((params: {
     decisionId: string;
     persistMonitor?: boolean;
@@ -384,6 +405,8 @@ export function useBackend({ onError }: UseBackendOptions = {}) {
     getReleaseDecisions,
     createReleaseReconciliation,
     getReleaseBundleSummary,
+    getReleaseEvidenceManifest,
+    verifyReleaseArtifacts,
     getReleaseDrift,
     applyReleaseEvidenceRetention,
     getReleaseRetentionPolicyPresets,

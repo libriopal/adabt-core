@@ -180,6 +180,8 @@ Before a release promotion:
 21. Plan rollback with `POST /api/release/rollbacks`, then transition it through approval, rehearsal, execution, failure, or cancellation with `POST /api/release/rollbacks/<rollback-id>/transition`.
 22. Attach rollback CI monitor evidence with `POST /api/release/rollbacks/<rollback-id>/ci-checks`.
 23. Export `/api/release/rollbacks/<rollback-id>/timeline` and store it with incident, audit, or rollback handoff artifacts.
+24. Generate `/api/release/evidence/manifest` with the decision, promotion, and rollback IDs before publishing the handoff packet.
+25. Verify uploaded handoff artifacts with `POST /api/release/evidence/verify-artifacts`; block publication until mismatches are resolved.
 
 ## Continuity Failure Response
 

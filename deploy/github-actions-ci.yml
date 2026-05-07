@@ -120,3 +120,35 @@ jobs:
         with:
           name: release-rollback-timeline
           path: outputs/release-rollback-timeline.json
+
+      - name: Generate release evidence manifest
+        if: ${{ env.AGROS_API_URL != '' && env.AGROS_RELEASE_DECISION_ID != '' }}
+        run: |
+          npm run artifact:evidence-manifest -- \
+            --api-url="$AGROS_API_URL" \
+            --decision-id="$AGROS_RELEASE_DECISION_ID" \
+            --promotion-id="${AGROS_RELEASE_PROMOTION_ID:-}" \
+            --rollback-id="${AGROS_RELEASE_ROLLBACK_ID:-}" \
+            --provider="${AGROS_RELEASE_PROVIDER:-railway}" \
+            --output=outputs/release-evidence-manifest.json
+
+      - name: Verify release handoff artifacts
+        if: ${{ env.AGROS_API_URL != '' && env.AGROS_RELEASE_DECISION_ID != '' }}
+        run: |
+          npm run release:verify-artifacts -- \
+            --api-url="$AGROS_API_URL" \
+            --manifest=outputs/release-evidence-manifest.json \
+            --release-evidence=outputs/release-evidence.json \
+            --release-bundle=outputs/release-bundle-summary.json \
+            --promotion-timeline=outputs/release-promotion-timeline.json \
+            --rollback-timeline=outputs/release-rollback-timeline.json \
+            --output=outputs/release-artifact-verification.json
+
+      - name: Upload release evidence manifest
+        if: ${{ env.AGROS_API_URL != '' && env.AGROS_RELEASE_DECISION_ID != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-evidence-manifest
+          path: |
+            outputs/release-evidence-manifest.json
+            outputs/release-artifact-verification.json

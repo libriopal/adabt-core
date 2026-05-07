@@ -615,6 +615,64 @@ export interface ReleaseRollbackTimelineExport {
   exportChecksum: string;
 }
 
+export type ReleaseHandoffArtifactKind =
+  | 'release_evidence'
+  | 'release_bundle_summary'
+  | 'promotion_timeline'
+  | 'rollback_timeline';
+
+export interface ReleaseHandoffArtifactRef {
+  kind: ReleaseHandoffArtifactKind;
+  artifactId: string;
+  version: string;
+  checksum: string;
+  signature: string;
+  sourceId: string;
+  required: boolean;
+  generatedAt?: number;
+  status?: string;
+}
+
+export interface ReleaseEvidenceBundleManifest {
+  version: 'agros-release-evidence-manifest-v1';
+  generatedAt: number;
+  stream: string;
+  provider: string;
+  decisionId: string;
+  evidenceId: string;
+  promotionId?: string;
+  rollbackId?: string;
+  artifacts: ReleaseHandoffArtifactRef[];
+  missingArtifacts: ReleaseHandoffArtifactKind[];
+  manifestChecksum: string;
+  manifestSignature: string;
+  triage: {
+    status: 'ready' | 'degraded';
+    summary: string;
+    recommendations: string[];
+  };
+}
+
+export interface ReleaseArtifactVerificationReport {
+  version: 'agros-release-artifact-verification-v1';
+  verifiedAt: number;
+  status: 'ready' | 'degraded' | 'blocked';
+  manifestChecksum: string;
+  computedManifestChecksum: string;
+  manifestSignature: string;
+  signatureMatched: boolean;
+  artifacts: Array<{
+    kind: ReleaseHandoffArtifactKind;
+    artifactId: string;
+    expectedChecksum: string;
+    actualChecksum?: string;
+    matched: boolean;
+    detail: string;
+  }>;
+  mismatches: string[];
+  recommendations: string[];
+}
+
 export interface SlotGPTOutput {
   id: string;
   transformedTheme: string;

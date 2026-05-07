@@ -7,7 +7,9 @@ import {
   ReleaseDeploymentCommandDescriptor,
   ReleaseDriftReport,
   ReleaseEnvironment,
+  ReleaseArtifactVerificationReport,
   ReleaseEvidenceComparison,
+  ReleaseEvidenceBundleManifest,
   ReleaseEvidenceRecord,
   ReleaseGateReport,
   ReleasePromotionRecord,
@@ -46,6 +48,8 @@ export const ReleaseReadinessPanel: React.FC = () => {
   const [selectedRollbackCommandId, setSelectedRollbackCommandId] = useState('');
   const [rollback, setRollback] = useState<ReleaseRollbackRecord | null>(null);
   const [rollbackTimeline, setRollbackTimeline] = useState<ReleaseRollbackTimelineExport | null>(null);
+  const [integrityManifest, setIntegrityManifest] = useState<ReleaseEvidenceBundleManifest | null>(null);
+  const [artifactVerification, setArtifactVerification] = useState<ReleaseArtifactVerificationReport | null>(null);
   const [historyStatus, setHistoryStatus] = useState('');
   const [historyRollbackStatus, setHistoryRollbackStatus] = useState('');
   const [decision, setDecision] = useState<ReleaseDecisionOutcome>('go');
@@ -74,6 +78,7 @@ export const ReleaseReadinessPanel: React.FC = () => {
     getReleaseRollbackCommands,
     getReleaseBundleSummary,
     getReleaseDrift,
+    getReleaseEvidenceManifest,
     getReleaseEvidenceExport,
     getReleaseEvidenceHistory,
     getReleaseDecisions,
@@ -82,6 +87,7 @@ export const ReleaseReadinessPanel: React.FC = () => {
     getReleaseReadiness,
     getReleaseRetentionPolicyPresets,
     getReleaseSupervisionCard,
+    verifyReleaseArtifacts,
     startReleasePromotion,
     planReleaseRollback,
     transitionReleaseRollback,
@@ -396,6 +402,53 @@ export const ReleaseReadinessPanel: React.FC = () => {
     }
   };
 
+  const generateIntegrityManifest = async () => {
+    const latestDecision = decisions[0];
+    if (!latestDecision) {
+      setError('Record a release decision before generating the evidence manifest.');
+      return;
+    }
+    setError(null);
+    setArtifactVerification(null);
+    const data = await getReleaseEvidenceManifest({
+      decisionId: latestDecision.id,
+      stream,
+      provider,
+      promotionId: promotion?.id,
+      rollbackId: rollback?.id,
+      limit: 8,
+    }) as any;
+    if (data?.manifest) {
+      setIntegrityManifest(data.manifest);
+      downloadJson(`agros-release-evidence-manifest-${latestDecision.id}.json`, data.manifest);
+    }
+  };
+
+  const verifyIntegrityArtifacts = async () => {
+    if (!integrityManifest) {
+      setError('Generate an evidence manifest before verifying handoff artifacts.');
+      return;
+    }
+    if (!bundle) {
+      setError('Load the release bundle before verifying handoff artifacts.');
+      return;
+    }
+    setError(null);
+    const data = await verifyReleaseArtifacts({
+      manifest: integrityManifest,
+      artifacts: {
+        release_evidence: bundle.evidence,
+        release_bundle_summary: bundle,
+        promotion_timeline: promotionTimeline ?? undefined,
+        rollback_timeline: rollbackTimeline ?? undefined,
+      },
+    }) as any;
+    if (data?.verification) {
+      setArtifactVerification(data.verification);
+      downloadJson(`agros-release-artifact-verification-${integrityManifest.decisionId}.json`, data.verification);
+    }
+  };
+
   const recordDriftOverride = async () => {
     const latestDecision = decisions[0];
     const activeDrift = drift || bundle?.drift;
@@ -434,6 +487,8 @@ export const ReleaseReadinessPanel: React.FC = () => {
     setSelectedRollbackCommandId('');
     setRollback(null);
     setRollbackTimeline(null);
+    setIntegrityManifest(null);
+    setArtifactVerification(null);
     loadDeploymentCommands();
     loadRollbackCommands();
   }, [environment]);
@@ -442,9 +497,9 @@ export const ReleaseReadinessPanel: React.FC = () => {
     <div style={{ background: '#12172B', borderRadius: 8, padding: 24, border: '1px solid #1E293B', marginBottom: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', marginBottom: 18 }}>
         <div>
-          <h2 style={{ color: '#94A3B8', fontSize: 14, marginTop: 0, marginBottom: 6 }}>Phase 13 Rollback Supervision</h2>
+          <h2 style={{ color: '#94A3B8', fontSize: 14, marginTop: 0, marginBottom: 6 }}>Phase 14 Evidence Integrity</h2>
           <div style={{ color: '#64748B', fontSize: 12 }}>
-            Runtime gates, managed promotions, rollback commands, CI evidence, and rollback timelines.
+            Runtime gates, promotions, rollbacks, signed handoff manifests, and artifact verification.
           </div>
         </div>
         <StatusBadge status={release?.status} />
@@ -500,6 +555,9 @@ export const ReleaseReadinessPanel: React.FC = () => {
         </button>
         <button onClick={loadRollbackCommands} disabled={loading} style={buttonStyle(loading)}>
           Rollback
+        </button>
+        <button onClick={generateIntegrityManifest} disabled={loading || !decisions[0]} style={buttonStyle(loading || !decisions[0])}>
+          Manifest
         </button>
       </div>
 
@@ -774,6 +832,39 @@ export const ReleaseReadinessPanel: React.FC = () => {
                 <div style={{ color: '#CBD5E1', fontSize: 11 }}>
                   Rollback events: {rollbackTimeline.timeline.length} | CI checks: {rollbackTimeline.ciChecks.length} | checksum {rollbackTimeline.exportChecksum}
                 </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {integrityManifest && (
+        <div style={{ ...panelStyle, marginTop: 12, borderColor: integrityManifest.triage.status === 'ready' ? '#166534' : '#92400E' }}>
+          <div style={panelTitleStyle}>Evidence Integrity Manifest</div>
+          <div style={{ color: integrityManifest.triage.status === 'ready' ? '#A3E635' : '#FDBA74', fontSize: 12, marginBottom: 8 }}>
+            {integrityManifest.triage.summary}
+          </div>
+          <div style={{ display: 'grid', gap: 6, color: '#CBD5E1', fontSize: 11 }}>
+            <div>Artifacts: {integrityManifest.artifacts.length} | Missing: {integrityManifest.missingArtifacts.length}</div>
+            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Manifest checksum: {integrityManifest.manifestChecksum}</div>
+            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Manifest signature: {integrityManifest.manifestSignature}</div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 150px', gap: 8, marginTop: 10 }}>
+            <div style={{ color: '#64748B', fontSize: 11, alignSelf: 'center' }}>
+              {integrityManifest.artifacts.map(artifact => artifact.kind.replace(/_/g, ' ')).join(', ')}
+            </div>
+            <button onClick={verifyIntegrityArtifacts} disabled={loading || !bundle} style={buttonStyle(loading || !bundle)}>
+              Verify
+            </button>
+          </div>
+          {artifactVerification && (
+            <div style={{ display: 'grid', gap: 6, color: '#CBD5E1', fontSize: 11, marginTop: 10 }}>
+              <div style={{ color: artifactVerification.status === 'ready' ? '#A3E635' : '#FDBA74', fontWeight: 800 }}>
+                Verification: {artifactVerification.status}
+              </div>
+              <div>Matched: {artifactVerification.artifacts.filter(artifact => artifact.matched).length}/{artifactVerification.artifacts.length}</div>
+              {artifactVerification.mismatches.length > 0 && (
+                <div>{artifactVerification.mismatches.join(' ')}</div>
               )}
             </div>
           )}

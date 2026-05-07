@@ -322,6 +322,69 @@ export interface ReleaseRollbackTimelineExport {
   exportChecksum: string;
 }
 
+export type ReleaseHandoffArtifactKind =
+  | 'release_evidence'
+  | 'release_bundle_summary'
+  | 'promotion_timeline'
+  | 'rollback_timeline';
+
+export interface ReleaseHandoffArtifactRef {
+  kind: ReleaseHandoffArtifactKind;
+  artifactId: string;
+  version: string;
+  checksum: string;
+  signature: string;
+  sourceId: string;
+  required: boolean;
+  generatedAt?: number;
+  status?: string;
+}
+
+export interface ReleaseEvidenceBundleManifest {
+  version: 'agros-release-evidence-manifest-v1';
+  generatedAt: number;
+  stream: string;
+  provider: string;
+  decisionId: string;
+  evidenceId: string;
+  promotionId?: string;
+  rollbackId?: string;
+  artifacts: ReleaseHandoffArtifactRef[];
+  missingArtifacts: ReleaseHandoffArtifactKind[];
+  manifestChecksum: string;
+  manifestSignature: string;
+  triage: {
+    status: 'ready' | 'degraded';
+    summary: string;
+    recommendations: string[];
+  };
+}
+
+export interface ReleaseArtifactVerificationInput {
+  manifest: ReleaseEvidenceBundleManifest;
+  artifacts?: Partial<Record<ReleaseHandoffArtifactKind, unknown>>;
+}
+
+export interface ReleaseArtifactVerificationReport {
+  version: 'agros-release-artifact-verification-v1';
+  verifiedAt: number;
+  status: 'ready' | 'degraded' | 'blocked';
+  manifestChecksum: string;
+  computedManifestChecksum: string;
+  manifestSignature: string;
+  signatureMatched: boolean;
+  artifacts: Array<{
+    kind: ReleaseHandoffArtifactKind;
+    artifactId: string;
+    expectedChecksum: string;
+    actualChecksum?: string;
+    matched: boolean;
+    detail: string;
+  }>;
+  mismatches: string[];
+  recommendations: string[];
+}
+
 const PROVIDERS = new Set(['local-docker', 'railway', 'render', 'custom']);
 
 const RELEASE_RETENTION_POLICY_PRESETS: Record<ReleaseRetentionPolicyName, ReleaseRetentionPolicyPreset> = {
@@ -1634,5 +1697,345 @@ export async function exportReleaseRollbackTimeline(
     timeline: rollback.timeline,
     ciChecks: rollback.ciChecks,
     exportChecksum,
+  };
+}
+
+function signHandoffArtifact(
+  kind: ReleaseHandoffArtifactKind,
+  checksum: string,
+  sourceSignature?: string,
+): string {
+  return hashString(stableStringify({
+    checksum,
+    kind,
+    sourceSignature: sourceSignature ?? null,
+  }));
+}
+
+function manifestChecksumPayload(
+  manifest: Omit<ReleaseEvidenceBundleManifest, 'manifestChecksum' | 'manifestSignature'>,
+): Record<string, unknown> {
+  return {
+    artifacts: manifest.artifacts.map(artifact => ({
+      artifactId: artifact.artifactId,
+      checksum: artifact.checksum,
+      kind: artifact.kind,
+      required: artifact.required,
+      signature: artifact.signature,
+      sourceId: artifact.sourceId,
+      status: artifact.status ?? null,
+      version: artifact.version,
+    })),
+    decisionId: manifest.decisionId,
+    evidenceId: manifest.evidenceId,
+    generatedAt: manifest.generatedAt,
+    missingArtifacts: manifest.missingArtifacts,
+    promotionId: manifest.promotionId ?? null,
+    provider: manifest.provider,
+    rollbackId: manifest.rollbackId ?? null,
+    stream: manifest.stream,
+    triage: manifest.triage,
+    version: manifest.version,
+  };
+}
+
+function signManifest(checksum: string, decisionId: string): string {
+  return hashString(stableStringify({
+    checksum,
+    decisionId,
+    version: 'agros-release-evidence-manifest-v1',
+  }));
+}
+
+function releaseEvidenceArtifactRef(evidence: ReleaseEvidenceRecord): ReleaseHandoffArtifactRef {
+  const signed = signReleaseEvidence(evidence);
+  return {
+    kind: 'release_evidence',
+    artifactId: evidence.id,
+    version: 'agros-release-evidence-record-v1',
+    checksum: signed.evidenceChecksum,
+    signature: signed.providerSignature,
+    sourceId: evidence.id,
+    required: true,
+    generatedAt: evidence.checkedAt,
+    status: evidence.status,
+  };
+}
+
+function stableReleaseBundleChecksum(bundle: Pick<ReleaseBundleSummary, 'decision' | 'drift' | 'evidence' | 'reconciliation' | 'summary'>): string {
+  return hashString(stableStringify({
+    decisionSignature: bundle.decision.decisionSignature,
+    driftChecksum: bundle.drift.driftChecksum,
+    evidenceChecksum: bundle.decision.evidenceChecksum,
+    evidenceId: bundle.evidence.id,
+    reconciliationSignature: bundle.reconciliation?.reconciliationSignature ?? null,
+    summary: bundle.summary,
+  }));
+}
+
+function stablePromotionTimelineChecksum(
+  timeline: Pick<ReleasePromotionTimelineExport, 'promotion' | 'timeline' | 'ciChecks'>,
+): string {
+  return hashString(stableStringify({
+    ciChecks: timeline.ciChecks.map(check => check.checksum),
+    promotionSignature: timeline.promotion.promotionSignature,
+    status: timeline.promotion.status,
+    supervisionCardChecksum: timeline.promotion.supervisionCardChecksum,
+    timeline: timeline.timeline.map(event => event.checksum),
+  }));
+}
+
+function stableRollbackTimelineChecksum(
+  timeline: Pick<ReleaseRollbackTimelineExport, 'rollback' | 'timeline' | 'ciChecks'>,
+): string {
+  return hashString(stableStringify({
+    ciChecks: timeline.ciChecks.map(check => check.checksum),
+    promotionTimelineChecksum: timeline.rollback.promotionTimelineChecksum,
+    rollbackSignature: timeline.rollback.rollbackSignature,
+    status: timeline.rollback.status,
+    timeline: timeline.timeline.map(event => event.checksum),
+  }));
+}
+
+function releaseBundleArtifactRef(bundle: ReleaseBundleSummary): ReleaseHandoffArtifactRef {
+  const checksum = stableReleaseBundleChecksum(bundle);
+  return {
+    kind: 'release_bundle_summary',
+    artifactId: bundle.decision.id,
+    version: bundle.version,
+    checksum,
+    signature: signHandoffArtifact('release_bundle_summary', checksum, bundle.decision.decisionSignature),
+    sourceId: bundle.decision.id,
+    required: true,
+    generatedAt: bundle.generatedAt,
+    status: bundle.summary.releaseReady ? 'ready' : 'degraded',
+  };
+}
+
+function promotionTimelineArtifactRef(timeline: ReleasePromotionTimelineExport): ReleaseHandoffArtifactRef {
+  const checksum = stablePromotionTimelineChecksum(timeline);
+  return {
+    kind: 'promotion_timeline',
+    artifactId: timeline.promotion.id,
+    version: timeline.version,
+    checksum,
+    signature: signHandoffArtifact('promotion_timeline', checksum, timeline.promotion.promotionSignature),
+    sourceId: timeline.promotion.id,
+    required: true,
+    generatedAt: timeline.exportedAt,
+    status: timeline.promotion.status,
+  };
+}
+
+function rollbackTimelineArtifactRef(timeline: ReleaseRollbackTimelineExport): ReleaseHandoffArtifactRef {
+  const checksum = stableRollbackTimelineChecksum(timeline);
+  return {
+    kind: 'rollback_timeline',
+    artifactId: timeline.rollback.id,
+    version: timeline.version,
+    checksum,
+    signature: signHandoffArtifact('rollback_timeline', checksum, timeline.rollback.rollbackSignature),
+    sourceId: timeline.rollback.id,
+    required: true,
+    generatedAt: timeline.exportedAt,
+    status: timeline.rollback.status,
+  };
+}
+
+async function findPromotionForManifest(
+  decisionId: string,
+  promotionId?: string,
+): Promise<ReleasePromotionRecord | null> {
+  if (promotionId) return getStorageRepository().releasePromotions.getById(promotionId);
+  return (await getReleasePromotionHistory(undefined, 1, { decisionId }))[0] ?? null;
+}
+
+async function findRollbackForManifest(
+  decisionId: string,
+  promotionId?: string,
+  rollbackId?: string,
+): Promise<ReleaseRollbackRecord | null> {
+  if (rollbackId) return getStorageRepository().releaseRollbacks.getById(rollbackId);
+  const filters = promotionId ? { promotionId } : { decisionId };
+  return (await getReleaseRollbackHistory(undefined, 1, filters))[0] ?? null;
+}
+
+export async function createReleaseEvidenceBundleManifest(options: {
+  decisionId?: string;
+  stream?: string;
+  provider?: string;
+  promotionId?: string;
+  rollbackId?: string;
+  limit?: number;
+} = {}): Promise<ReleaseEvidenceBundleManifest> {
+  const bundle = await createReleaseBundleSummary({
+    decisionId: options.decisionId,
+    stream: options.stream,
+    provider: options.provider,
+    limit: options.limit ?? 8,
+  });
+  const artifacts: ReleaseHandoffArtifactRef[] = [
+    releaseEvidenceArtifactRef(bundle.evidence),
+    releaseBundleArtifactRef(bundle),
+  ];
+  const missingArtifacts: ReleaseHandoffArtifactKind[] = [];
+
+  const promotion = await findPromotionForManifest(bundle.decision.id, options.promotionId);
+  let promotionTimeline: ReleasePromotionTimelineExport | null = null;
+  if (promotion) {
+    promotionTimeline = await exportReleasePromotionTimeline(promotion.id);
+    artifacts.push(promotionTimelineArtifactRef(promotionTimeline));
+  } else {
+    missingArtifacts.push('promotion_timeline');
+  }
+
+  const rollback = await findRollbackForManifest(bundle.decision.id, promotion?.id, options.rollbackId);
+  if (rollback) {
+    const rollbackTimeline = await exportReleaseRollbackTimeline(rollback.id);
+    artifacts.push(rollbackTimelineArtifactRef(rollbackTimeline));
+  } else {
+    missingArtifacts.push('rollback_timeline');
+  }
+
+  const generatedAt = Date.now();
+  const triage = {
+    status: missingArtifacts.length ? 'degraded' as const : 'ready' as const,
+    summary: missingArtifacts.length
+      ? `Manifest is missing ${missingArtifacts.join(', ')} handoff artifacts.`
+      : 'Manifest covers release evidence, bundle summary, promotion timeline, and rollback timeline artifacts.',
+    recommendations: missingArtifacts.length
+      ? missingArtifacts.map(kind => `Export and attach ${kind.replace(/_/g, ' ')} before publishing the handoff bundle.`)
+      : ['Publish the manifest with the verified handoff artifacts.'],
+  };
+  const unsigned = {
+    version: 'agros-release-evidence-manifest-v1' as const,
+    generatedAt,
+    stream: bundle.stream,
+    provider: bundle.provider,
+    decisionId: bundle.decision.id,
+    evidenceId: bundle.evidence.id,
+    promotionId: promotion?.id,
+    rollbackId: rollback?.id,
+    artifacts,
+    missingArtifacts,
+    triage,
+  };
+  const manifestChecksum = hashString(stableStringify(manifestChecksumPayload(unsigned)));
+
+  return {
+    ...unsigned,
+    manifestChecksum,
+    manifestSignature: signManifest(manifestChecksum, bundle.decision.id),
+  };
+}
+
+function asObjectRecord(input: unknown): Record<string, unknown> | null {
+  return input && typeof input === 'object' && !Array.isArray(input)
+    ? input as Record<string, unknown>
+    : null;
+}
+
+function checksumFromUploadedArtifact(
+  kind: ReleaseHandoffArtifactKind,
+  artifact: unknown,
+): string | undefined {
+  const record = asObjectRecord(artifact);
+  if (!record) return undefined;
+  if (kind === 'release_evidence' && typeof record.id === 'string' && typeof record.stream === 'string') {
+    return signReleaseEvidence(record as unknown as ReleaseEvidenceRecord).evidenceChecksum;
+  }
+  if (
+    kind === 'release_bundle_summary'
+    && asObjectRecord(record.decision)
+    && asObjectRecord(record.drift)
+    && asObjectRecord(record.evidence)
+    && asObjectRecord(record.summary)
+  ) {
+    return stableReleaseBundleChecksum(record as unknown as ReleaseBundleSummary);
+  }
+  if (kind === 'promotion_timeline' && asObjectRecord(record.promotion) && Array.isArray(record.timeline)) {
+    return stablePromotionTimelineChecksum(record as unknown as ReleasePromotionTimelineExport);
+  }
+  if (kind === 'rollback_timeline' && asObjectRecord(record.rollback) && Array.isArray(record.timeline)) {
+    return stableRollbackTimelineChecksum(record as unknown as ReleaseRollbackTimelineExport);
+  }
+  if (typeof record.exportChecksum === 'string') return record.exportChecksum;
+  if (typeof record.bundleChecksum === 'string') return record.bundleChecksum;
+  if (typeof record.evidenceChecksum === 'string') return record.evidenceChecksum;
+  if (record.bundle && typeof (record.bundle as Record<string, unknown>).bundleChecksum === 'string') {
+    return (record.bundle as Record<string, unknown>).bundleChecksum as string;
+  }
+  if (record.timeline && typeof (record.timeline as Record<string, unknown>).exportChecksum === 'string') {
+    return (record.timeline as Record<string, unknown>).exportChecksum as string;
+  }
+  return hashString(stableStringify(record));
+}
+
+export function verifyReleaseHandoffArtifacts(
+  input: ReleaseArtifactVerificationInput,
+): ReleaseArtifactVerificationReport {
+  const { manifest } = input;
+  const computedManifestChecksum = hashString(stableStringify(manifestChecksumPayload({
+    version: manifest.version,
+    generatedAt: manifest.generatedAt,
+    stream: manifest.stream,
+    provider: manifest.provider,
+    decisionId: manifest.decisionId,
+    evidenceId: manifest.evidenceId,
+    promotionId: manifest.promotionId,
+    rollbackId: manifest.rollbackId,
+    artifacts: manifest.artifacts,
+    missingArtifacts: manifest.missingArtifacts,
+    triage: manifest.triage,
+  })));
+  const signatureMatched = computedManifestChecksum === manifest.manifestChecksum
+    && manifest.manifestSignature === signManifest(manifest.manifestChecksum, manifest.decisionId);
+  const mismatches: string[] = [];
+  if (computedManifestChecksum !== manifest.manifestChecksum) {
+    mismatches.push('Manifest checksum does not match manifest contents.');
+  }
+  if (!signatureMatched) {
+    mismatches.push('Manifest signature does not match the manifest checksum.');
+  }
+
+  const artifacts = manifest.artifacts.map(ref => {
+    const uploaded = input.artifacts?.[ref.kind];
+    const actualChecksum = checksumFromUploadedArtifact(ref.kind, uploaded);
+    const matched = actualChecksum === ref.checksum;
+    const detail = matched
+      ? `${ref.kind} checksum matched.`
+      : actualChecksum
+        ? `${ref.kind} checksum mismatch.`
+        : `${ref.kind} artifact was not uploaded for verification.`;
+    if (!matched) mismatches.push(detail);
+    return {
+      kind: ref.kind,
+      artifactId: ref.artifactId,
+      expectedChecksum: ref.checksum,
+      actualChecksum,
+      matched,
+      detail,
+    };
+  });
+  const missingRequired = artifacts.filter(artifact => !artifact.matched).length;
+  const status = missingRequired || !signatureMatched
+    ? 'blocked'
+    : manifest.missingArtifacts.length
+      ? 'degraded'
+      : 'ready';
+
+  return {
+    version: 'agros-release-artifact-verification-v1',
+    verifiedAt: Date.now(),
+    status,
+    manifestChecksum: manifest.manifestChecksum,
+    computedManifestChecksum,
+    manifestSignature: manifest.manifestSignature,
+    signatureMatched,
+    artifacts,
+    mismatches,
+    recommendations: mismatches.length
+      ? ['Regenerate mismatched artifacts from the release API and rerun artifact verification before publishing.']
+      : manifest.triage.recommendations,
   };
 }
