@@ -1,6 +1,8 @@
 import { randomUUID } from 'crypto';
 import type { NextFunction, Request, Response } from 'express';
 import { logger } from './logger';
+import { resolveDatabaseRuntimeConfig } from '../storage/databaseConfig';
+import { resolveQueueRuntime } from '../workers/queueRuntime';
 
 export interface RuntimeValidationReport {
   status: 'ready' | 'degraded';
@@ -8,8 +10,11 @@ export interface RuntimeValidationReport {
   warnings: string[];
   config: {
     databasePath: string;
+    databaseProvider: string;
+    postgresConfigured: boolean;
     workersEnabled: boolean;
     redisConfigured: boolean;
+    queueMode: string;
     frontendUrl: string;
     logLevel: string;
   };
@@ -22,8 +27,10 @@ export interface RequestWithContext extends Request {
 export function validateRuntimeEnvironment(): RuntimeValidationReport {
   const warnings: string[] = [];
   const workersEnabled = process.env.ENABLE_WORKERS === 'true';
-  const redisConfigured = Boolean(process.env.REDIS_HOST);
-  const databasePath = process.env.DATABASE_PATH || './data/slotgpt.db';
+  const database = resolveDatabaseRuntimeConfig();
+  const queue = resolveQueueRuntime();
+  const redisConfigured = queue.mode === 'redis';
+  const databasePath = database.sqlitePath;
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
 
   if (process.env.NODE_ENV === 'production' && frontendUrl.includes('localhost')) {
@@ -31,14 +38,19 @@ export function validateRuntimeEnvironment(): RuntimeValidationReport {
   }
 
   if (workersEnabled && !redisConfigured) {
-    warnings.push('Workers are enabled but REDIS_HOST is not set; local Redis will be assumed');
+    warnings.push('Workers are enabled without REDIS_HOST; deterministic local queue fallback will be used');
   }
 
   if (
     process.env.NODE_ENV === 'production'
+    && database.provider === 'sqlite'
     && (databasePath.includes('apps/backend/data') || databasePath === './data/slotgpt.db')
   ) {
     warnings.push('DATABASE_PATH should point to a persistent volume in hosted production');
+  }
+
+  if (database.provider === 'postgres' && !database.postgresUrl) {
+    warnings.push('DATABASE_URL is required when DATABASE_PROVIDER=postgres');
   }
 
   return {
@@ -47,8 +59,11 @@ export function validateRuntimeEnvironment(): RuntimeValidationReport {
     warnings,
     config: {
       databasePath,
+      databaseProvider: database.provider,
+      postgresConfigured: Boolean(database.postgresUrl),
       workersEnabled,
       redisConfigured,
+      queueMode: queue.mode,
       frontendUrl,
       logLevel: process.env.LOG_LEVEL || 'info',
     },

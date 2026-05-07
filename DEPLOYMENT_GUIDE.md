@@ -21,7 +21,10 @@ Important variables:
 
 - `FRONTEND_URL`: deployed frontend origin.
 - `VITE_API_URL`: frontend API base URL, usually `https://<backend>/api`.
-- `DATABASE_PATH`: backend SQLite path. In production use a persistent volume, for example `/data/slotgpt.db`.
+- `DATABASE_PROVIDER`: `sqlite` for the current runtime fallback or `postgres` for migration preparation.
+- `DATABASE_PATH`: backend SQLite path. In production SQLite fallback mode, use a persistent volume, for example `/data/slotgpt.db`.
+- `DATABASE_URL`: Postgres connection string used by the Phase 1 migration adapter when `DATABASE_PROVIDER=postgres`.
+- `RUN_MIGRATIONS`: set to `false` only when migrations are handled externally.
 - `ENABLE_WORKERS`: set `true` only when Redis is configured.
 - `REDIS_HOST` and `REDIS_PORT`: worker queue backend.
 - `LOG_LEVEL`: `debug`, `info`, `warn`, or `error`.
@@ -73,6 +76,9 @@ NODE_ENV=production
 PORT=3001
 LOG_LEVEL=info
 DATABASE_PATH=/data/slotgpt.db
+DATABASE_PROVIDER=sqlite
+DATABASE_URL=
+RUN_MIGRATIONS=true
 ENABLE_WORKERS=true
 FRONTEND_URL=https://<vercel-frontend>
 REDIS_HOST=<railway-redis-host>

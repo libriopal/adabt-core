@@ -10,8 +10,10 @@
     "dev": "node scripts/dev.mjs",
     "build": "npm run build --prefix apps/frontend && npm run build --prefix apps/backend",
     "test": "npm test --prefix apps/backend",
+    "migrate": "npm run migrate --prefix apps/backend",
     "validate": "node scripts/validate-production.mjs",
     "validate:phase0": "node scripts/validate-phase0.mjs",
+    "validate:phase1": "node scripts/validate-phase1.mjs",
     "dev:frontend": "npm run dev --prefix apps/frontend",
     "dev:backend": "npm run dev --prefix apps/backend"
   }

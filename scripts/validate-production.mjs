@@ -20,6 +20,9 @@ function run(label, command, args, options = {}) {
 
 run('frontend build', 'npm', ['run', 'build', '--prefix', 'apps/frontend']);
 run('backend build', 'npm', ['run', 'build', '--prefix', 'apps/backend']);
+run('sqlite migration runner', 'npm', ['run', 'migrate'], {
+  env: { ...process.env, DATABASE_PROVIDER: 'sqlite', DATABASE_PATH: ':memory:' },
+});
 run('backend tests', 'npm', ['test', '--prefix', 'apps/backend']);
 
 const tsx = resolve(root, 'apps/backend/node_modules/.bin/tsx');

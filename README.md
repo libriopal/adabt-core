@@ -13,6 +13,7 @@ AGROS is a deterministic adaptive research system for slot-design simulation, se
 npm install
 npm run build
 npm test
+npm run migrate
 ```
 
 Run local development servers:
@@ -35,6 +36,12 @@ Phase 0 local stabilization can be checked with:
 
 ```bash
 npm run validate:phase0
+```
+
+Phase 1 database and queue runtime plumbing can be checked with:
+
+```bash
+npm run validate:phase1
 ```
 
 ## Deployment
@@ -68,4 +75,4 @@ See `DEPLOYMENT_GUIDE.md` for environment variables and provider-specific setup.
 
 ## State
 
-Backend SQLite runtime files are intentionally ignored. In production, set `DATABASE_PATH` to a persistent volume path such as `/data/slotgpt.db`.
+Backend SQLite runtime files are intentionally ignored. Local runtime defaults to `DATABASE_PROVIDER=sqlite` and `DATABASE_PATH=./data/slotgpt.db`. Phase 1 also includes a Postgres migration adapter using `DATABASE_PROVIDER=postgres` and `DATABASE_URL`, while request storage remains on the deterministic SQLite fallback until the production adapter cutover phase.

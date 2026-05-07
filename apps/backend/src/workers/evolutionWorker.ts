@@ -1,29 +1,34 @@
 import { Queue, Worker, Job } from 'bullmq';
 import { Design } from '../types';
 import { logger } from '../diagnostics/logger';
+import { createLocalQueue, createLocalWorker, resolveQueueRuntime } from './queueRuntime';
 
-const connection = {
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
-};
+const queueRuntime = resolveQueueRuntime();
+const connection = queueRuntime.mode === 'redis'
+  ? { host: queueRuntime.host ?? 'localhost', port: queueRuntime.port ?? 6379 }
+  : null;
 
-export const evolutionQueue = new Queue('evolution', {
-  connection,
-  defaultJobOptions: {
-    attempts: 3,
-    backoff: { type: 'exponential', delay: 1000 },
-  },
-});
+export const evolutionQueue = connection
+  ? new Queue('evolution', {
+    connection,
+    defaultJobOptions: {
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 1000 },
+    },
+  })
+  : createLocalQueue('evolution');
 
-export const evolutionWorker = new Worker(
-  'evolution',
-  async (job: Job) => {
-    const { runId, generation, designIds } = job.data;
-    logger.info('evolution_worker_batch', { runId, generation, designCount: designIds.length });
-    return { processed: designIds.length, runId };
-  },
-  { concurrency: 4, connection },
-);
+export const evolutionWorker = connection
+  ? new Worker(
+    'evolution',
+    async (job: Job) => {
+      const { runId, generation, designIds } = job.data;
+      logger.info('evolution_worker_batch', { runId, generation, designCount: designIds.length });
+      return { processed: designIds.length, runId };
+    },
+    { concurrency: 4, connection },
+  )
+  : createLocalWorker('evolution');
 
 export async function queueEvolutionBatch(
   runId: string,

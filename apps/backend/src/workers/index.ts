@@ -1,9 +1,11 @@
 import { evolutionWorker, evolutionQueue } from './evolutionWorker';
 import { scraperQueue, scraperWorker, scheduleScraping } from './scraperWorker';
 import { logger } from '../diagnostics/logger';
+import { resolveQueueRuntime } from './queueRuntime';
 
 export function startWorkers(): void {
-  logger.info('workers_starting');
+  const queueRuntime = resolveQueueRuntime();
+  logger.info('workers_starting', { queueMode: queueRuntime.mode });
 
   scheduleScraping().catch(error => logger.error('scraper_schedule_failed', {
     error: error instanceof Error ? error.message : String(error),

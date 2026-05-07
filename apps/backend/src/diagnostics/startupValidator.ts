@@ -12,6 +12,7 @@ export interface StartupValidationReport {
 }
 
 const REQUIRED_TABLES = [
+  'schema_migrations',
   'designs',
   'evolution_runs',
   'demand_cache',
