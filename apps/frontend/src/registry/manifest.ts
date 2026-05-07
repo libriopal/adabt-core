@@ -101,8 +101,10 @@ const AGROS_LAYERS: Omit<LayerManifest, 'status'>[] = [
     name: 'Demand Intelligence',
     order: 7,
     components: [
-      { name: 'DemandEngine', path: 'engine/demand.ts', type: 'service', status: 'evolving', dependencies: [] },
-      { name: 'TrendAnalyzer', path: 'engine/trends.ts', type: 'service', status: 'evolving', dependencies: ['DemandEngine'] },
+      { name: 'DemandEngine', path: 'backend:services/demandEngine.ts', type: 'service', status: 'stable', dependencies: [] },
+      { name: 'SourceAdapters', path: 'backend:services/demandEngine.ts', type: 'service', status: 'stable', dependencies: ['DemandEngine'] },
+      { name: 'TrendAnalyzer', path: 'backend:services/demandEngine.ts', type: 'service', status: 'stable', dependencies: ['SourceAdapters'] },
+      { name: 'DemandIntelligencePanel', path: 'components/DemandIntelligencePanel.tsx', type: 'ui', status: 'stable', dependencies: ['DemandEngine'] },
     ],
     dependencies: [],
   },

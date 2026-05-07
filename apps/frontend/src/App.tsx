@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { EvolutionVisualizer } from './components/EvolutionVisualizer';
 import { DebugPanel } from './components/DebugPanel';
 import { EvolutionSimulatorPanel } from './components/EvolutionSimulatorPanel';
+import { DemandIntelligencePanel } from './components/DemandIntelligencePanel';
 import { useBackend } from './hooks/useBackend';
 import { agros, AGROSState } from './agros/init';
 
@@ -15,7 +16,7 @@ const App: React.FC = () => {
   const [agrosState, setAgrosState] = useState<AGROSState | null>(null);
   const [showDebug, setShowDebug] = useState(false);
 
-  const { loading, generateBatch, startEvolution, getDemand } = useBackend({
+  const { loading, generateBatch, startEvolution } = useBackend({
     onError: (e) => setError(e),
   });
 
@@ -83,6 +84,7 @@ const App: React.FC = () => {
         {error && <ErrorBanner error={error} onDismiss={() => setError(null)} />}
 
         <EvolutionSimulatorPanel />
+        <DemandIntelligencePanel />
 
         <div style={{ background: '#12172B', borderRadius: 8, padding: 24, border: '1px solid #1E293B', marginBottom: 24 }}>
           <h2 style={{ color: '#94A3B8', fontSize: 14, marginTop: 0, marginBottom: 16 }}>Generate Designs</h2>

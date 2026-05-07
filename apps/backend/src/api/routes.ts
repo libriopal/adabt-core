@@ -181,7 +181,10 @@ router.get('/export/:id', (req, res) => {
 
 router.get('/demand', async (req, res) => {
   try {
-    const latest = await demandEngine.updateDemand();
+    const input = typeof req.query.input === 'string' && req.query.input.trim()
+      ? req.query.input.trim()
+      : undefined;
+    const latest = await demandEngine.updateDemand(input);
     res.json({ success: true, demand: latest });
   } catch (error) {
     const id = dbgId('DMD');

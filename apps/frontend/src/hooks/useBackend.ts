@@ -68,7 +68,10 @@ export function useBackend({ onError }: UseBackendOptions = {}) {
 
   const exportDesign = useCallback((id: string) => request(`/export/${id}`), [request]);
 
-  const getDemand = useCallback(() => request('/demand'), [request]);
+  const getDemand = useCallback((params?: { input?: string }) => {
+    const qs = params?.input ? `?${new URLSearchParams({ input: params.input }).toString()}` : '';
+    return request(`/demand${qs}`);
+  }, [request]);
 
   return { loading, generateBatch, startEvolution, getEvolutionState, pauseEvolution, getDesigns, importDesigns, exportDesign, getDemand };
 }

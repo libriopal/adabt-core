@@ -71,17 +71,43 @@ export interface RawReview {
 }
 
 export interface DemandSignal {
+  source?: string;
   sentiment: number;
   intensity: number;
   keywords: string[];
   trendWeight: number;
+  popularity?: number;
+  confidence?: number;
 }
 
 export interface DemandResult {
   demandScore: number;
-  volume: number;
-  keywordVector: Record<string, number>;
-  signals: DemandSignal[];
+  trendVector: number[];
+  keywordClusters: string[];
+  timestamp: number;
+  volume?: number;
+  keywordVector?: Record<string, number>;
+  signals?: DemandSignal[];
+  sourceBreakdown?: DemandSourceBreakdown[];
+  sourceWeights?: Record<string, number>;
+  reinforcementInputs?: {
+    demandWeight: number;
+    trendMomentum: number;
+    sentimentBias: number;
+    popularityPressure: number;
+  };
+  checksum?: string;
+}
+
+export interface DemandSourceBreakdown {
+  source: string;
+  signalCount: number;
+  sentiment: number;
+  intensity: number;
+  trendWeight: number;
+  popularity: number;
+  confidence: number;
+  keywords: string[];
 }
 
 export interface SlotGPTOutput {

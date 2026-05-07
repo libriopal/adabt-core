@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { batchGenerator } from '../src/services/batchGenerator';
+import { demandEngine } from '../src/services/demandEngine';
 import { evolutionEngine } from '../src/services/evolutionEngine';
 import { initDatabase } from '../src/storage/db';
 
@@ -54,5 +55,15 @@ describe('Integration Tests', () => {
     const state = evolutionEngine.getState(runId);
     expect(state).toBeDefined();
     expect(state?.status).toBe('running');
+  });
+
+  it('should compute source-weighted demand intelligence', async () => {
+    const demand = await demandEngine.updateDemand('mythic bonus volatility');
+
+    expect(demand.demandScore).toBeGreaterThan(0);
+    expect(demand.keywordClusters.length).toBeGreaterThan(0);
+    expect(demand.sourceBreakdown?.length).toBeGreaterThan(1);
+    expect(demand.reinforcementInputs?.demandWeight).toBeGreaterThan(0);
+    expect(demand.checksum).toBeDefined();
   });
 });
