@@ -40,4 +40,24 @@ export class DeterministicPRNG {
     }
     return result;
   }
+
+  nextFloat(min: number, max: number): number {
+    return this.next() * (max - min) + min;
+  }
+
+  // Box-Muller transform for Gaussian distribution
+  nextGaussian(mean: number = 0, std: number = 1): number {
+    const u1 = this.next();
+    const u2 = this.next();
+    const z0 = Math.sqrt(-2 * Math.log(u1 + 1e-10)) * Math.cos(2 * Math.PI * u2);
+    return z0 * std + mean;
+  }
+
+  /**
+   * Return the current internal seed so checkpoints can capture
+   * and later reconstruct this PRNG's exact position.
+   */
+  getState(): number {
+    return this.seed;
+  }
 }

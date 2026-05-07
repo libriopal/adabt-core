@@ -1,7 +1,0 @@
-env
-PORT=3001
-FRONTEND_URL=http://localhost:3000
-NODE_ENV=development
-ENABLE_WORKERS=false        # Set true if Redis is running
-REDIS_HOST=localhost
-REDIS_PORT=6379
