@@ -3,6 +3,7 @@ import { EvolutionVisualizer } from './components/EvolutionVisualizer';
 import { DebugPanel } from './components/DebugPanel';
 import { EvolutionSimulatorPanel } from './components/EvolutionSimulatorPanel';
 import { DemandIntelligencePanel } from './components/DemandIntelligencePanel';
+import { ReinforcementOptimizerPanel } from './components/ReinforcementOptimizerPanel';
 import { useBackend } from './hooks/useBackend';
 import { agros, AGROSState } from './agros/init';
 
@@ -85,6 +86,7 @@ const App: React.FC = () => {
 
         <EvolutionSimulatorPanel />
         <DemandIntelligencePanel />
+        <ReinforcementOptimizerPanel />
 
         <div style={{ background: '#12172B', borderRadius: 8, padding: 24, border: '1px solid #1E293B', marginBottom: 24 }}>
           <h2 style={{ color: '#94A3B8', fontSize: 14, marginTop: 0, marginBottom: 16 }}>Generate Designs</h2>

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { batchGenerator } from '../src/services/batchGenerator';
 import { demandEngine } from '../src/services/demandEngine';
 import { evolutionEngine } from '../src/services/evolutionEngine';
+import { reinforcementEngine } from '../src/services/reinforcementEngine';
 import { initDatabase } from '../src/storage/db';
 
 beforeAll(() => {
@@ -65,5 +66,14 @@ describe('Integration Tests', () => {
     expect(demand.sourceBreakdown?.length).toBeGreaterThan(1);
     expect(demand.reinforcementInputs?.demandWeight).toBeGreaterThan(0);
     expect(demand.checksum).toBeDefined();
+  });
+
+  it('should verify deterministic reinforcement replay', async () => {
+    const replay = await reinforcementEngine.verifyReplay();
+
+    expect(replay.stable).toBe(true);
+    expect(replay.firstChecksum).toBe(replay.secondChecksum);
+    expect(replay.decisionCount).toBe(3);
+    expect(Object.values(replay.gateStatuses).reduce((sum, count) => sum + count, 0)).toBe(3);
   });
 });

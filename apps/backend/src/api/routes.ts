@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { batchGenerator } from '../services/batchGenerator';
 import { evolutionEngine } from '../services/evolutionEngine';
 import { demandEngine } from '../services/demandEngine';
-import { DesignDB, EvolutionDB } from '../storage/db';
+import { reinforcementEngine } from '../services/reinforcementEngine';
+import { DesignDB, ReinforcementDB } from '../storage/db';
 import { Design } from '../types';
 
 export const router = Router();
@@ -189,6 +190,17 @@ router.get('/demand', async (req, res) => {
   } catch (error) {
     const id = dbgId('DMD');
     console.error(`[${id}] /demand error:`, error);
+    res.status(500).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/reinforcement/replay', async (_req, res) => {
+  try {
+    const replay = await reinforcementEngine.verifyReplay();
+    res.json({ success: true, replay, recent: ReinforcementDB.getLatest(8) });
+  } catch (error) {
+    const id = dbgId('RFR');
+    console.error(`[${id}] /reinforcement/replay error:`, error);
     res.status(500).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
   }
 });

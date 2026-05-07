@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
-import { DBDesign, DBEvolutionRun, DemandResult, Design, EvolutionState } from '../types';
+import { DBDesign, DBEvolutionRun, DemandResult, Design, EvolutionState, ReinforcementDecision } from '../types';
 
 let db: Database.Database | null = null;
 
@@ -81,6 +81,25 @@ function createTables(): void {
       timestamp INTEGER NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+  `);
+
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS reinforcement_events (
+      id TEXT PRIMARY KEY,
+      design_id TEXT NOT NULL,
+      total REAL NOT NULL,
+      axes TEXT NOT NULL,
+      weights TEXT NOT NULL,
+      gate TEXT NOT NULL,
+      mutation_weight REAL NOT NULL,
+      lineage TEXT NOT NULL,
+      demand_checksum TEXT NOT NULL,
+      replay_checksum TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_reinforcement_design ON reinforcement_events(design_id);
+    CREATE INDEX IF NOT EXISTS idx_reinforcement_created ON reinforcement_events(created_at DESC);
   `);
 }
 
@@ -302,5 +321,49 @@ export const DemandDB = {
       keywordClusters: JSON.parse(row.keyword_clusters),
       timestamp: row.timestamp,
     };
+  },
+};
+
+// ─── ReinforcementDB ─────────────────────────────────────────────────────────
+
+export const ReinforcementDB = {
+  save(decision: ReinforcementDecision): void {
+    getDB().prepare(`
+      INSERT OR REPLACE INTO reinforcement_events
+        (id, design_id, total, axes, weights, gate, mutation_weight, lineage,
+         demand_checksum, replay_checksum, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      decision.id,
+      decision.designId,
+      decision.total,
+      JSON.stringify(decision.axes),
+      JSON.stringify(decision.weights),
+      JSON.stringify(decision.gate),
+      decision.mutationWeight,
+      JSON.stringify(decision.lineage),
+      decision.demandChecksum,
+      decision.replayChecksum,
+      Date.now(),
+    );
+  },
+
+  getLatest(limit = 20): ReinforcementDecision[] {
+    const rows = getDB()
+      .prepare('SELECT * FROM reinforcement_events ORDER BY created_at DESC LIMIT ?')
+      .all(limit) as any[];
+
+    return rows.map(row => ({
+      id: row.id,
+      designId: row.design_id,
+      total: row.total,
+      axes: JSON.parse(row.axes),
+      weights: JSON.parse(row.weights),
+      gate: JSON.parse(row.gate),
+      mutationWeight: row.mutation_weight,
+      lineage: JSON.parse(row.lineage),
+      demandChecksum: row.demand_checksum,
+      replayChecksum: row.replay_checksum,
+    }));
   },
 };

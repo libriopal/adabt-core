@@ -73,5 +73,7 @@ export function useBackend({ onError }: UseBackendOptions = {}) {
     return request(`/demand${qs}`);
   }, [request]);
 
-  return { loading, generateBatch, startEvolution, getEvolutionState, pauseEvolution, getDesigns, importDesigns, exportDesign, getDemand };
+  const getReinforcementReplay = useCallback(() => request('/reinforcement/replay'), [request]);
+
+  return { loading, generateBatch, startEvolution, getEvolutionState, pauseEvolution, getDesigns, importDesigns, exportDesign, getDemand, getReinforcementReplay };
 }

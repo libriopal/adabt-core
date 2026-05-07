@@ -103,7 +103,8 @@ export class EvolutionEngine {
         }
 
         const parents = this.selectParents(evaluated, state);
-        state.designs = this.generateNextGeneration(parents, state, signal);
+        const mutationWeights = new Map(evaluated.map(e => [e.design.id, e.mutationWeight]));
+        state.designs = this.generateNextGeneration(parents, state, signal, mutationWeights);
         state.currentGeneration++;
 
         try {
@@ -207,6 +208,7 @@ export class EvolutionEngine {
     parents: Design[],
     state: EvolutionState,
     signal: AbortSignal,
+    mutationWeights: Map<string, number> = new Map(),
   ): Design[] {
     const newGeneration: Design[] = [];
     const prng = new DeterministicPRNG(`${state.runId}_${state.currentGeneration}`);
@@ -218,7 +220,8 @@ export class EvolutionEngine {
       const parent1 = prng.pick(parents);
       const parent2 = prng.pick(parents);
       const child = this.crossover(parent1, parent2, prng, state.runId, state.currentGeneration);
-      this.mutate(child, state.mutationRate, prng);
+      const mutationRate = reinforcementEngine.getChildMutationRate(parent1, parent2, state.mutationRate, mutationWeights);
+      this.mutate(child, mutationRate, prng);
       newGeneration.push(child);
     }
 

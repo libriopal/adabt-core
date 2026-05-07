@@ -71,6 +71,7 @@ const AGROS_LAYERS: Omit<LayerManifest, 'status'>[] = [
     name: 'Evolution Layer',
     order: 4,
     components: [
+      { name: 'EvolutionEngine', path: 'backend:services/evolutionEngine.ts', type: 'core', status: 'stable', dependencies: ['DeterministicPRNG', 'ReinforcementEngine'] },
       { name: 'EvolutionSimulator', path: 'evolution/simulator.ts', type: 'core', status: 'stable', dependencies: ['DeterministicPRNG'] },
       { name: 'MutationEngine', path: 'evolution/mutation.ts', type: 'service', status: 'stable', dependencies: ['EvolutionSimulator'] },
       { name: 'SelectionPipeline', path: 'evolution/selection.ts', type: 'service', status: 'stable', dependencies: ['EvolutionSimulator'] },
@@ -89,17 +90,8 @@ const AGROS_LAYERS: Omit<LayerManifest, 'status'>[] = [
     dependencies: ['Deterministic Core'],
   },
   {
-    name: 'Reinforcement Layer',
-    order: 6,
-    components: [
-      { name: 'ReinforcementEngine', path: 'engine/reinforcement.ts', type: 'core', status: 'evolving', dependencies: ['EvolutionEngine', 'ScoringEngine'] },
-      { name: 'RewardShaper', path: 'engine/rewards.ts', type: 'service', status: 'evolving', dependencies: ['ReinforcementEngine'] },
-    ],
-    dependencies: ['Evolution Layer', 'Intent Processing'],
-  },
-  {
     name: 'Demand Intelligence',
-    order: 7,
+    order: 6,
     components: [
       { name: 'DemandEngine', path: 'backend:services/demandEngine.ts', type: 'service', status: 'stable', dependencies: [] },
       { name: 'SourceAdapters', path: 'backend:services/demandEngine.ts', type: 'service', status: 'stable', dependencies: ['DemandEngine'] },
@@ -107,6 +99,18 @@ const AGROS_LAYERS: Omit<LayerManifest, 'status'>[] = [
       { name: 'DemandIntelligencePanel', path: 'components/DemandIntelligencePanel.tsx', type: 'ui', status: 'stable', dependencies: ['DemandEngine'] },
     ],
     dependencies: [],
+  },
+  {
+    name: 'Reinforcement Layer',
+    order: 7,
+    components: [
+      { name: 'ReinforcementEngine', path: 'backend:services/reinforcementEngine.ts', type: 'core', status: 'stable', dependencies: ['DemandEngine', 'ScoringEngine'] },
+      { name: 'RewardShaper', path: 'backend:services/reinforcementEngine.ts', type: 'service', status: 'stable', dependencies: ['ReinforcementEngine'] },
+      { name: 'ReinforcementGate', path: 'backend:services/reinforcementEngine.ts', type: 'service', status: 'stable', dependencies: ['ReinforcementEngine'] },
+      { name: 'ReinforcementReplayVerifier', path: 'backend:services/reinforcementEngine.ts', type: 'service', status: 'stable', dependencies: ['ReinforcementEngine'] },
+      { name: 'ReinforcementOptimizerPanel', path: 'components/ReinforcementOptimizerPanel.tsx', type: 'ui', status: 'stable', dependencies: ['ReinforcementEngine'] },
+    ],
+    dependencies: ['Intent Processing', 'Demand Intelligence'],
   },
   {
     name: 'STRUTHIO-SEC Mesh',
@@ -135,6 +139,8 @@ const AGROS_LAYERS: Omit<LayerManifest, 'status'>[] = [
     components: [
       { name: 'EvolutionVisualizer', path: 'components/EvolutionVisualizer.tsx', type: 'ui', status: 'stable', dependencies: ['EvolutionEngine'] },
       { name: 'EvolutionSimulatorPanel', path: 'components/EvolutionSimulatorPanel.tsx', type: 'ui', status: 'stable', dependencies: ['EvolutionSimulator'] },
+      { name: 'DemandIntelligencePanel', path: 'components/DemandIntelligencePanel.tsx', type: 'ui', status: 'stable', dependencies: ['DemandEngine'] },
+      { name: 'ReinforcementOptimizerPanel', path: 'components/ReinforcementOptimizerPanel.tsx', type: 'ui', status: 'stable', dependencies: ['ReinforcementEngine'] },
       { name: 'MemoryInspector', path: 'components/MemoryInspector.tsx', type: 'ui', status: 'evolving', dependencies: ['MemoryGraph'] },
       { name: 'DebugPanel', path: 'components/DebugPanel.tsx', type: 'ui', status: 'evolving', dependencies: ['MetricsCollector', 'TraceLogger'] },
     ],

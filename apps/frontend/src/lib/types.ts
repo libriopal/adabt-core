@@ -110,6 +110,55 @@ export interface DemandSourceBreakdown {
   keywords: string[];
 }
 
+export interface ReinforcementAxes {
+  demand: number;
+  engagement: number;
+  novelty: number;
+  retention: number;
+  diversity: number;
+  stability: number;
+}
+
+export interface ReinforcementWeights extends ReinforcementAxes {}
+
+export interface ReinforcementGateReport {
+  status: 'pass' | 'warn' | 'blocked';
+  reasons: string[];
+  stabilityBoundary: number;
+  confidenceBoundary: number;
+  mutationBoundary: number;
+}
+
+export interface ReinforcementLineageEntry {
+  designId: string;
+  parentIds: string[];
+  generation: number;
+  inheritedScore: number;
+  rewardChecksum: string;
+}
+
+export interface ReinforcementDecision {
+  id: string;
+  designId: string;
+  total: number;
+  axes: ReinforcementAxes;
+  weights: ReinforcementWeights;
+  gate: ReinforcementGateReport;
+  mutationWeight: number;
+  lineage: ReinforcementLineageEntry;
+  demandChecksum: string;
+  replayChecksum: string;
+}
+
+export interface ReinforcementReplaySummary {
+  stable: boolean;
+  checksum: string;
+  firstChecksum: string;
+  secondChecksum: string;
+  decisionCount: number;
+  gateStatuses: Record<string, number>;
+}
+
 export interface SlotGPTOutput {
   id: string;
   transformedTheme: string;
