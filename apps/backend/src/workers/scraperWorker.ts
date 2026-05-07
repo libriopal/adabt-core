@@ -1,5 +1,6 @@
 import { Queue, Worker } from 'bullmq';
 import { demandEngine } from '../services/demandEngine';
+import { logger } from '../diagnostics/logger';
 
 const connection = {
   host: process.env.REDIS_HOST || 'localhost',
@@ -11,7 +12,7 @@ export const scraperQueue = new Queue('scraper', { connection });
 export const scraperWorker = new Worker(
   'scraper',
   async () => {
-    console.log('[Worker] Running demand update');
+    logger.info('scraper_worker_demand_update');
     const result = await demandEngine.updateDemand();
     return { score: result.demandScore, keywords: result.keywordClusters };
   },

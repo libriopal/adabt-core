@@ -1,0 +1,13 @@
+node_modules
+dist
+.git
+.github
+.env
+.env.*
+!.env.example
+apps/backend/data/*.db
+apps/backend/data/*.db-shm
+apps/backend/data/*.db-wal
+npm-debug.log
+Dockerfile
+docker-compose.yml

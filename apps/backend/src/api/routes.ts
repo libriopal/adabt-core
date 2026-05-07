@@ -6,11 +6,27 @@ import { demandEngine } from '../services/demandEngine';
 import { reinforcementEngine } from '../services/reinforcementEngine';
 import { DesignDB, ReinforcementDB } from '../storage/db';
 import { Design } from '../types';
+import { continuityHub } from '../diagnostics/continuityHub';
+import { logger } from '../diagnostics/logger';
+import { runReplaySuite } from '../diagnostics/replaySuite';
+import { collectSystemDiagnostics } from '../diagnostics/systemDiagnostics';
+import { RequestWithContext, validateRuntimeEnvironment } from '../diagnostics/runtimeValidation';
 
 export const router = Router();
 
-function dbgId(prefix: string) {
-  return `${prefix}-${Math.random().toString(16).slice(2, 6).toUpperCase()}`;
+function dbgId(prefix: string, req?: RequestWithContext) {
+  return req?.requestId || `${prefix}-${Math.random().toString(16).slice(2, 6).toUpperCase()}`;
+}
+
+function logRouteError(prefix: string, req: RequestWithContext, error: unknown) {
+  const id = dbgId(prefix, req);
+  logger.error('route_error', {
+    debugId: id,
+    route: req.path,
+    method: req.method,
+    error: error instanceof Error ? error.message : String(error),
+  });
+  return id;
 }
 
 const GenerateBatchSchema = z.object({
@@ -33,7 +49,7 @@ const ImportSchema = z.object({
   preserveIds: z.boolean().default(false),
 });
 
-router.post('/generate-batch', async (req, res) => {
+router.post('/generate-batch', async (req: RequestWithContext, res) => {
   try {
     const body = GenerateBatchSchema.parse(req.body);
     const startTime = Date.now();
@@ -55,13 +71,12 @@ router.post('/generate-batch', async (req, res) => {
       },
     });
   } catch (error) {
-    const id = dbgId('GEN');
-    console.error(`[${id}] /generate-batch error:`, error);
+    const id = logRouteError('GEN', req, error);
     res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
   }
 });
 
-router.post('/evolve', async (req, res) => {
+router.post('/evolve', async (req: RequestWithContext, res) => {
   try {
     const body = EvolveSchema.parse(req.body);
     let runId: string;
@@ -69,19 +84,20 @@ router.post('/evolve', async (req, res) => {
     if (body.resumeRunId) {
       const resumed = await evolutionEngine.resumeEvolution(body.resumeRunId);
       if (!resumed) {
-        const id = dbgId('EVO');
-        console.error(`[${id}] /evolve resume not found: ${body.resumeRunId}`);
+        const id = dbgId('EVO', req);
+        logger.warn('evolution_resume_not_found', { debugId: id, runId: body.resumeRunId });
         return res.status(404).json({ success: false, debugId: id, error: 'Run not found or not paused' });
       }
       runId = body.resumeRunId;
+      continuityHub.resume(runId);
     } else {
       let seeds = body.seedDesigns || [];
       if (seeds.length === 0) {
         seeds = DesignDB.getAll({ limit: body.populationSize, minScore: 0.5 });
       }
       if (seeds.length === 0) {
-        const id = dbgId('EVO');
-        console.error(`[${id}] /evolve no seed designs available`);
+        const id = dbgId('EVO', req);
+        logger.warn('evolution_seed_designs_missing', { debugId: id });
         return res.status(400).json({ success: false, debugId: id, error: 'No seed designs available. Generate a batch first.' });
       }
 
@@ -97,16 +113,15 @@ router.post('/evolve', async (req, res) => {
 
     res.json({ success: true, runId, status: 'running' });
   } catch (error) {
-    const id = dbgId('EVO');
-    console.error(`[${id}] /evolve error:`, error);
+    const id = logRouteError('EVO', req, error);
     res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
   }
 });
 
-router.get('/evolve/:runId', (req, res) => {
+router.get('/evolve/:runId', (req: RequestWithContext, res) => {
   const state = evolutionEngine.getState(req.params.runId);
   if (!state) {
-    const id = dbgId('EVO');
+    const id = dbgId('EVO', req);
     return res.status(404).json({ success: false, debugId: id, error: 'Evolution run not found' });
   }
 
@@ -123,12 +138,13 @@ router.get('/evolve/:runId', (req, res) => {
   });
 });
 
-router.post('/evolve/:runId/pause', (req, res) => {
+router.post('/evolve/:runId/pause', (req: RequestWithContext, res) => {
   const paused = evolutionEngine.pauseEvolution(req.params.runId);
   if (!paused) {
-    const id = dbgId('EVO');
+    const id = dbgId('EVO', req);
     return res.status(404).json({ success: false, debugId: id, error: 'Evolution run not running' });
   }
+  continuityHub.interrupt(req.params.runId, 'pause_endpoint');
   res.json({ success: true, status: 'paused' });
 });
 
@@ -142,16 +158,16 @@ router.get('/designs', (req, res) => {
   res.json({ success: true, designs, stats: DesignDB.getStats() });
 });
 
-router.get('/designs/:id', (req, res) => {
+router.get('/designs/:id', (req: RequestWithContext, res) => {
   const design = DesignDB.getById(req.params.id);
   if (!design) {
-    const id = dbgId('DES');
+    const id = dbgId('DES', req);
     return res.status(404).json({ success: false, debugId: id, error: 'Design not found' });
   }
   res.json({ success: true, design });
 });
 
-router.post('/import', (req, res) => {
+router.post('/import', (req: RequestWithContext, res) => {
   try {
     const body = ImportSchema.parse(req.body);
     const imported = body.designs.map((design: Design) => {
@@ -164,23 +180,22 @@ router.post('/import', (req, res) => {
     });
     res.json({ success: true, imported: imported.length, designs: imported });
   } catch (error) {
-    const id = dbgId('IMP');
-    console.error(`[${id}] /import error:`, error);
+    const id = logRouteError('IMP', req, error);
     res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
   }
 });
 
-router.get('/export/:id', (req, res) => {
+router.get('/export/:id', (req: RequestWithContext, res) => {
   const design = DesignDB.getById(req.params.id);
   if (!design) {
-    const id = dbgId('DES');
+    const id = dbgId('DES', req);
     return res.status(404).json({ success: false, debugId: id, error: 'Design not found' });
   }
   DesignDB.updateExported(design.id, true);
   res.json({ success: true, export: { version: '1.0.0', exportedAt: Date.now(), design } });
 });
 
-router.get('/demand', async (req, res) => {
+router.get('/demand', async (req: RequestWithContext, res) => {
   try {
     const input = typeof req.query.input === 'string' && req.query.input.trim()
       ? req.query.input.trim()
@@ -188,28 +203,85 @@ router.get('/demand', async (req, res) => {
     const latest = await demandEngine.updateDemand(input);
     res.json({ success: true, demand: latest });
   } catch (error) {
-    const id = dbgId('DMD');
-    console.error(`[${id}] /demand error:`, error);
+    const id = logRouteError('DMD', req, error);
     res.status(500).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
   }
 });
 
-router.get('/reinforcement/replay', async (_req, res) => {
+router.get('/reinforcement/replay', async (req: RequestWithContext, res) => {
   try {
     const replay = await reinforcementEngine.verifyReplay();
     res.json({ success: true, replay, recent: ReinforcementDB.getLatest(8) });
   } catch (error) {
-    const id = dbgId('RFR');
-    console.error(`[${id}] /reinforcement/replay error:`, error);
+    const id = logRouteError('RFR', req, error);
+    res.status(500).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/replay/verify', async (req: RequestWithContext, res) => {
+  try {
+    const replay = await runReplaySuite();
+    res.status(replay.stable ? 200 : 503).json({ success: replay.stable, replay });
+  } catch (error) {
+    const id = logRouteError('RPY', req, error);
+    res.status(500).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/continuity/status', (_req, res) => {
+  res.json({ success: true, continuity: continuityHub.getStatus() });
+});
+
+router.post('/continuity/:runId/interrupt', (req: RequestWithContext, res) => {
+  const paused = evolutionEngine.pauseEvolution(req.params.runId);
+  const event = continuityHub.interrupt(req.params.runId, typeof req.body?.reason === 'string' ? req.body.reason : 'manual');
+  res.status(paused ? 200 : 202).json({ success: true, paused, event });
+});
+
+router.post('/continuity/:runId/resume', async (req: RequestWithContext, res) => {
+  try {
+    const resumed = await evolutionEngine.resumeEvolution(req.params.runId);
+    const event = continuityHub.resume(req.params.runId);
+    res.status(resumed ? 200 : 202).json({ success: true, resumed, event });
+  } catch (error) {
+    const id = logRouteError('CTY', req, error);
+    res.status(500).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/ready', (req, res) => {
+  const runtime = validateRuntimeEnvironment();
+  const status = runtime.status === 'ready' ? 'ready' : 'degraded';
+  res.status(status === 'ready' ? 200 : 503).json({
+    success: status === 'ready',
+    status,
+    timestamp: Date.now(),
+    runtime,
+    database: DesignDB.getStats(),
+    requestId: (req as RequestWithContext).requestId,
+  });
+});
+
+router.get('/diagnostics', async (req: RequestWithContext, res) => {
+  try {
+    const diagnostics = await collectSystemDiagnostics();
+    res.status(diagnostics.status === 'ready' ? 200 : 503).json({ success: diagnostics.status === 'ready', diagnostics });
+  } catch (error) {
+    const id = logRouteError('DGN', req, error);
     res.status(500).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
   }
 });
 
 router.get('/health', (req, res) => {
+  const runtime = validateRuntimeEnvironment();
   res.json({
-    status: 'healthy',
+    status: runtime.status === 'ready' ? 'healthy' : 'degraded',
     timestamp: Date.now(),
+    uptimeSeconds: process.uptime(),
     activeEvolutions: evolutionEngine.getActiveRuns().length,
+    continuity: continuityHub.getStatus(),
+    runtime,
     database: DesignDB.getStats(),
+    requestId: (req as RequestWithContext).requestId,
   });
 });

@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            apps/frontend/package-lock.json
+            apps/backend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix apps/frontend
+
+      - name: Install backend dependencies
+        run: npm ci --prefix apps/backend
+
+      - name: Build frontend
+        run: npm run build --prefix apps/frontend
+
+      - name: Build backend
+        run: npm run build --prefix apps/backend
+
+      - name: Test backend
+        run: npm test --prefix apps/backend
+
+      - name: Validate production readiness
+        run: node scripts/validate-production.mjs

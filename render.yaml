@@ -1,0 +1,39 @@
+services:
+  - type: web
+    name: agros-backend
+    runtime: docker
+    dockerfilePath: ./apps/backend/Dockerfile
+    plan: starter
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: LOG_LEVEL
+        value: info
+      - key: DATABASE_PATH
+        value: /data/slotgpt.db
+      - key: ENABLE_WORKERS
+        value: true
+      - key: FRONTEND_URL
+        sync: false
+      - key: REDIS_HOST
+        fromService:
+          type: redis
+          name: agros-redis
+          property: host
+      - key: REDIS_PORT
+        fromService:
+          type: redis
+          name: agros-redis
+          property: port
+    disk:
+      name: agros-data
+      mountPath: /data
+      sizeGB: 1
+
+  - type: redis
+    name: agros-redis
+    plan: starter
+    ipAllowList: []

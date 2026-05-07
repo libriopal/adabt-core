@@ -1,5 +1,6 @@
 import { Queue, Worker, Job } from 'bullmq';
 import { Design } from '../types';
+import { logger } from '../diagnostics/logger';
 
 const connection = {
   host: process.env.REDIS_HOST || 'localhost',
@@ -18,7 +19,7 @@ export const evolutionWorker = new Worker(
   'evolution',
   async (job: Job) => {
     const { runId, generation, designIds } = job.data;
-    console.log(`[Worker] Processing evolution batch ${runId}/gen${generation}`);
+    logger.info('evolution_worker_batch', { runId, generation, designCount: designIds.length });
     return { processed: designIds.length, runId };
   },
   { concurrency: 4, connection },

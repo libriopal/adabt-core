@@ -2,6 +2,7 @@ import { Design, EvolutionState, EvolutionConfig, GenerationSnapshot, SlotMechan
 import { DeterministicPRNG } from '../utils/prng';
 import { DesignDB, EvolutionDB } from '../storage/db';
 import { reinforcementEngine, RewardBreakdown } from './reinforcementEngine';
+import { logger } from '../diagnostics/logger';
 
 export class EvolutionEngine {
   private activeRuns: Map<string, EvolutionState> = new Map();
@@ -28,6 +29,13 @@ export class EvolutionEngine {
 
     try { EvolutionDB.create(state); } catch { /* non-fatal */ }
 
+    logger.info('evolution_started', {
+      runId,
+      populationSize: config.populationSize,
+      maxGenerations: config.maxGenerations,
+      mutationRate: config.mutationRate,
+    });
+
     this.runEvolutionLoop(runId, state, this.abortControllers.get(runId)!.signal);
     return runId;
   }
@@ -43,6 +51,7 @@ export class EvolutionEngine {
     this.abortControllers.set(runId, new AbortController());
 
     this.runEvolutionLoop(runId, state, this.abortControllers.get(runId)!.signal);
+    logger.info('evolution_resumed', { runId, currentGeneration: state.currentGeneration });
     return true;
   }
 
@@ -59,6 +68,7 @@ export class EvolutionEngine {
       try { EvolutionDB.update(runId, { status: 'paused' }); } catch { /* non-fatal */ }
     }
 
+    if (state) logger.info('evolution_paused', { runId, currentGeneration: state.currentGeneration });
     return !!state;
   }
 
@@ -86,7 +96,11 @@ export class EvolutionEngine {
   ): Promise<void> {
     try {
       while (state.currentGeneration < state.maxGenerations && !signal.aborted) {
-        console.log(`[Evolution ${runId}] Generation ${state.currentGeneration + 1}/${state.maxGenerations}`);
+        logger.info('evolution_generation_started', {
+          runId,
+          generation: state.currentGeneration + 1,
+          maxGenerations: state.maxGenerations,
+        });
 
         const evaluated = await reinforcementEngine.evaluatePopulation(state.designs);
 
@@ -124,7 +138,10 @@ export class EvolutionEngine {
         state.status = 'completed';
       }
     } catch (error) {
-      console.error(`[Evolution ${runId}] Error:`, error);
+      logger.error('evolution_failed', {
+        runId,
+        error: error instanceof Error ? error.message : String(error),
+      });
       state.status = 'error';
     } finally {
       try {
@@ -136,6 +153,11 @@ export class EvolutionEngine {
       } catch { /* non-fatal */ }
       this.activeRuns.delete(runId);
       this.abortControllers.delete(runId);
+      logger.info('evolution_finished', {
+        runId,
+        status: state.status,
+        currentGeneration: state.currentGeneration,
+      });
     }
   }
 

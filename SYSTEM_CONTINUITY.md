@@ -1,0 +1,67 @@
+# AGROS System Continuity
+
+## Continuity Goals
+
+AGROS preserves:
+
+- deterministic seed identity
+- replay parity across sessions
+- checkpoint recovery paths
+- architecture manifest continuity
+- cocoon reconstruction fidelity
+- interrupt/resume operational state
+
+## Continuity Flow
+
+```text
+Seed
+  -> deterministic PRNG state
+  -> generated genome or design state
+  -> replay checksum
+  -> cocoon serialization
+  -> reconstruction verification
+  -> recovery checkpoint
+```
+
+## Runtime Continuity Interfaces
+
+Backend endpoints:
+
+- `GET /api/replay/verify`: verifies deterministic demand and reinforcement replay.
+- `GET /api/diagnostics`: returns runtime, replay, database, continuity, demand, and reinforcement diagnostics.
+- `GET /api/continuity/status`: returns websocket clients, interrupted run IDs, and recent continuity events.
+- `POST /api/continuity/:runId/interrupt`: pauses a run when possible and broadcasts a continuity interrupt event.
+- `POST /api/continuity/:runId/resume`: resumes a paused run when possible and broadcasts a continuity resume event.
+
+Websocket:
+
+- `/ws/continuity`: emits connected, heartbeat, interrupt, resume, and diagnostic events.
+
+## Multi-Session Compatibility
+
+Frontend continuity is preserved through:
+
+- IndexedDB persistence
+- architecture manifests
+- deterministic PRNG state capture
+- cocoon state serialization
+- topology signatures
+
+Backend continuity is preserved through:
+
+- SQLite WAL persistence
+- evolution run records
+- reinforcement replay checksums
+- demand cache records
+- structured request IDs
+
+## Replay Requirements
+
+A production run is stable only when:
+
+- two identical seeded evolution runs produce the same checksum
+- reinforcement replay returns stable
+- cocoon reconstruction returns stable
+- cocoon replay returns stable
+- checkpoint restore returns the same topology checksum
+
