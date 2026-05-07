@@ -19,6 +19,8 @@ const REQUIRED_TABLES = [
   'evolution_runs',
   'demand_cache',
   'reinforcement_events',
+  'event_log',
+  'replay_checkpoints',
 ];
 
 export async function validateStartup(): Promise<StartupValidationReport> {
@@ -36,6 +38,8 @@ export async function validateStartup(): Promise<StartupValidationReport> {
     if (databaseConfig.provider === 'postgres') {
       const stats = await getStorageRepository().designs.getStats();
       await getStorageRepository().reinforcement.getLatest(1);
+      await getStorageRepository().events.getLatest(1);
+      await getStorageRepository().replayCheckpoints.getLatest(undefined, 1);
       checks.push({
         name: 'postgres_repository',
         passed: true,

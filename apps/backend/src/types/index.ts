@@ -107,6 +107,26 @@ export interface ReinforcementReplaySummary {
   gateStatuses: Record<string, number>;
 }
 
+export interface EventLogEntry {
+  id: string;
+  stream: string;
+  type: string;
+  sequence: number;
+  payload: Record<string, unknown>;
+  replayChecksum: string;
+  createdAt: number;
+}
+
+export interface ReplayCheckpoint {
+  id: string;
+  stream: string;
+  label: string;
+  eventCount: number;
+  replayChecksum: string;
+  state: Record<string, unknown>;
+  createdAt: number;
+}
+
 export interface Design {
   id: string;
   seed: string;

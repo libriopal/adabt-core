@@ -8,6 +8,7 @@ import { getStorageRepository } from '../storage/repository';
 import { Design } from '../types';
 import { continuityHub } from '../diagnostics/continuityHub';
 import { logger } from '../diagnostics/logger';
+import { DEFAULT_REPLAY_STREAM, getReplayHistory } from '../diagnostics/replayHistory';
 import { runReplaySuite } from '../diagnostics/replaySuite';
 import { collectSystemDiagnostics } from '../diagnostics/systemDiagnostics';
 import { RequestWithContext, validateRuntimeEnvironment } from '../diagnostics/runtimeValidation';
@@ -47,6 +48,11 @@ const EvolveSchema = z.object({
 const ImportSchema = z.object({
   designs: z.array(z.any()),
   preserveIds: z.boolean().default(false),
+});
+
+const ReplayHistoryQuerySchema = z.object({
+  stream: z.string().min(1).default(DEFAULT_REPLAY_STREAM),
+  limit: z.coerce.number().int().min(1).max(500).default(50),
 });
 
 router.post('/generate-batch', async (req: RequestWithContext, res) => {
@@ -226,6 +232,20 @@ router.get('/replay/verify', async (req: RequestWithContext, res) => {
   } catch (error) {
     const id = logRouteError('RPY', req, error);
     res.status(500).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+router.get('/replay/history', async (req: RequestWithContext, res) => {
+  try {
+    const query = ReplayHistoryQuerySchema.parse(req.query);
+    const history = await getReplayHistory(query.stream, query.limit);
+    res.status(history.verification.stable ? 200 : 503).json({
+      success: history.verification.stable,
+      history,
+    });
+  } catch (error) {
+    const id = logRouteError('RPH', req, error);
+    res.status(400).json({ success: false, debugId: id, error: error instanceof Error ? error.message : String(error) });
   }
 });
 

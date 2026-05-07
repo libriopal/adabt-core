@@ -1,5 +1,14 @@
 import { Pool } from 'pg';
-import { DBDesign, DBEvolutionRun, DemandResult, Design, EvolutionState, ReinforcementDecision } from '../types';
+import {
+  DBDesign,
+  DBEvolutionRun,
+  DemandResult,
+  Design,
+  EventLogEntry,
+  EvolutionState,
+  ReinforcementDecision,
+  ReplayCheckpoint,
+} from '../types';
 import { initDatabase, getDB } from './db';
 import {
   resolveDatabaseRuntimeConfig,
@@ -20,6 +29,14 @@ export interface DesignStats {
   avgScore: number;
   topScore: number;
 }
+
+export type EventLogInput = Omit<EventLogEntry, 'createdAt'> & {
+  createdAt?: number;
+};
+
+export type ReplayCheckpointInput = Omit<ReplayCheckpoint, 'createdAt'> & {
+  createdAt?: number;
+};
 
 export interface StorageRepository {
   provider: DatabaseProvider;
@@ -42,6 +59,16 @@ export interface StorageRepository {
   reinforcement: {
     save(decision: ReinforcementDecision): Promise<void>;
     getLatest(limit?: number): Promise<ReinforcementDecision[]>;
+  };
+  events: {
+    append(event: EventLogInput): Promise<EventLogEntry>;
+    getByStream(stream: string, limit?: number): Promise<EventLogEntry[]>;
+    getLatest(limit?: number): Promise<EventLogEntry[]>;
+  };
+  replayCheckpoints: {
+    save(checkpoint: ReplayCheckpointInput): Promise<ReplayCheckpoint>;
+    getLatest(stream?: string, limit?: number): Promise<ReplayCheckpoint[]>;
+    getById(id: string): Promise<ReplayCheckpoint | null>;
   };
   close(): Promise<void>;
 }
@@ -130,6 +157,30 @@ function rowToReinforcement(row: any): ReinforcementDecision {
     lineage: JSON.parse(row.lineage),
     demandChecksum: row.demand_checksum,
     replayChecksum: row.replay_checksum,
+  };
+}
+
+function rowToEvent(row: any): EventLogEntry {
+  return {
+    id: row.id,
+    stream: row.stream,
+    type: row.type,
+    sequence: Number(row.sequence),
+    payload: JSON.parse(row.payload),
+    replayChecksum: row.replay_checksum,
+    createdAt: Number(row.created_at),
+  };
+}
+
+function rowToReplayCheckpoint(row: any): ReplayCheckpoint {
+  return {
+    id: row.id,
+    stream: row.stream,
+    label: row.label,
+    eventCount: Number(row.event_count),
+    replayChecksum: row.replay_checksum,
+    state: JSON.parse(row.state),
+    createdAt: Number(row.created_at),
   };
 }
 
@@ -291,6 +342,87 @@ export class SqliteStorageRepository implements StorageRepository {
         .prepare('SELECT * FROM reinforcement_events ORDER BY created_at DESC LIMIT ?')
         .all(limit) as any[];
       return rows.map(rowToReinforcement);
+    },
+  };
+
+  events = {
+    append: async (event: EventLogInput): Promise<EventLogEntry> => {
+      const createdAt = event.createdAt ?? Date.now();
+      getDB().prepare(`
+        INSERT INTO event_log
+          (id, stream, type, sequence, payload, replay_checksum, created_at)
+        VALUES
+          (@id, @stream, @type, @sequence, @payload, @replay_checksum, @created_at)
+      `).run({
+        id: event.id,
+        stream: event.stream,
+        type: event.type,
+        sequence: event.sequence,
+        payload: JSON.stringify(event.payload),
+        replay_checksum: event.replayChecksum,
+        created_at: createdAt,
+      });
+
+      return { ...event, createdAt };
+    },
+    getByStream: async (stream: string, limit?: number): Promise<EventLogEntry[]> => {
+      const params: Record<string, unknown> = { stream };
+      const limitClause = limit ? 'LIMIT @limit' : '';
+      if (limit) params.limit = limit;
+      const rows = getDB()
+        .prepare(`
+          SELECT * FROM (
+            SELECT * FROM event_log
+            WHERE stream = @stream
+            ORDER BY sequence DESC
+            ${limitClause}
+          )
+          ORDER BY sequence ASC
+        `)
+        .all(params) as any[];
+      return rows.map(rowToEvent);
+    },
+    getLatest: async (limit = 50): Promise<EventLogEntry[]> => {
+      const rows = getDB()
+        .prepare('SELECT * FROM event_log ORDER BY created_at DESC, sequence DESC LIMIT ?')
+        .all(limit) as any[];
+      return rows.map(rowToEvent);
+    },
+  };
+
+  replayCheckpoints = {
+    save: async (checkpoint: ReplayCheckpointInput): Promise<ReplayCheckpoint> => {
+      const createdAt = checkpoint.createdAt ?? Date.now();
+      getDB().prepare(`
+        INSERT OR REPLACE INTO replay_checkpoints
+          (id, stream, label, event_count, replay_checksum, state, created_at)
+        VALUES
+          (@id, @stream, @label, @event_count, @replay_checksum, @state, @created_at)
+      `).run({
+        id: checkpoint.id,
+        stream: checkpoint.stream,
+        label: checkpoint.label,
+        event_count: checkpoint.eventCount,
+        replay_checksum: checkpoint.replayChecksum,
+        state: JSON.stringify(checkpoint.state),
+        created_at: createdAt,
+      });
+
+      return { ...checkpoint, createdAt };
+    },
+    getLatest: async (stream?: string, limit = 20): Promise<ReplayCheckpoint[]> => {
+      const rows = stream
+        ? getDB()
+          .prepare('SELECT * FROM replay_checkpoints WHERE stream = ? ORDER BY created_at DESC LIMIT ?')
+          .all(stream, limit) as any[]
+        : getDB()
+          .prepare('SELECT * FROM replay_checkpoints ORDER BY created_at DESC LIMIT ?')
+          .all(limit) as any[];
+      return rows.map(rowToReplayCheckpoint);
+    },
+    getById: async (id: string): Promise<ReplayCheckpoint | null> => {
+      const row = getDB().prepare('SELECT * FROM replay_checkpoints WHERE id = ?').get(id) as any;
+      return row ? rowToReplayCheckpoint(row) : null;
     },
   };
 
@@ -514,6 +646,98 @@ export class PostgresStorageRepository implements StorageRepository {
         [limit],
       );
       return result.rows.map(rowToReinforcement);
+    },
+  };
+
+  events = {
+    append: async (event: EventLogInput): Promise<EventLogEntry> => {
+      const createdAt = event.createdAt ?? Date.now();
+      await this.pool.query(`
+        INSERT INTO event_log
+          (id, stream, type, sequence, payload, replay_checksum, created_at)
+        VALUES
+          ($1, $2, $3, $4, $5, $6, $7)
+      `, [
+        event.id,
+        event.stream,
+        event.type,
+        event.sequence,
+        JSON.stringify(event.payload),
+        event.replayChecksum,
+        createdAt,
+      ]);
+
+      return { ...event, createdAt };
+    },
+    getByStream: async (stream: string, limit?: number): Promise<EventLogEntry[]> => {
+      const values: unknown[] = [stream];
+      const limitClause = limit ? 'LIMIT $2' : '';
+      if (limit) values.push(limit);
+      const result = await this.pool.query(
+        `
+          SELECT * FROM (
+            SELECT * FROM event_log
+            WHERE stream = $1
+            ORDER BY sequence DESC
+            ${limitClause}
+          ) recent_events
+          ORDER BY sequence ASC
+        `,
+        values,
+      );
+      return result.rows.map(rowToEvent);
+    },
+    getLatest: async (limit = 50): Promise<EventLogEntry[]> => {
+      const result = await this.pool.query(
+        'SELECT * FROM event_log ORDER BY created_at DESC, sequence DESC LIMIT $1',
+        [limit],
+      );
+      return result.rows.map(rowToEvent);
+    },
+  };
+
+  replayCheckpoints = {
+    save: async (checkpoint: ReplayCheckpointInput): Promise<ReplayCheckpoint> => {
+      const createdAt = checkpoint.createdAt ?? Date.now();
+      await this.pool.query(`
+        INSERT INTO replay_checkpoints
+          (id, stream, label, event_count, replay_checksum, state, created_at)
+        VALUES
+          ($1, $2, $3, $4, $5, $6, $7)
+        ON CONFLICT (id) DO UPDATE SET
+          stream = EXCLUDED.stream,
+          label = EXCLUDED.label,
+          event_count = EXCLUDED.event_count,
+          replay_checksum = EXCLUDED.replay_checksum,
+          state = EXCLUDED.state,
+          created_at = EXCLUDED.created_at
+      `, [
+        checkpoint.id,
+        checkpoint.stream,
+        checkpoint.label,
+        checkpoint.eventCount,
+        checkpoint.replayChecksum,
+        JSON.stringify(checkpoint.state),
+        createdAt,
+      ]);
+
+      return { ...checkpoint, createdAt };
+    },
+    getLatest: async (stream?: string, limit = 20): Promise<ReplayCheckpoint[]> => {
+      const result = stream
+        ? await this.pool.query(
+          'SELECT * FROM replay_checkpoints WHERE stream = $1 ORDER BY created_at DESC LIMIT $2',
+          [stream, limit],
+        )
+        : await this.pool.query(
+          'SELECT * FROM replay_checkpoints ORDER BY created_at DESC LIMIT $1',
+          [limit],
+        );
+      return result.rows.map(rowToReplayCheckpoint);
+    },
+    getById: async (id: string): Promise<ReplayCheckpoint | null> => {
+      const result = await this.pool.query('SELECT * FROM replay_checkpoints WHERE id = $1', [id]);
+      return result.rows[0] ? rowToReplayCheckpoint(result.rows[0]) : null;
     },
   };
 

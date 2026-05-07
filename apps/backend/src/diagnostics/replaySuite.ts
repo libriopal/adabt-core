@@ -1,5 +1,6 @@
 import { demandEngine } from '../services/demandEngine';
 import { reinforcementEngine } from '../services/reinforcementEngine';
+import { persistReplaySuiteResult, ReplayPersistenceResult } from './replayHistory';
 
 export interface ReplaySuiteResult {
   stable: boolean;
@@ -9,6 +10,7 @@ export interface ReplaySuiteResult {
     checksum?: string;
     details: Record<string, unknown>;
   }>;
+  persistence?: ReplayPersistenceResult;
 }
 
 export async function runReplaySuite(): Promise<ReplaySuiteResult> {
@@ -35,8 +37,12 @@ export async function runReplaySuite(): Promise<ReplaySuiteResult> {
     },
   ];
 
-  return {
+  const result: ReplaySuiteResult = {
     stable: checks.every(check => check.stable),
     checks,
   };
+
+  result.persistence = await persistReplaySuiteResult(result);
+
+  return result;
 }
