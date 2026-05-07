@@ -1,6 +1,8 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { EvolutionVisualizer } from './components/EvolutionVisualizer';
+import { DebugPanel } from './components/DebugPanel';
 import { useBackend } from './hooks/useBackend';
+import { agros, AGROSState } from './agros/init';
 
 const App: React.FC = () => {
   const [narrative, setNarrative] = useState('');
@@ -9,10 +11,27 @@ const App: React.FC = () => {
   const [designs, setDesigns] = useState<any[]>([]);
   const [evolutionRunId, setEvolutionRunId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [agrosState, setAgrosState] = useState<AGROSState | null>(null);
+  const [showDebug, setShowDebug] = useState(false);
 
   const { loading, generateBatch, startEvolution, getDemand } = useBackend({
     onError: (e) => setError(e),
   });
+
+  // Initialize AGROS on mount
+  useEffect(() => {
+    agros.init().then(state => {
+      setAgrosState(state);
+      console.log('[AGROS] System initialized', state.sessionId);
+    }).catch(err => {
+      console.error('[AGROS] Initialization failed', err);
+      setError('AGROS initialization failed');
+    });
+
+    return () => {
+      agros.shutdown();
+    };
+  }, []);
 
   const handleGenerate = useCallback(async () => {
     setError(null);
@@ -29,8 +48,36 @@ const App: React.FC = () => {
   return (
     <div style={{ minHeight: '100vh', background: '#0A0E1A', color: '#E2E8F0', fontFamily: 'system-ui, sans-serif', padding: '32px 24px' }}>
       <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-        <h1 style={{ color: '#22D3EE', fontFamily: 'JetBrains Mono, monospace', marginBottom: 8 }}>SlotGPT</h1>
-        <p style={{ color: '#64748B', marginBottom: 32 }}>AI-Driven Slot Machine Design Generator</p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+          <div>
+            <h1 style={{ color: '#22D3EE', fontFamily: 'JetBrains Mono, monospace', marginBottom: 8, marginTop: 0 }}>SlotGPT</h1>
+            <p style={{ color: '#64748B', margin: 0 }}>AI-Driven Slot Machine Design Generator</p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {agrosState && (
+              <span style={{ color: '#10B981', fontSize: 11, fontFamily: 'JetBrains Mono, monospace' }}>
+                AGROS: {agrosState.sessionId.slice(0, 12)}...
+              </span>
+            )}
+            <button
+              onClick={() => setShowDebug(!showDebug)}
+              style={{
+                background: showDebug ? '#22D3EE' : 'rgba(34,211,238,0.1)',
+                color: showDebug ? '#0A0E1A' : '#22D3EE',
+                border: '1px solid #22D3EE',
+                padding: '6px 12px',
+                borderRadius: 4,
+                cursor: 'pointer',
+                fontSize: 11,
+                fontFamily: 'JetBrains Mono, monospace',
+                fontWeight: 600,
+              }}
+            >
+              {showDebug ? 'Hide Debug' : 'Debug'}
+            </button>
+          </div>
+        </div>
+        <div style={{ marginBottom: 32 }} />
 
         {error && <ErrorBanner error={error} onDismiss={() => setError(null)} />}
 
@@ -96,6 +143,14 @@ const App: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* AGROS Debug Panel */}
+      {showDebug && agrosState && (
+        <DebugPanel 
+          sessionId={agrosState.sessionId} 
+          onClose={() => setShowDebug(false)} 
+        />
+      )}
     </div>
   );
 };
