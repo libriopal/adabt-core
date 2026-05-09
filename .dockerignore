@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.git/
+.gitignore
+*.md
+apicli.py
+run.sh
+.env*
+apps/backend/data/
+apps/backend/node_modules/
+apps/frontend/node_modules/

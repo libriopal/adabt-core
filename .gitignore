@@ -4,7 +4,18 @@ __v0_devtools.tsx
 __v0_jsx-dev-runtime.ts
 
 # Common ignores
-node_modules
+node_modules/
 .next/
+dist/
 .env*.local
+.env
 .DS_Store
+
+# Bun lock files (standardized on npm)
+bun.lock
+bun.lockb
+
+# SQLite data (generated at runtime)
+apps/backend/data/*.db
+apps/backend/data/*.db-shm
+apps/backend/data/*.db-wal
