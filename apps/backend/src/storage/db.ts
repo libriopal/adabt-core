@@ -5,7 +5,9 @@ import { DBDesign, DBEvolutionRun, DemandResult, Design, EvolutionState } from '
 
 let db: Database.Database | null = null;
 
-export function initDatabase(dbPath: string = './data/slotgpt.db'): Database.Database {
+const DEFAULT_DB_PATH = path.join(process.env.DATA_DIR || './data', 'slotgpt.db');
+
+export function initDatabase(dbPath: string = DEFAULT_DB_PATH): Database.Database {
   if (dbPath !== ':memory:') {
     const dir = path.dirname(dbPath);
     fs.mkdirSync(dir, { recursive: true });

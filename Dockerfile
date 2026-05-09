@@ -32,8 +32,9 @@ RUN npm ci --omit=dev
 WORKDIR /app
 COPY --from=frontend-build /app/apps/frontend/dist ./apps/frontend/dist
 
-# Data directory for SQLite
-RUN mkdir -p /app/apps/backend/data
+# Data directory for SQLite — mount a Railway Volume here for persistence
+ENV DATA_DIR=/data
+RUN mkdir -p /data
 
 WORKDIR /app/apps/backend
 ENV NODE_ENV=production
