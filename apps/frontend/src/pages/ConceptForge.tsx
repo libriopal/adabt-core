@@ -380,7 +380,7 @@ const ConceptForge: React.FC = () => {
   } as const);
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0A0E1A', color: '#E2E8F0', fontFamily: 'system-ui, sans-serif', padding: '32px 24px' }}>
+    <div style={{ padding: '32px 24px' }}>
       <div style={{ maxWidth: 1200, margin: '0 auto' }}>
         {/* Header */}
         <div style={{ marginBottom: 32 }}>
