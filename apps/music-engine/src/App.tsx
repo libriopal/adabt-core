@@ -1,16 +1,27 @@
 // ─── Music Intelligence Engine ──────────────────────────────────────────────
-// Phase 1: Audio ingestion, decode, playback, waveform, spectrum visualization.
+// Phase 2: Audio ingestion, decode, playback, FFT engine, BPM detection,
+// spectral mapping, chromagram, key estimation, beat grid.
 
 import { useAudioEngine } from './hooks/useAudioEngine';
 import { FileDropZone } from './components/FileDropZone';
 import { WaveformDisplay } from './components/WaveformDisplay';
 import { SpectrumVisualizer } from './components/SpectrumVisualizer';
 import { TransportControls } from './components/TransportControls';
+import { AnalysisPanel } from './components/AnalysisPanel';
 import { TelemetryPanel } from './components/TelemetryPanel';
 
 export default function App() {
   const { state, loadFile, play, pause, stop, seek, setVolume } = useAudioEngine();
-  const { playback, file, decodeProgress, waveformPreview, vfxSnapshot, telemetry } = state;
+  const {
+    playback,
+    file,
+    decodeProgress,
+    waveformPreview,
+    vfxSnapshot,
+    telemetry,
+    analysis,
+    analysisStatus,
+  } = state;
 
   const isLoading = playback.status === 'loading';
   const hasAudio = playback.status === 'paused' || playback.status === 'playing';
@@ -38,7 +49,7 @@ export default function App() {
           Music Intelligence Engine
         </h1>
         <p style={{ fontSize: 13, color: '#555', marginTop: 4 }}>
-          Phase 1 — Audio Ingestion & Visualization
+          Phase 2 — FFT Engine · BPM Detection · Spectral Mapping
         </p>
       </div>
 
@@ -50,7 +61,7 @@ export default function App() {
         fileName={file?.name}
       />
 
-      {/* Waveform */}
+      {/* Waveform with beat grid overlay */}
       {waveformPreview && (
         <WaveformDisplay
           waveform={waveformPreview}
@@ -58,6 +69,7 @@ export default function App() {
           duration={playback.duration}
           isPlaying={playback.status === 'playing'}
           onSeek={seek}
+          beatGrid={analysis?.beatGrid ?? null}
         />
       )}
 
@@ -72,11 +84,22 @@ export default function App() {
         />
       )}
 
-      {/* Spectrum Visualizer */}
+      {/* Spectrum Visualizer with BPM sync */}
       {hasAudio && (
         <SpectrumVisualizer
           snapshot={vfxSnapshot}
           isPlaying={playback.status === 'playing'}
+          bpm={analysis?.bpm ?? null}
+        />
+      )}
+
+      {/* Analysis Panel — BPM, Key, Beat Grid, Spectral Timeline */}
+      {(hasAudio || analysisStatus.active) && (
+        <AnalysisPanel
+          analysis={analysis}
+          status={analysisStatus}
+          duration={playback.duration}
+          currentTime={playback.currentTime}
         />
       )}
 
@@ -116,7 +139,7 @@ export default function App() {
 
       {/* Footer */}
       <div style={{ marginTop: 'auto', textAlign: 'center', fontSize: 11, color: '#333', padding: 12 }}>
-        AGROS Music Intelligence Engine v0.1.0 — Workers: decode ✓ | analysis ○ | orchestration ○
+        AGROS Music Intelligence Engine v0.2.0 — Workers: decode ✓ | analysis ✓ | orchestration ○
       </div>
     </div>
   );
