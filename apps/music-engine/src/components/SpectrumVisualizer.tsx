@@ -1,5 +1,6 @@
 // ─── SpectrumVisualizer ─────────────────────────────────────────────────────
 // Real-time frequency spectrum bars driven by VFX snapshots.
+// Phase 2: BPM-synced pulse effect — bars breathe with the beat phase.
 // Canvas-based, zero-allocation in the render loop.
 
 import { useRef, useEffect } from 'react';
@@ -8,9 +9,10 @@ import type { VFXSnapshot } from '../types/audio';
 interface SpectrumVisualizerProps {
   snapshot: VFXSnapshot | null;
   isPlaying: boolean;
+  bpm?: number | null;
 }
 
-export function SpectrumVisualizer({ snapshot, isPlaying }: SpectrumVisualizerProps) {
+export function SpectrumVisualizer({ snapshot, isPlaying, bpm }: SpectrumVisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number | null>(null);
   const snapshotRef = useRef<VFXSnapshot | null>(snapshot);
@@ -60,6 +62,13 @@ export function SpectrumVisualizer({ snapshot, isPlaying }: SpectrumVisualizerPr
         return;
       }
 
+      // Beat pulse factor (0 → 1, peaks on the beat)
+      const beatPhase = snap.beatPhase;
+      // Sharp attack, slow decay — like a kick drum
+      const beatPulse = Math.pow(1 - beatPhase, 3);
+      // Scale factor: bars grow 15% on the beat
+      const pulseScale = 1 + beatPulse * 0.15;
+
       // Draw spectrum bars
       const spectrum = snap.spectrum;
       const numBars = Math.min(128, spectrum.length);
@@ -69,12 +78,14 @@ export function SpectrumVisualizer({ snapshot, isPlaying }: SpectrumVisualizerPr
         // Use logarithmic frequency mapping for perceptual accuracy
         const freqIdx = Math.floor(Math.pow(i / numBars, 1.5) * spectrum.length);
         const value = spectrum[Math.min(freqIdx, spectrum.length - 1)];
-        const barH = value * h * 0.9;
+        const barH = value * h * 0.9 * pulseScale;
 
         // Color gradient: purple to cyan based on frequency
-        const hue = 270 - (i / numBars) * 90; // 270 (purple) → 180 (cyan)
-        const lightness = 40 + value * 30;
-        ctx.fillStyle = `hsl(${hue}, 80%, ${lightness}%)`;
+        // Beat pulse shifts hue slightly
+        const hue = 270 - (i / numBars) * 90 + beatPulse * 15;
+        const lightness = 40 + value * 30 + beatPulse * 10;
+        const saturation = 80 + beatPulse * 15;
+        ctx.fillStyle = `hsl(${hue}, ${Math.min(100, saturation)}%, ${Math.min(80, lightness)}%)`;
 
         ctx.fillRect(
           i * barWidth + 1,
@@ -84,6 +95,13 @@ export function SpectrumVisualizer({ snapshot, isPlaying }: SpectrumVisualizerPr
         );
       }
 
+      // Beat flash overlay
+      if (beatPulse > 0.5) {
+        const flashAlpha = (beatPulse - 0.5) * 0.15;
+        ctx.fillStyle = `rgba(167, 139, 250, ${flashAlpha})`;
+        ctx.fillRect(0, 0, w, h);
+      }
+
       // RMS energy bar at top
       const rmsWidth = snap.rms * w;
       const gradient = ctx.createLinearGradient(0, 0, rmsWidth, 0);
@@ -91,6 +109,14 @@ export function SpectrumVisualizer({ snapshot, isPlaying }: SpectrumVisualizerPr
       gradient.addColorStop(1, 'rgba(167, 139, 250, 0.3)');
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, rmsWidth, 3);
+
+      // BPM indicator in corner
+      if (bpm) {
+        ctx.fillStyle = `rgba(167, 139, 250, ${0.3 + beatPulse * 0.4})`;
+        ctx.font = '10px monospace';
+        ctx.textAlign = 'right';
+        ctx.fillText(`${Math.round(bpm)} BPM`, w - 8, 14);
+      }
 
       rafRef.current = requestAnimationFrame(render);
     };
@@ -106,7 +132,7 @@ export function SpectrumVisualizer({ snapshot, isPlaying }: SpectrumVisualizerPr
         cancelAnimationFrame(rafRef.current);
       }
     };
-  }, [isPlaying]);
+  }, [isPlaying, bpm]);
 
   return (
     <canvas
