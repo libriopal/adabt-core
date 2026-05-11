@@ -43,6 +43,9 @@ export const AGROS_METRICS: MetricDefinition[] = [
   { name: 'checkpoint_size', category: 'performance', unit: 'bytes', aggregation: 'max' },
   { name: 'cache_hits', category: 'performance', unit: 'count', aggregation: 'sum' },
   { name: 'cache_misses', category: 'performance', unit: 'count', aggregation: 'sum' },
+  { name: 'music_decode_time', category: 'performance', unit: 'ms', aggregation: 'avg' },
+  { name: 'music_analysis_bpm', category: 'performance', unit: 'bpm', aggregation: 'avg' },
+  { name: 'music_analysis_rms', category: 'performance', unit: 'ratio', aggregation: 'avg' },
   
   // Evolution metrics
   { name: 'generation', category: 'evolution', unit: 'epoch', aggregation: 'max' },

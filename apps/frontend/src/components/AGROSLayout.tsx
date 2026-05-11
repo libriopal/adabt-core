@@ -4,6 +4,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 const NAV_ITEMS = [
   { label: 'SlotGen', path: '/', icon: '⚡' },
   { label: 'ConceptForge', path: '/concept-forge', icon: '🔥' },
+  { label: 'Music Engine', path: '/music-engine', icon: '♫' },
 ];
 
 const AGROSLayout: React.FC = () => {
