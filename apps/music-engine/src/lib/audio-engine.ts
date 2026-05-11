@@ -49,6 +49,12 @@ export class AudioEngine {
   private rafId: number | null = null;
   private currentSeqId: number | null = null;
 
+  // Incremental waveform preview state
+  private previewBuckets: Float32Array | null = null;
+  private previewBucketCounts: Uint32Array | null = null;
+  private waveformSamplesProcessed = 0;
+  private static readonly PREVIEW_POINTS = 2000;
+
   constructor() {
     this.initWorkers();
   }
@@ -85,9 +91,11 @@ export class AudioEngine {
         break;
 
       case 'decode:chunk':
-        this.state.pcmChunks = [...this.state.pcmChunks, msg.pcmData];
+        // Mutate array in-place instead of cloning on every chunk
+        this.state.pcmChunks.push(msg.pcmData);
         this.state.totalDecodedSamples += msg.pcmData.length;
-        this.buildWaveformPreview();
+        // Incrementally process only the new chunk into the waveform preview
+        this.appendToWaveformPreview(msg.pcmData);
         this.notify();
         break;
 
@@ -103,6 +111,8 @@ export class AudioEngine {
           this.state.file.sampleRate = msg.sampleRate;
           this.state.file.channels = msg.channels;
         }
+        // Final exact waveform rebuild now that all samples are in
+        this.buildFinalWaveformPreview();
         this.preparePlayback(msg.sampleRate, msg.channels, msg.totalSamples);
         this.notify();
         break;
@@ -135,12 +145,18 @@ export class AudioEngine {
       playback: { ...INITIAL_STATE.playback, status: 'loading' },
       telemetry: this.state.telemetry,
     };
+    this.resetWaveformPreview();
+    // Assign seqId before async work to prevent race condition
+    // when two quick file selections resolve out of order
+    const seqId = nextSeqId();
+    this.currentSeqId = seqId;
     this.notify();
 
     // Read file and send to decode worker
     const arrayBuffer = await file.arrayBuffer();
-    const seqId = nextSeqId();
-    this.currentSeqId = seqId;
+
+    // Check we haven't been superseded during the await
+    if (this.currentSeqId !== seqId) return;
 
     workerManager.send('decode', {
       type: 'decode:start',
@@ -322,16 +338,63 @@ export class AudioEngine {
     }
   }
 
-  // ─── Waveform Preview ─────────────────────────────────────────────────
+  // ─── Waveform Preview (Incremental) ────────────────────────────────────
 
-  private buildWaveformPreview(): void {
-    // Downsample all PCM chunks into a 2000-point waveform for display
-    const TARGET_POINTS = 2000;
+  private resetWaveformPreview(): void {
+    this.previewBuckets = new Float32Array(AudioEngine.PREVIEW_POINTS);
+    this.previewBucketCounts = new Uint32Array(AudioEngine.PREVIEW_POINTS);
+    this.waveformSamplesProcessed = 0;
+    this.state.waveformPreview = null;
+  }
+
+  /**
+   * Incrementally fold a new PCM chunk into the preview buckets.
+   * Only the new chunk is scanned — O(chunkLength) per call, not O(totalSamples).
+   * The bucket mapping uses an *estimated* final sample count derived from the
+   * file's expected duration (or falls back to a generous over-estimate).
+   * On decode:complete we do one final rebuild so the mapping is exact.
+   */
+  private appendToWaveformPreview(chunk: Float32Array): void {
+    const N = AudioEngine.PREVIEW_POINTS;
+    if (!this.previewBuckets || !this.previewBucketCounts) {
+      this.previewBuckets = new Float32Array(N);
+      this.previewBucketCounts = new Uint32Array(N);
+    }
+
+    // Estimate total samples from file duration hint or current count
+    const estimatedTotal = this.state.file?.duration
+      ? Math.ceil(this.state.file.duration * 44100) // rough estimate
+      : this.state.totalDecodedSamples * 2; // double current as fallback
+
+    const samplesPerBucket = Math.max(1, Math.floor(estimatedTotal / N));
+
+    for (let i = 0; i < chunk.length; i++) {
+      const globalIdx = this.waveformSamplesProcessed + i;
+      const bucket = Math.min(N - 1, Math.floor(globalIdx / samplesPerBucket));
+      const absVal = Math.abs(chunk[i]);
+      if (absVal > this.previewBuckets[bucket]) {
+        this.previewBuckets[bucket] = absVal;
+      }
+      this.previewBucketCounts[bucket]++;
+    }
+
+    this.waveformSamplesProcessed += chunk.length;
+
+    // Expose a copy to consumers (the Float32Array is mutable internally)
+    this.state.waveformPreview = new Float32Array(this.previewBuckets);
+  }
+
+  /**
+   * Final exact waveform build on decode:complete.
+   * Called once — O(totalSamples) total, not per-chunk.
+   */
+  private buildFinalWaveformPreview(): void {
+    const N = AudioEngine.PREVIEW_POINTS;
     const totalSamples = this.state.totalDecodedSamples;
     if (totalSamples === 0) return;
 
-    const samplesPerPoint = Math.max(1, Math.floor(totalSamples / TARGET_POINTS));
-    const numPoints = Math.min(TARGET_POINTS, totalSamples);
+    const samplesPerBucket = Math.max(1, Math.floor(totalSamples / N));
+    const numPoints = Math.min(N, totalSamples);
     const preview = new Float32Array(numPoints);
 
     let sampleIdx = 0;
@@ -340,8 +403,7 @@ export class AudioEngine {
 
     for (let p = 0; p < numPoints; p++) {
       let maxAbs = 0;
-      for (let s = 0; s < samplesPerPoint && sampleIdx < totalSamples; s++, sampleIdx++) {
-        // Navigate chunks
+      for (let s = 0; s < samplesPerBucket && sampleIdx < totalSamples; s++, sampleIdx++) {
         while (chunkIdx < this.state.pcmChunks.length && chunkOffset >= this.state.pcmChunks[chunkIdx].length) {
           chunkOffset -= this.state.pcmChunks[chunkIdx].length;
           chunkIdx++;

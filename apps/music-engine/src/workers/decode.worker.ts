@@ -15,10 +15,12 @@ import type {
   TelemetryEvent,
 } from '../types/worker-messages';
 
-let cancelledSeqId: number | null = null;
+// Track multiple cancelled sequences — prevents stale decodes from
+// becoming "un-cancelled" when a newer request starts.
+const cancelledSeqIds = new Set<number>();
 
 function isCancelled(seqId: number): boolean {
-  return cancelledSeqId === seqId;
+  return cancelledSeqIds.has(seqId);
 }
 
 function sendProgress(seqId: number, percent: number, decodedSamples: number): void {
@@ -175,12 +177,12 @@ self.onmessage = (e: MessageEvent<DecodeWorkerInbound>) => {
 
   switch (msg.type) {
     case 'decode:start':
-      cancelledSeqId = null;
+      // Don't clear previous cancellations — they stay valid
       decodeAudio(msg.seqId, msg.fileData, msg.fileName);
       break;
 
     case 'cancel':
-      cancelledSeqId = msg.seqId;
+      cancelledSeqIds.add(msg.seqId);
       sendTelemetry('decode:cancelled', { seqId: msg.seqId });
       break;
   }

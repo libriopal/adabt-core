@@ -35,6 +35,7 @@ export function TransportControls({
     }}>
       {/* Play/Pause */}
       <button
+        aria-label={playback.status === 'playing' ? 'Pause playback' : 'Start playback'}
         onClick={playback.status === 'playing' ? onPause : onPlay}
         disabled={!isPlayable}
         style={{
@@ -57,6 +58,7 @@ export function TransportControls({
 
       {/* Stop */}
       <button
+        aria-label="Stop playback"
         onClick={onStop}
         disabled={!isPlayable}
         style={{
@@ -93,6 +95,7 @@ export function TransportControls({
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ fontSize: 14, color: '#666' }}>🔊</span>
         <input
+          aria-label="Volume"
           type="range"
           min="0"
           max="1"

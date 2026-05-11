@@ -11,6 +11,11 @@ interface FileDropZoneProps {
 }
 
 const ACCEPTED_TYPES = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg', 'audio/flac', 'audio/aac'];
+const ACCEPTED_EXT_RE = /\.(mp3|wav|ogg|flac|aac)$/i;
+
+function isAcceptedAudioFile(file: File): boolean {
+  return ACCEPTED_TYPES.includes(file.type) || ACCEPTED_EXT_RE.test(file.name);
+}
 
 export function FileDropZone({ onFile, isLoading, progress, fileName }: FileDropZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
@@ -20,7 +25,7 @@ export function FileDropZone({ onFile, isLoading, progress, fileName }: FileDrop
     e.preventDefault();
     setIsDragging(false);
     const file = e.dataTransfer.files[0];
-    if (file && (ACCEPTED_TYPES.includes(file.type) || file.name.match(/\.(mp3|wav|ogg|flac|aac)$/i))) {
+    if (file && isAcceptedAudioFile(file)) {
       onFile(file);
     }
   }, [onFile]);
@@ -38,12 +43,21 @@ export function FileDropZone({ onFile, isLoading, progress, fileName }: FileDrop
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) onFile(file);
+    if (file && isAcceptedAudioFile(file)) onFile(file);
   }, [onFile]);
 
   return (
     <div
+      role="button"
+      tabIndex={0}
+      aria-label="Upload audio file"
       onClick={handleClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleClick();
+        }
+      }}
       onDrop={handleDrop}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}

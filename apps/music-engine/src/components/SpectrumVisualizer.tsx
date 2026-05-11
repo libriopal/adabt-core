@@ -14,6 +14,7 @@ export function SpectrumVisualizer({ snapshot, isPlaying }: SpectrumVisualizerPr
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number | null>(null);
   const snapshotRef = useRef<VFXSnapshot | null>(snapshot);
+  const sizeRef = useRef<{ w: number; h: number; dpr: number }>({ w: 0, h: 0, dpr: 1 });
 
   // Keep snapshot ref in sync
   snapshotRef.current = snapshot;
@@ -27,9 +28,14 @@ export function SpectrumVisualizer({ snapshot, isPlaying }: SpectrumVisualizerPr
     const render = () => {
       const dpr = window.devicePixelRatio || 1;
       const rect = canvas.getBoundingClientRect();
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
-      ctx.scale(dpr, dpr);
+
+      // Only resize canvas when dimensions actually change
+      if (rect.width !== sizeRef.current.w || rect.height !== sizeRef.current.h || dpr !== sizeRef.current.dpr) {
+        canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+        canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+        sizeRef.current = { w: rect.width, h: rect.height, dpr };
+      }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
       const w = rect.width;
       const h = rect.height;

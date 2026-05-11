@@ -72,7 +72,7 @@ export function WaveformDisplay({ waveform, currentTime, duration, isPlaying, on
     if (!canvas || duration <= 0) return;
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
-    const time = (x / rect.width) * duration;
+    const time = Math.min(duration, Math.max(0, (x / rect.width) * duration));
     onSeek(time);
   }, [duration, onSeek]);
 
