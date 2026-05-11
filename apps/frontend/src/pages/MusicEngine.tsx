@@ -1,14 +1,17 @@
 // ─── Music Intelligence Engine ──────────────────────────────────────────────
-// Phase 1: Audio ingestion, decode, playback, waveform, spectrum visualization.
+// Unified tab within AGROS — audio ingestion, decode, playback, waveform,
+// spectrum visualization, and DSP analysis.
+// Merged from music-intelligence-engine standalone + apps/music-engine Phase 1+2.
 
-import { useAudioEngine } from './hooks/useAudioEngine';
-import { FileDropZone } from './components/FileDropZone';
-import { WaveformDisplay } from './components/WaveformDisplay';
-import { SpectrumVisualizer } from './components/SpectrumVisualizer';
-import { TransportControls } from './components/TransportControls';
-import { TelemetryPanel } from './components/TelemetryPanel';
+import React from 'react';
+import { useAudioEngine } from '../music/hooks/useAudioEngine';
+import { FileDropZone } from '../music/components/FileDropZone';
+import { WaveformDisplay } from '../music/components/WaveformDisplay';
+import { SpectrumVisualizer } from '../music/components/SpectrumVisualizer';
+import { TransportControls } from '../music/components/TransportControls';
+import { TelemetryPanel } from '../music/components/TelemetryPanel';
 
-export default function App() {
+const MusicEngine: React.FC = () => {
   const { state, loadFile, play, pause, stop, seek, setVolume } = useAudioEngine();
   const { playback, file, decodeProgress, waveformPreview, vfxSnapshot, telemetry } = state;
 
@@ -17,28 +20,35 @@ export default function App() {
 
   return (
     <div style={{
-      maxWidth: 900,
+      maxWidth: 960,
       margin: '0 auto',
-      padding: '40px 24px',
-      height: '100vh',
+      padding: '32px 24px',
       display: 'flex',
       flexDirection: 'column',
       gap: 20,
+      minHeight: 'calc(100vh - 48px)',
     }}>
       {/* Header */}
-      <div style={{ textAlign: 'center', marginBottom: 8 }}>
+      <div style={{ marginBottom: 4 }}>
         <h1 style={{
-          fontSize: 28,
+          fontSize: 24,
           fontWeight: 700,
-          background: 'linear-gradient(135deg, #7c3aed, #a78bfa, #06b6d4)',
+          fontFamily: 'JetBrains Mono, monospace',
+          background: 'linear-gradient(135deg, #7c3aed, #a78bfa, #22D3EE)',
           WebkitBackgroundClip: 'text',
           WebkitTextFillColor: 'transparent',
           letterSpacing: -0.5,
+          margin: 0,
         }}>
           Music Intelligence Engine
         </h1>
-        <p style={{ fontSize: 13, color: '#555', marginTop: 4 }}>
-          Phase 1 — Audio Ingestion & Visualization
+        <p style={{
+          fontSize: 12,
+          color: '#64748B',
+          marginTop: 6,
+          fontFamily: 'JetBrains Mono, monospace',
+        }}>
+          Phase 1 — Audio Ingestion, Decode & Visualization
         </p>
       </div>
 
@@ -61,7 +71,7 @@ export default function App() {
         />
       )}
 
-      {/* Transport */}
+      {/* Transport Controls */}
       {hasAudio && (
         <TransportControls
           playback={playback}
@@ -80,7 +90,7 @@ export default function App() {
         />
       )}
 
-      {/* File Info */}
+      {/* File Info Grid */}
       {file && hasAudio && (
         <div style={{
           display: 'grid',
@@ -96,14 +106,27 @@ export default function App() {
           ].map(({ label, value }) => (
             <div key={label} style={{
               background: 'rgba(255,255,255,0.02)',
-              border: '1px solid #1a1a2e',
+              border: '1px solid #1E293B',
               borderRadius: 8,
               padding: '8px 12px',
             }}>
-              <div style={{ fontSize: 10, color: '#555', textTransform: 'uppercase', letterSpacing: 1 }}>
+              <div style={{
+                fontSize: 10,
+                color: '#64748B',
+                textTransform: 'uppercase',
+                letterSpacing: 1,
+                fontFamily: 'JetBrains Mono, monospace',
+              }}>
                 {label}
               </div>
-              <div style={{ fontSize: 13, color: '#a0a0b0', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div style={{
+                fontSize: 13,
+                color: '#94A3B8',
+                marginTop: 2,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}>
                 {value}
               </div>
             </div>
@@ -115,9 +138,18 @@ export default function App() {
       <TelemetryPanel events={telemetry} />
 
       {/* Footer */}
-      <div style={{ marginTop: 'auto', textAlign: 'center', fontSize: 11, color: '#333', padding: 12 }}>
+      <div style={{
+        marginTop: 'auto',
+        textAlign: 'center',
+        fontSize: 11,
+        color: '#334155',
+        padding: 12,
+        fontFamily: 'JetBrains Mono, monospace',
+      }}>
         AGROS Music Intelligence Engine v0.1.0 — Workers: decode ✓ | analysis ○ | orchestration ○
       </div>
     </div>
   );
-}
+};
+
+export default MusicEngine;
