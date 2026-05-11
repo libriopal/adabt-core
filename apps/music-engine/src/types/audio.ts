@@ -59,3 +59,26 @@ export interface VFXSnapshot {
   peak: number;
   beatPhase: number;    // 0-1, cycles per beat
 }
+
+/** Analysis result from the analysis worker (Phase 2) */
+export interface AnalysisResult {
+  bpm: number;
+  key: string;
+  beatGrid: number[];
+  frames: Array<{
+    time: number;
+    rms: number;
+    spectralCentroid: number;
+    spectralFlux: number;
+  }>;
+}
+
+/** Analysis progress stages */
+export type AnalysisStage = 'fft' | 'bpm' | 'chroma' | 'transients' | 'symbolic';
+
+/** Analysis status */
+export interface AnalysisStatus {
+  active: boolean;
+  stage: AnalysisStage | null;
+  percent: number;
+}
