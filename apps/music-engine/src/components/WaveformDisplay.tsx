@@ -1,5 +1,6 @@
 // ─── WaveformDisplay ────────────────────────────────────────────────────────
 // Renders a waveform preview from the decoded PCM data.
+// Phase 2: Beat grid overlay markers drawn on top of waveform.
 // Uses canvas for efficient rendering. Supports seek-by-click.
 
 import { useRef, useEffect, useCallback } from 'react';
@@ -10,9 +11,17 @@ interface WaveformDisplayProps {
   duration: number;
   isPlaying: boolean;
   onSeek: (time: number) => void;
+  beatGrid?: number[] | null;
 }
 
-export function WaveformDisplay({ waveform, currentTime, duration, isPlaying, onSeek }: WaveformDisplayProps) {
+export function WaveformDisplay({
+  waveform,
+  currentTime,
+  duration,
+  isPlaying,
+  onSeek,
+  beatGrid,
+}: WaveformDisplayProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -38,6 +47,29 @@ export function WaveformDisplay({ waveform, currentTime, duration, isPlaying, on
     ctx.fillStyle = '#0d0d15';
     ctx.fillRect(0, 0, w, h);
 
+    // Beat grid markers (draw behind waveform for depth)
+    if (beatGrid && beatGrid.length > 0 && duration > 0) {
+      for (let i = 0; i < beatGrid.length; i++) {
+        const x = (beatGrid[i] / duration) * w;
+        // Downbeat (every 4th beat) gets a brighter line
+        const isDownbeat = i % 4 === 0;
+        ctx.strokeStyle = isDownbeat
+          ? 'rgba(250, 204, 21, 0.25)'
+          : 'rgba(250, 204, 21, 0.10)';
+        ctx.lineWidth = isDownbeat ? 1.5 : 0.5;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, h);
+        ctx.stroke();
+
+        // Small tick at top for downbeats
+        if (isDownbeat) {
+          ctx.fillStyle = 'rgba(250, 204, 21, 0.4)';
+          ctx.fillRect(x - 1, 0, 3, 4);
+        }
+      }
+    }
+
     // Waveform bars
     const barWidth = Math.max(1, w / waveform.length);
     for (let i = 0; i < waveform.length; i++) {
@@ -61,7 +93,7 @@ export function WaveformDisplay({ waveform, currentTime, duration, isPlaying, on
       ctx.lineTo(playheadX, h);
       ctx.stroke();
     }
-  }, [waveform, currentTime, duration]);
+  }, [waveform, currentTime, duration, beatGrid]);
 
   useEffect(() => {
     draw();
