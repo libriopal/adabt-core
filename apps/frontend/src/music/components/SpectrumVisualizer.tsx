@@ -84,6 +84,13 @@ export function SpectrumVisualizer({ snapshot, isPlaying }: SpectrumVisualizerPr
         );
       }
 
+      // Beat flash — subtle pulse on the beat (beatPhase near 0)
+      if (snap.beatPhase < 0.1) {
+        const flashAlpha = (1 - snap.beatPhase / 0.1) * 0.08;
+        ctx.fillStyle = `rgba(251, 191, 36, ${flashAlpha})`;
+        ctx.fillRect(0, 0, w, h);
+      }
+
       // RMS energy bar at top
       const rmsWidth = snap.rms * w;
       const gradient = ctx.createLinearGradient(0, 0, rmsWidth, 0);

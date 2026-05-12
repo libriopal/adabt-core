@@ -26,7 +26,9 @@ export interface TrackAnalysis {
   sampleRate: number;
   duration: number;
   bpm: number;
+  bpmConfidence: number;    // 0-1
   key: string;              // e.g. "C minor"
+  keyConfidence: number;    // 0-1
   events: SymbolicEvent[];
   frames: AnalysisFrame[];  // downsampled to ~30fps
   beatGrid: number[];       // beat onset times in seconds

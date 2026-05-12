@@ -1,5 +1,6 @@
-// ─── DSP Module Index ───────────────────────────────────────────────────────
-// Re-exports all DSP primitives for convenient access.
+// ─── DSP Module ─────────────────────────────────────────────────────────────
+// Barrel export for all DSP primitives.
 
 export { runFFT, computeSTFT } from './fft';
 export { estimateBPM, estimateBPMAutocorrelation } from './bpm';
+export { estimateKey, computeChromagram } from './key';

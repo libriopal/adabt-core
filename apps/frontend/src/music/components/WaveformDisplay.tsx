@@ -9,10 +9,11 @@ interface WaveformDisplayProps {
   currentTime: number;
   duration: number;
   isPlaying: boolean;
+  beatGrid?: number[];
   onSeek: (time: number) => void;
 }
 
-export function WaveformDisplay({ waveform, currentTime, duration, isPlaying, onSeek }: WaveformDisplayProps) {
+export function WaveformDisplay({ waveform, currentTime, duration, isPlaying, beatGrid, onSeek }: WaveformDisplayProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -52,6 +53,19 @@ export function WaveformDisplay({ waveform, currentTime, duration, isPlaying, on
       ctx.fillRect(x, mid - amplitude, barWidth + 0.5, amplitude * 2);
     }
 
+    // Beat grid overlay
+    if (beatGrid && beatGrid.length > 0 && duration > 0) {
+      ctx.strokeStyle = 'rgba(251, 191, 36, 0.18)';
+      ctx.lineWidth = 1;
+      for (const beatTime of beatGrid) {
+        const x = (beatTime / duration) * w;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, h);
+        ctx.stroke();
+      }
+    }
+
     // Playhead
     if (duration > 0) {
       ctx.strokeStyle = '#e0e0e8';
@@ -61,7 +75,7 @@ export function WaveformDisplay({ waveform, currentTime, duration, isPlaying, on
       ctx.lineTo(playheadX, h);
       ctx.stroke();
     }
-  }, [waveform, currentTime, duration]);
+  }, [waveform, currentTime, duration, beatGrid]);
 
   useEffect(() => {
     draw();

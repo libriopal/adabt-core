@@ -1,7 +1,7 @@
 // ─── Music Intelligence Engine ──────────────────────────────────────────────
 // Unified tab within AGROS — audio ingestion, decode, playback, waveform,
-// spectrum visualization, and DSP analysis.
-// Merged from music-intelligence-engine standalone + apps/music-engine Phase 1+2.
+// spectrum visualization, DSP analysis (BPM, key, beat grid).
+// Phase 1+2 complete.
 
 import React from 'react';
 import { useAudioEngine } from '../music/hooks/useAudioEngine';
@@ -9,11 +9,21 @@ import { FileDropZone } from '../music/components/FileDropZone';
 import { WaveformDisplay } from '../music/components/WaveformDisplay';
 import { SpectrumVisualizer } from '../music/components/SpectrumVisualizer';
 import { TransportControls } from '../music/components/TransportControls';
+import { AnalysisPanel } from '../music/components/AnalysisPanel';
 import { TelemetryPanel } from '../music/components/TelemetryPanel';
 
 const MusicEngine: React.FC = () => {
   const { state, loadFile, play, pause, stop, seek, setVolume } = useAudioEngine();
-  const { playback, file, decodeProgress, waveformPreview, vfxSnapshot, telemetry } = state;
+  const {
+    playback,
+    file,
+    decodeProgress,
+    waveformPreview,
+    vfxSnapshot,
+    analysis,
+    analysisProgress,
+    telemetry,
+  } = state;
 
   const isLoading = playback.status === 'loading';
   const hasAudio = playback.status === 'paused' || playback.status === 'playing';
@@ -48,7 +58,7 @@ const MusicEngine: React.FC = () => {
           marginTop: 6,
           fontFamily: 'JetBrains Mono, monospace',
         }}>
-          Phase 1 — Audio Ingestion, Decode & Visualization
+          Phase 2 — Audio Analysis, BPM Detection, Key Estimation & Beat Grid
         </p>
       </div>
 
@@ -60,13 +70,14 @@ const MusicEngine: React.FC = () => {
         fileName={file?.name}
       />
 
-      {/* Waveform */}
+      {/* Waveform with Beat Grid Overlay */}
       {waveformPreview && (
         <WaveformDisplay
           waveform={waveformPreview}
           currentTime={playback.currentTime}
           duration={playback.duration}
           isPlaying={playback.status === 'playing'}
+          beatGrid={analysis?.beatGrid}
           onSeek={seek}
         />
       )}
@@ -82,11 +93,19 @@ const MusicEngine: React.FC = () => {
         />
       )}
 
-      {/* Spectrum Visualizer */}
+      {/* Spectrum Visualizer (BPM-synced beat flash) */}
       {hasAudio && (
         <SpectrumVisualizer
           snapshot={vfxSnapshot}
           isPlaying={playback.status === 'playing'}
+        />
+      )}
+
+      {/* Analysis Panel — BPM, Key, Beat Grid, Confidence */}
+      {(hasAudio || analysisProgress) && (
+        <AnalysisPanel
+          analysis={analysis}
+          progress={analysisProgress}
         />
       )}
 
@@ -146,7 +165,7 @@ const MusicEngine: React.FC = () => {
         padding: 12,
         fontFamily: 'JetBrains Mono, monospace',
       }}>
-        AGROS Music Intelligence Engine v0.1.0 — Workers: decode ✓ | analysis ○ | orchestration ○
+        AGROS Music Intelligence Engine v0.2.0 — Workers: decode ✓ | analysis ✓ | orchestration ○
       </div>
     </div>
   );

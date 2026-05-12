@@ -6,7 +6,7 @@
 export { useAudioEngine } from './hooks/useAudioEngine';
 
 // DSP primitives
-export { runFFT, computeSTFT, estimateBPM, estimateBPMAutocorrelation } from './dsp';
+export { runFFT, computeSTFT, estimateBPM, estimateBPMAutocorrelation, estimateKey, computeChromagram } from './dsp';
 
 // Types
 export type {

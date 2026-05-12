@@ -71,7 +71,9 @@ export interface AnalyzeComplete {
   type: 'analyze:complete';
   seqId: number;
   bpm: number;
+  bpmConfidence: number;
   key: string;
+  keyConfidence: number;
   beatGrid: number[];
   frames: Array<{
     time: number;

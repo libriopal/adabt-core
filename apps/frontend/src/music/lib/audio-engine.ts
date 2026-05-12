@@ -4,8 +4,8 @@
 // Workers own all DSP/decode compute.
 
 import { workerManager, nextSeqId } from './worker-manager';
-import type { AudioFileInfo, PlaybackState, VFXSnapshot } from '../types/audio';
-import type { DecodeWorkerOutbound } from '../types/worker-messages';
+import type { AudioFileInfo, PlaybackState, VFXSnapshot, TrackAnalysis } from '../types/audio';
+import type { DecodeWorkerOutbound, AnalysisWorkerOutbound } from '../types/worker-messages';
 
 export type AudioEngineListener = (state: AudioEngineState) => void;
 
@@ -17,6 +17,8 @@ export interface AudioEngineState {
   totalDecodedSamples: number;
   waveformPreview: Float32Array | null;
   vfxSnapshot: VFXSnapshot | null;
+  analysis: TrackAnalysis | null;
+  analysisProgress: { stage: string; percent: number } | null;
   telemetry: Array<{ event: string; data: Record<string, unknown>; timestamp: number }>;
 }
 
@@ -33,6 +35,8 @@ const INITIAL_STATE: AudioEngineState = {
   totalDecodedSamples: 0,
   waveformPreview: null,
   vfxSnapshot: null,
+  analysis: null,
+  analysisProgress: null,
   telemetry: [],
 };
 
@@ -48,6 +52,7 @@ export class AudioEngine {
   private startOffset = 0;
   private rafId: number | null = null;
   private currentSeqId: number | null = null;
+  private analysisSeqId: number | null = null;
 
   // Incremental waveform preview state
   private previewBuckets: Float32Array | null = null;
@@ -70,6 +75,17 @@ export class AudioEngine {
 
     workerManager.subscribe('decode', (msg) => {
       this.handleDecodeMessage(msg as DecodeWorkerOutbound);
+    });
+
+    // Analysis worker
+    const analysisWorker = new Worker(
+      new URL('../workers/analysis.worker.ts', import.meta.url),
+      { type: 'module' }
+    );
+    workerManager.register('analysis', analysisWorker);
+
+    workerManager.subscribe('analysis', (msg) => {
+      this.handleAnalysisMessage(msg as AnalysisWorkerOutbound);
     });
 
     workerManager.onTelemetry((event) => {
@@ -114,6 +130,8 @@ export class AudioEngine {
         // Final exact waveform rebuild now that all samples are in
         this.buildFinalWaveformPreview();
         this.preparePlayback(msg.sampleRate, msg.channels, msg.totalSamples);
+        // Kick off DSP analysis in background worker
+        this.triggerAnalysis(msg.sampleRate);
         this.notify();
         break;
 
@@ -125,12 +143,83 @@ export class AudioEngine {
     }
   }
 
+  // ─── Analysis Worker Handling ──────────────────────────────────────────
+
+  private handleAnalysisMessage(msg: AnalysisWorkerOutbound): void {
+    if ('seqId' in msg && msg.seqId !== this.analysisSeqId) return;
+
+    switch (msg.type) {
+      case 'analyze:progress':
+        this.state.analysisProgress = { stage: msg.stage, percent: msg.percent };
+        this.notify();
+        break;
+
+      case 'analyze:complete':
+        this.state.analysis = {
+          sampleRate: this.state.file?.sampleRate ?? 44100,
+          duration: this.state.playback.duration,
+          bpm: msg.bpm,
+          bpmConfidence: msg.bpmConfidence,
+          key: msg.key,
+          keyConfidence: msg.keyConfidence,
+          events: [],
+          frames: msg.frames.map(f => ({
+            ...f,
+            spectrum: new Float32Array(0),
+            chroma: new Float32Array(0),
+          })),
+          beatGrid: msg.beatGrid,
+        };
+        this.state.analysisProgress = null;
+        this.notify();
+        break;
+
+      case 'analyze:error':
+        this.state.analysisProgress = null;
+        console.error('[AudioEngine] Analysis error:', msg.error);
+        this.notify();
+        break;
+    }
+  }
+
+  private triggerAnalysis(sampleRate: number): void {
+    // Cancel any existing analysis
+    if (this.analysisSeqId !== null) {
+      workerManager.cancel('analysis');
+    }
+
+    // Assemble full PCM from chunks
+    const fullPcm = new Float32Array(this.state.totalDecodedSamples);
+    let offset = 0;
+    for (const chunk of this.state.pcmChunks) {
+      fullPcm.set(chunk, offset);
+      offset += chunk.length;
+    }
+
+    const seqId = nextSeqId();
+    this.analysisSeqId = seqId;
+    this.state.analysisProgress = { stage: 'fft', percent: 0 };
+    this.notify();
+
+    workerManager.send('analysis', {
+      type: 'analyze:start',
+      seqId,
+      pcmData: fullPcm,
+      sampleRate,
+      channels: 1,
+    }, [fullPcm.buffer]);
+  }
+
   // ─── File Loading ─────────────────────────────────────────────────────
 
   async loadFile(file: File): Promise<void> {
-    // Cancel any existing decode
+    // Cancel any existing decode and analysis
     if (this.currentSeqId !== null) {
       workerManager.cancel('decode');
+    }
+    if (this.analysisSeqId !== null) {
+      workerManager.cancel('analysis');
+      this.analysisSeqId = null;
     }
     this.stop();
 
@@ -315,13 +404,20 @@ export class AudioEngine {
       }
       rms = Math.sqrt(rms / waveformBuffer.length);
 
+      // Compute beat phase from BPM analysis
+      let beatPhase = 0;
+      if (this.state.analysis?.bpm && this.state.analysis.bpm > 0) {
+        const beatInterval = 60 / this.state.analysis.bpm;
+        beatPhase = (currentTime % beatInterval) / beatInterval;
+      }
+
       this.state.vfxSnapshot = {
         time: currentTime,
         spectrum,
         waveform,
         rms,
         peak,
-        beatPhase: 0, // Phase 2 will compute this from BPM
+        beatPhase,
       };
 
       this.notify();
