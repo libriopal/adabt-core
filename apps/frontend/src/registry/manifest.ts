@@ -134,6 +134,9 @@ const AGROS_LAYERS: Omit<LayerManifest, 'status'>[] = [
       { name: 'EvolutionVisualizer', path: 'components/EvolutionVisualizer.tsx', type: 'ui', status: 'stable', dependencies: ['EvolutionEngine'] },
       { name: 'MemoryInspector', path: 'components/MemoryInspector.tsx', type: 'ui', status: 'evolving', dependencies: ['MemoryGraph'] },
       { name: 'DebugPanel', path: 'components/DebugPanel.tsx', type: 'ui', status: 'evolving', dependencies: ['MetricsCollector', 'TraceLogger'] },
+      { name: 'MusicEnginePage', path: 'pages/MusicEngine.tsx', type: 'ui', status: 'evolving', dependencies: ['MusicAnalysisWorker', 'MetricsCollector'] },
+      { name: 'MusicAnalysisWorker', path: 'music/workers/audioAnalysis.worker.ts', type: 'worker', status: 'evolving', dependencies: ['MusicDSP'] },
+      { name: 'MusicDSP', path: 'music/dsp.ts', type: 'service', status: 'evolving', dependencies: [] },
     ],
     dependencies: ['Debug Layer', 'Evolution Layer', 'Memory Layer'],
   },
@@ -248,6 +251,7 @@ class ArchitectureRegistry {
     if (path.includes('demand') || path.includes('trend')) return 'Demand Intelligence';
     if (path.includes('struthio/')) return 'STRUTHIO-SEC Mesh';
     if (path.includes('debug/')) return 'Debug Layer';
+    if (path.includes('music/') || path.includes('MusicEngine')) return 'Visualization Layer';
     if (path.includes('components/')) return 'Visualization Layer';
     return 'Unknown';
   }
