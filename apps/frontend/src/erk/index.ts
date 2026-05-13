@@ -72,6 +72,7 @@ export interface ERKUpdateResult {
  *               across all clients in multiplayer (Law 1).
  */
 export class ERK {
+  private readonly initialSeed: string | number;
   private prng: DeterministicPRNG;
   private receptor: EmotionalStateReceptor;
   private transitionEngine: HarmonicTransitionEngine;
@@ -83,6 +84,7 @@ export class ERK {
   private currentKey: number;
 
   constructor(seed: string | number) {
+    this.initialSeed = seed;
     this.prng = new DeterministicPRNG(seed);
     this.receptor = new EmotionalStateReceptor();
     this.transitionEngine = new HarmonicTransitionEngine();
@@ -127,6 +129,9 @@ export class ERK {
       this.activeLeitmotif = targetLeitmotif;
       this.pendingTransition = transition;
       clusterChanged = true;
+    } else {
+      // No cluster change — clear any stale pending transition
+      this.pendingTransition = null;
     }
 
     // 4. Compute effective BPM and key within mutation bounds
@@ -148,10 +153,13 @@ export class ERK {
 
   /**
    * Get the full serializable session state for IndexedDB persistence.
+   *
+   * @param timestamp - External timestamp to use (e.g., from a shared game clock).
+   *                    Avoids nondeterministic `Date.now()` (Law 1 compliance).
    */
-  getSessionState(): ERKSessionState {
+  getSessionState(timestamp: number): ERKSessionState {
     return {
-      timestamp: Date.now(),
+      timestamp,
       emotionalState: this.receptor.getCurrent(),
       activeLeitmotifId: this.activeLeitmotif.id,
       activeCluster: this.activeCluster,
@@ -181,11 +189,11 @@ export class ERK {
 
   /**
    * Reset ERK to initial state.
+   * PRNG is always re-created to ensure reproducible state (Law 1).
+   * If no seed is provided, the original constructor seed is reused.
    */
   reset(seed?: string | number): void {
-    if (seed !== undefined) {
-      this.prng = new DeterministicPRNG(seed);
-    }
+    this.prng = new DeterministicPRNG(seed ?? this.initialSeed);
     this.receptor.reset();
     this.activeCluster = 'narrative';
     const narrativeSeeds = getLeitmotifsByCluster('narrative');

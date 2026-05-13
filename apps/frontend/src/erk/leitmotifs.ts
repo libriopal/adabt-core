@@ -41,8 +41,8 @@ const TIGHT_ENVELOPE: MutationEnvelope = {
 };
 
 const WIDE_ENVELOPE: MutationEnvelope = {
-  maxTempoDrift: 0.20,
-  maxTransposition: 3,
+  maxTempoDrift: 0.15,
+  maxTransposition: 2,
   voicingFamilies: ['strings', 'woodwinds', 'brass', 'keys', 'percussion'],
   maxVoiceMutationsPerBar: 3,
 };
@@ -329,7 +329,7 @@ export function getLeitmotifById(id: string): LeitmotifSeed | undefined {
  * Get all leitmotif seeds in a given cluster.
  */
 export function getLeitmotifsByCluster(cluster: LeitmotifCluster): readonly LeitmotifSeed[] {
-  return _byCluster.get(cluster) ?? [];
+  return [...(_byCluster.get(cluster) ?? [])];
 }
 
 /**

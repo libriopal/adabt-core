@@ -36,7 +36,7 @@
 
 ### Leitmotif Clusters
 
-```
+```text
 A — Sacred/Celestial:    Gate of Holy Spirits, Gates of Heaven,
                          Land of Benediction, Requiem of the Gods
 B — Profane/Demonic:     Gates of Hell, Demonic Banquet, Black Banquet,

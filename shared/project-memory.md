@@ -56,7 +56,7 @@
 
 ## Repository Topology
 
-```
+```text
 adabt-core/
 ├── apps/frontend/src/
 │   ├── engine/          # Intent vector, scoring, mechanic mapping, content rendering

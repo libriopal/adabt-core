@@ -46,6 +46,22 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
+/** Sanitize a single axis value: coerce NaN/Infinity to 0, then clamp to [0, 1]. */
+function safeAxis(v: number): number {
+  return clamp(Number.isFinite(v) ? v : 0, 0, 1);
+}
+
+/** Deep-copy and clamp every axis of an EmotionalStateVector to [0, 1]. */
+function clampVector(v: EmotionalStateVector): EmotionalStateVector {
+  return {
+    tension: safeAxis(v.tension),
+    momentum: safeAxis(v.momentum),
+    risk: safeAxis(v.risk),
+    chaos: safeAxis(v.chaos),
+    resolution: safeAxis(v.resolution),
+  };
+}
+
 // ── Receptor Class ────────────────────────────────────────────────────────────
 
 /**
@@ -89,18 +105,20 @@ export class EmotionalStateReceptor {
 
   /**
    * Get the full emotional history buffer (for persistence / analysis).
+   * Returns deep copies to prevent external mutation of internal state.
    */
   getHistory(): EmotionalStateVector[] {
-    return [...this.history];
+    return this.history.map(v => ({ ...v }));
   }
 
   /**
    * Restore receptor state from a persisted history.
    * Used when recovering from an IndexedDB checkpoint.
+   * Validates and clamps all values to [0, 1] to prevent NaN / out-of-range poisoning.
    */
   restore(history: EmotionalStateVector[], current: EmotionalStateVector): void {
-    this.history = history.slice(-HISTORY_SIZE);
-    this.current = { ...current };
+    this.history = history.slice(-HISTORY_SIZE).map(v => clampVector(v));
+    this.current = clampVector(current);
   }
 
   /**
