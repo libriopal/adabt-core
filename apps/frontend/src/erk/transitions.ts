@@ -72,7 +72,9 @@ const PIVOT_DEGREES: Record<string, number> = {
 // ── Distance Classification ───────────────────────────────────────────────────
 
 /**
- * Classify the harmonic distance between two clusters.
+ * Determine the harmonic distance category between two leitmotif clusters.
+ *
+ * @returns `'same'` if `from` and `to` are the same cluster, `'adjacent'` if they are harmonically adjacent, `'distant'` otherwise.
  */
 export function classifyDistance(from: LeitmotifCluster, to: LeitmotifCluster): ClusterDistance {
   if (from === to) return 'same';
@@ -83,13 +85,12 @@ export function classifyDistance(from: LeitmotifCluster, to: LeitmotifCluster): 
 // ── Secondary Dominant Chain Generator ─────────────────────────────────────────
 
 /**
- * Generate a secondary dominant chain for distant cluster transitions.
- * Uses cycle-of-fifths movement to modulate from one tonal center to another.
+ * Selects a sequence of scale degrees forming a modulation chain from a source root to a target root.
  *
- * @param fromKey - Root key of source (0–11)
- * @param toKey - Root key of target (0–11)
- * @param prng - Seeded PRNG for deterministic variation
- * @returns Array of scale degrees forming the modulation chain
+ * @param fromKey - Source root key as an integer 0–11 (semitone index)
+ * @param toKey - Target root key as an integer 0–11 (semitone index)
+ * @param prng - Seeded PRNG used to preserve deterministic API behavior
+ * @returns An array of scale degrees representing the modulation chain that resolves to the target tonic (`1`)
  */
 function generateDominantChain(fromKey: number, toKey: number, prng: DeterministicPRNG): number[] {
   // Calculate the interval (in semitones) between the two keys
