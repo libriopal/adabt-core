@@ -1,4 +1,4 @@
-      - name: Extract Context & Memory Status
+      - name: 'Extract Context & Memory Status'
         id: status
         run: |
           # 1. Determine Actor Role
