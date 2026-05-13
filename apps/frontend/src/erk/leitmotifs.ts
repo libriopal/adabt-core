@@ -319,21 +319,29 @@ for (const seed of LEITMOTIF_REGISTRY) {
 }
 
 /**
- * Look up a leitmotif seed by ID.
+ * Retrieve the leitmotif seed for the given identifier.
+ *
+ * @param id - The leitmotif seed identifier to look up
+ * @returns The matching `LeitmotifSeed`, or `undefined` if no seed exists for `id`
  */
 export function getLeitmotifById(id: string): LeitmotifSeed | undefined {
   return _byId.get(id);
 }
 
 /**
- * Get all leitmotif seeds in a given cluster.
+ * List all leitmotif seeds for the specified cluster.
+ *
+ * @param cluster - Cluster identifier whose seeds should be returned
+ * @returns A new array containing the leitmotif seeds assigned to `cluster`; an empty array if the cluster has no seeds
  */
 export function getLeitmotifsByCluster(cluster: LeitmotifCluster): readonly LeitmotifSeed[] {
   return [...(_byCluster.get(cluster) ?? [])];
 }
 
 /**
- * Get all cluster IDs.
+ * List all supported leitmotif cluster IDs.
+ *
+ * @returns The supported cluster identifiers: `sacred`, `profane`, `baroque`, `atmospheric`, and `narrative`.
  */
 export function getAllClusters(): readonly LeitmotifCluster[] {
   return ['sacred', 'profane', 'baroque', 'atmospheric', 'narrative'];

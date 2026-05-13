@@ -40,18 +40,37 @@ const MAX_DISRUPTIONS = 5;
 /** History buffer size for emotional trajectory smoothing. */
 const HISTORY_SIZE = 8;
 
-// ── Clamp utility ─────────────────────────────────────────────────────────────
+/**
+ * Restricts a number to the inclusive range defined by `min` and `max`.
+ *
+ * @param value - The input number to constrain
+ * @param min - The lower bound (inclusive)
+ * @param max - The upper bound (inclusive)
+ * @returns The input limited to be no less than `min` and no greater than `max`
+ */
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
-/** Sanitize a single axis value: coerce NaN/Infinity to 0, then clamp to [0, 1]. */
+/**
+ * Sanitize an axis value by coercing non-finite numbers to 0 and clamping the result to the range 0 to 1.
+ *
+ * @param v - The input axis value
+ * @returns A number between 0 and 1 (inclusive); `NaN` or infinite inputs become 0
+ */
 function safeAxis(v: number): number {
   return clamp(Number.isFinite(v) ? v : 0, 0, 1);
 }
 
-/** Deep-copy and clamp every axis of an EmotionalStateVector to [0, 1]. */
+/**
+ * Return a sanitized copy of an EmotionalStateVector with every axis constrained to the range 0–1.
+ *
+ * Non-finite axis values (NaN or ±Infinity) are converted to 0 before clamping.
+ *
+ * @param v - The source EmotionalStateVector to sanitize
+ * @returns A new EmotionalStateVector whose `tension`, `momentum`, `risk`, `chaos`, and `resolution` are finite numbers between 0 and 1 inclusive
+ */
 function clampVector(v: EmotionalStateVector): EmotionalStateVector {
   return {
     tension: safeAxis(v.tension),
