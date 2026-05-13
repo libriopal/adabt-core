@@ -1,0 +1,13 @@
+name: DSP Runtime Survivability
+on: [push, pull_request]
+
+jobs:
+  latency-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run DSP Latency Audit
+        uses: ./.github/actions/dsp-latency-audit
+        with:
+          threshold: 12ms # Threshold for Tier 0 stability
+

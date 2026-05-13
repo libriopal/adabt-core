@@ -1,35 +1,26 @@
-# v0-adaptive-generative-research-os
+# AMIS: Autonomous Music Intelligence System
 
-This is a [Next.js](https://nextjs.org) project bootstrapped with [v0](https://v0.app).
+## 1. IDENTITY
+This is a browser-native distributed emotional-runtime orchestration platform. It converts `FAR_NZY` gameplay states into deterministic procedural music.
 
-## Built with v0
+## 2. GOVERNANCE WORKFLOW
+1. **Propose:** @Viktor proposes architectural shifts in a PR.
+2. **Audit:** @CodeRabbit performs an adversarial audit (triggered via GitHub Actions).
+3. **Consolidate:** On merge, `memory-consolidation.yml` snapshots the new architecture state.
 
-This repository is linked to a [v0](https://v0.app) project. You can continue developing by visiting the link below -- start new chats to make changes, and v0 will push commits directly to this repo. Every merge to `main` will automatically deploy.
+## 3. PROJECT MEMORY HIERARCHY
+- `/shared/project-memory.md`: The canonical ledger of system evolution.
+- `/viktor.md` & `/coderabbit.md`: Agent-specific heuristics and failure logs.
+- `/constitution/operational-law.md`: The immutable system constitution.
 
-[Continue working on v0 →](https://v0.app/chat/projects/prj_88pRfVmmSrbXa5Hwzei4cvBESYA1)
+## 4. DEPLOYMENT (RAILWAY)
+- Ensure **COOP** and **COEP** headers are enabled to allow `SharedArrayBuffer` support.
+- All WASM binaries must be served with `application/wasm` MIME type.
+- Tiered Fidelity must be active to prevent thermal throttling on Android.
 
-## Getting Started
+## 5. RECOVERY
+If the system enters a recursive loop or architecture drift:
+1. Revert to the last `governance/checkpoints/` snapshot.
+2. Review `/coderabbit.md` for the failure rationale.
+3. Re-initialize from the Sovereign User arbitration.
 
-First, run the development server:
-
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-## Learn More
-
-To learn more, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-- [v0 Documentation](https://v0.app/docs) - learn about v0 and how to use it.
-
-<a href="https://v0.app/chat/api/kiro/clone/libriopal/v0-adaptive-generative-research-os" alt="Open in Kiro"><img src="https://pdgvvgmkdvyeydso.public.blob.vercel-storage.com/open%20in%20kiro.svg?sanitize=true" /></a>

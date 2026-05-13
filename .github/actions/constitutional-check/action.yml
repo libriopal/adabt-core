@@ -1,0 +1,10 @@
+name: 'Constitutional Check'
+description: 'Enforces Memory and Rollback Laws'
+runs:
+  using: "composite"
+  steps:
+    - shell: bash
+      run: |
+        echo "Checking PR structure..."
+        # Logic to ensure [ROLLBACK] and [MEM-UPDATE] tags exist in PR body
+

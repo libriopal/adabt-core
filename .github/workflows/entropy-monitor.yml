@@ -1,0 +1,12 @@
+name: Entropy Monitor
+on:
+  schedule:
+    - cron: '0 0 * * *' # Daily scan
+
+jobs:
+  scan-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Calculate Architecture Drift
+        run: npx ts-node ./scripts/governance/calculate-entropy.ts
+
