@@ -2,17 +2,20 @@
  * SPSC lock-free ring buffer over a SharedArrayBuffer.
  *
  * Memory layout (bytes):
- *   [0..3]  WRITE_HEAD : Uint32  — producer-owned write index
- *   [4..7]  READ_HEAD  : Uint32  — consumer-owned read index
+ *   [0..3]  WRITE_HEAD : Uint32  — monotonic, producer-owned
+ *   [4..7]  READ_HEAD  : Uint32  — monotonic, consumer-owned
  *   [8..]   Float32 data region  — capacity * 4 bytes
  *
- * Both indices are logical (never masked); masking happens at access time
- * via `index & (capacity - 1)` so the distance arithmetic stays correct
- * across the single wrap-around before both heads are reset.
+ * Indices are MONOTONIC (ever-increasing uint32, wrapping naturally at 2^32).
+ * The mask (index & (capacity - 1)) is applied ONLY when addressing data[].
+ * This makes full vs. empty unambiguous:
+ *   empty : writeHead - readHead === 0
+ *   full  : writeHead - readHead === capacity
+ * Both conditions are mathematically distinct for any power-of-two capacity ≤ 2^31.
  */
 
-const WRITE_HEAD = 0; // Uint32 index into headers
-const READ_HEAD = 1;  // Uint32 index into headers
+const WRITE_HEAD = 0;
+const READ_HEAD = 1;
 const HEADER_BYTES = 8;
 
 export class SharedRingBuffer {
@@ -20,9 +23,7 @@ export class SharedRingBuffer {
   private readonly headers: Uint32Array;
   private readonly data: Float32Array;
 
-  /**
-   * @param capacity  Number of Float32 samples. Must be a power of two.
-   */
+  /** @param capacity Number of Float32 samples. Must be a power of two. */
   constructor(capacity: number = 2048) {
     if (capacity <= 0 || (capacity & (capacity - 1)) !== 0) {
       throw new RangeError(`SharedRingBuffer: capacity must be a power of two, got ${capacity}`);
@@ -35,8 +36,8 @@ export class SharedRingBuffer {
   }
 
   /**
-   * Construct a SharedRingBuffer view over an existing SharedArrayBuffer.
-   * Used by the consumer (AudioWorklet) to attach to memory the producer already created.
+   * Attach to an existing SharedArrayBuffer — used by the AudioWorklet consumer
+   * after the producer posts the SAB via postMessage.
    */
   static fromSharedArrayBuffer(sab: SharedArrayBuffer, capacity: number): SharedRingBuffer {
     const instance = Object.create(SharedRingBuffer.prototype) as SharedRingBuffer;
@@ -46,54 +47,54 @@ export class SharedRingBuffer {
     return instance;
   }
 
-  /** Returns the underlying SharedArrayBuffer for transfer to another thread. */
   get sharedArrayBuffer(): SharedArrayBuffer {
     return this.data.buffer as SharedArrayBuffer;
   }
 
   // ---------------------------------------------------------------------------
-  // Producer API (call from WASM Worker only)
+  // Producer API  (WASM Worker thread only)
   // ---------------------------------------------------------------------------
 
   /**
-   * Push `samples` into the ring buffer.
-   * Returns true on success, false if there is insufficient space (back-pressure).
+   * Write `samples` into the buffer.
+   * Returns false on back-pressure (not enough free space); does not overwrite.
    */
   push(samples: Float32Array): boolean {
     const writeHead = Atomics.load(this.headers, WRITE_HEAD); // relaxed
-    const readHead = Atomics.load(this.headers, READ_HEAD);   // relaxed
+    const readHead  = Atomics.load(this.headers, READ_HEAD);  // relaxed
 
-    const freeSlots = this.capacity - ((writeHead - readHead) & (this.capacity - 1));
-    if (samples.length > freeSlots) {
-      return false; // overrun protection — do not clobber live data
-    }
+    // Monotonic distance: no mask here — gives true count [0 .. capacity].
+    const used = (writeHead - readHead) >>> 0;
+    const free = this.capacity - used;
+    if (samples.length > free) return false;
 
     for (let i = 0; i < samples.length; i++) {
       this.data[(writeHead + i) & (this.capacity - 1)] = samples[i];
     }
 
-    // Release store — publishes all data[] writes before advancing the head.
-    Atomics.store(this.headers, WRITE_HEAD, (writeHead + samples.length) & 0xFFFFFFFF);
+    // Release store — all data[] writes are visible before the head advances.
+    Atomics.store(this.headers, WRITE_HEAD, (writeHead + samples.length) >>> 0);
     return true;
   }
 
   // ---------------------------------------------------------------------------
-  // Consumer API (call from AudioWorklet process() only)
+  // Consumer API  (AudioWorklet process() only)
   // ---------------------------------------------------------------------------
 
   /**
-   * Pull `blockSize` samples into `output`.
-   * Returns true on success, false on underrun (caller should output silence).
+   * Read `blockSize` samples into `output`.
+   * Returns false on underrun; fills `output` with silence in that case.
    */
   pull(output: Float32Array, blockSize: number): boolean {
     // Acquire load — establishes happens-before with the producer's release store.
     const writeHead = Atomics.load(this.headers, WRITE_HEAD); // acquire
-    const readHead = Atomics.load(this.headers, READ_HEAD);   // relaxed (we own it)
+    const readHead  = Atomics.load(this.headers, READ_HEAD);  // relaxed (we own it)
 
-    const available = (writeHead - readHead) & (this.capacity - 1);
+    // Monotonic distance — no mask, gives true count [0 .. capacity].
+    const available = (writeHead - readHead) >>> 0;
     if (available < blockSize) {
       output.fill(0, 0, blockSize);
-      return false; // underrun — silence this block
+      return false;
     }
 
     for (let i = 0; i < blockSize; i++) {
@@ -101,18 +102,18 @@ export class SharedRingBuffer {
     }
 
     // Relaxed store — producer never acquires on READ_HEAD.
-    Atomics.store(this.headers, READ_HEAD, (readHead + blockSize) & 0xFFFFFFFF);
+    Atomics.store(this.headers, READ_HEAD, (readHead + blockSize) >>> 0);
     return true;
   }
 
   // ---------------------------------------------------------------------------
-  // Diagnostics (safe to call from either thread; values are snapshots)
+  // Diagnostics (snapshot — safe from either thread)
   // ---------------------------------------------------------------------------
 
   get availableSamples(): number {
     const w = Atomics.load(this.headers, WRITE_HEAD);
     const r = Atomics.load(this.headers, READ_HEAD);
-    return (w - r) & (this.capacity - 1);
+    return (w - r) >>> 0;
   }
 
   get freeSamples(): number {

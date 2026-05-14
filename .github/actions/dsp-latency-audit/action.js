@@ -1,13 +1,22 @@
-const core = require('@actions/core');
+// Dependency-free DSP latency audit — uses only GitHub workflow commands via stdout.
+// No @actions/core or node_modules required.
 
 const SAMPLE_RATE = 48000;
 const BLOCK_SIZE = 128;
 const BUDGET_MS = (BLOCK_SIZE / SAMPLE_RATE) * 1000; // 2.6667 ms
-const JITTER_THRESHOLD = 0.10; // 10%
+const JITTER_ABS_CEILING_MS = 1.0; // max - mean must not exceed 1 ms (Tier 0 Android)
 const ITERATIONS = 1000;
 
+function log(msg) {
+  process.stdout.write(msg + '\n');
+}
+
+function fail(msg) {
+  process.stdout.write(`::error::${msg}\n`);
+  process.exitCode = 1;
+}
+
 function simulateDspBlock(blockSize) {
-  // Simulate a realistic DSP render: per-sample gain + simple one-pole LP filter.
   const input = new Float32Array(blockSize);
   const output = new Float32Array(blockSize);
   for (let i = 0; i < blockSize; i++) {
@@ -25,7 +34,7 @@ function simulateDspBlock(blockSize) {
 function runAudit() {
   const samples = [];
 
-  // Warm-up pass (not measured)
+  // Warm-up — not measured
   for (let i = 0; i < 50; i++) simulateDspBlock(BLOCK_SIZE);
 
   for (let i = 0; i < ITERATIONS; i++) {
@@ -40,29 +49,30 @@ function runAudit() {
   const sorted = [...samples].sort((a, b) => a - b);
   const p99 = sorted[Math.floor(0.99 * sorted.length)];
 
-  const jitterRatio = (max - mean) / mean;
+  // Absolute jitter: max - mean. Avoids division-by-near-zero when DSP is very fast.
+  const jitterAbs = max - mean;
 
-  core.info(`DSP Latency Audit — ${ITERATIONS} iterations @ ${SAMPLE_RATE} Hz, block ${BLOCK_SIZE}`);
-  core.info(`  Budget  : ${BUDGET_MS.toFixed(4)} ms`);
-  core.info(`  Mean    : ${mean.toFixed(4)} ms`);
-  core.info(`  p99     : ${p99.toFixed(4)} ms`);
-  core.info(`  Max     : ${max.toFixed(4)} ms`);
-  core.info(`  Jitter  : ${(jitterRatio * 100).toFixed(2)}% (threshold ${JITTER_THRESHOLD * 100}%)`);
+  log(`DSP Latency Audit — ${ITERATIONS} iterations @ ${SAMPLE_RATE} Hz, block ${BLOCK_SIZE}`);
+  log(`  Budget       : ${BUDGET_MS.toFixed(4)} ms`);
+  log(`  Mean         : ${mean.toFixed(4)} ms`);
+  log(`  p99          : ${p99.toFixed(4)} ms`);
+  log(`  Max          : ${max.toFixed(4)} ms`);
+  log(`  Jitter (abs) : ${jitterAbs.toFixed(4)} ms  (ceiling ${JITTER_ABS_CEILING_MS} ms)`);
 
   if (mean > BUDGET_MS) {
-    core.setFailed(`Mean render time ${mean.toFixed(4)} ms exceeds Tier 0 budget of ${BUDGET_MS.toFixed(4)} ms`);
+    fail(`Mean render time ${mean.toFixed(4)} ms exceeds Tier 0 budget of ${BUDGET_MS.toFixed(4)} ms`);
     return;
   }
   if (p99 > BUDGET_MS) {
-    core.setFailed(`p99 render time ${p99.toFixed(4)} ms exceeds Tier 0 budget of ${BUDGET_MS.toFixed(4)} ms`);
+    fail(`p99 render time ${p99.toFixed(4)} ms exceeds Tier 0 budget of ${BUDGET_MS.toFixed(4)} ms`);
     return;
   }
-  if (jitterRatio > JITTER_THRESHOLD) {
-    core.setFailed(`Jitter ${(jitterRatio * 100).toFixed(2)}% exceeds Tier 0 threshold of ${JITTER_THRESHOLD * 100}%`);
+  if (jitterAbs > JITTER_ABS_CEILING_MS) {
+    fail(`Absolute jitter ${jitterAbs.toFixed(4)} ms exceeds Tier 0 ceiling of ${JITTER_ABS_CEILING_MS} ms`);
     return;
   }
 
-  core.info('Audit passed: DSP render is within Tier 0 latency and jitter budget.');
+  log('::notice::Audit passed: DSP render is within Tier 0 latency and jitter budget.');
 }
 
 runAudit();

@@ -13,3 +13,9 @@
 - `.github/actions/dsp-latency-audit/action.js` — rewritten as a real Node.js script: simulates 128-sample render loop at 48 kHz, measures mean/p99/max render time and jitter ratio against the 2.67 ms Tier 0 budget (10% jitter ceiling). Was: a 4-line stub with undefined `jitter` variable.
 - `apps/frontend/src/dsp/SPSC_RING_BUFFER_SPEC.md` — created; documents acquire/release memory ordering protocol for WASM Worker (producer) → AudioWorklet (consumer) SPSC ring buffer.
 - `apps/frontend/src/dsp/SharedRingBuffer.ts` — created; lock-free SPSC ring buffer over SharedArrayBuffer. Capacity 2048 samples (power-of-two). `push()` uses release store on WRITE_HEAD; `pull()` uses acquire load on WRITE_HEAD. Both methods provide overrun/underrun protection. Exposes `fromSharedArrayBuffer()` for cross-thread attachment and diagnostics (`availableSamples`, `freeSamples`).
+
+## Phase 1 Ring Buffer — Blocker Patch (2026-05-14)
+- [VETO PATCH]: Three CodeRabbit blockers resolved to clear the Phase 1 veto.
+- `SharedRingBuffer.ts` — **Monotonic Indexing**: WRITE_HEAD and READ_HEAD are now ever-increasing uint32 values; the power-of-two mask is applied only at `data[]` access (`index & (capacity-1)`). Distance arithmetic uses unsigned subtraction (`>>> 0`) with no mask, making full (distance == capacity) and empty (distance == 0) mathematically distinct. Previous masked-subtraction approach produced aliasing between those two states.
+- `action.js` — **Dependency-Free CI**: Removed `@actions/core` entirely. Output uses `process.stdout.write` with GitHub workflow command syntax (`::error::`, `::notice::`). Runs in any lean Node.js environment without node_modules.
+- `action.js` — **Absolute Jitter Gate**: Replaced ratio-based jitter `(max-mean)/mean` with absolute jitter `max - mean`; fails if > 1.0 ms. Ratio metric was numerically unstable when mean approaches zero on fast Android hardware (Tier 0 target).
