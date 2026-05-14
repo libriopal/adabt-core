@@ -10,3 +10,7 @@ restartPolicyMaxRetries = 3
 # Mount a Railway Volume at /data for persistent SQLite storage.
 # Create the volume in Railway dashboard → Settings → Volumes → Add Volume
 # Set the mount path to: /data
+# AMIS Survivability Headers
+# Cross-Origin-Opener-Policy = "same-origin"
+# Cross-Origin-Embedder-Policy = "require-corp"
+

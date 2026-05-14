@@ -1,0 +1,114 @@
+name: Slack Push Notification
+
+on:
+  push:
+    branches: [dev, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  notify-slack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Extract context and memory status
+        id: status
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          AUTHOR="${{ github.actor }}"
+          case "$AUTHOR" in
+            *viktor*) ROLE="ARCHITECT"; COLOR="#36a64f" ;;
+            *coderabbit*) ROLE="GOVERNOR"; COLOR="#ff0000" ;;
+            *) ROLE="SOVEREIGN"; COLOR="#439FE0" ;;
+          esac
+
+          HEAD_SHA="${{ github.sha }}"
+          BEFORE_SHA="${{ github.event.before }}"
+          if [[ -z "$BEFORE_SHA" || "$BEFORE_SHA" == "0000000000000000000000000000000000000000" ]]; then
+            BASE_SHA="$(git rev-parse "${HEAD_SHA}^" 2>/dev/null || true)"
+          else
+            BASE_SHA="$BEFORE_SHA"
+          fi
+
+          if [[ -n "$BASE_SHA" ]]; then
+            FILES_CHANGED="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")"
+          else
+            FILES_CHANGED="$(git show --pretty='' --name-only "$HEAD_SHA")"
+          fi
+
+          if grep -Fxq "shared/project-memory.md" <<< "$FILES_CHANGED"; then
+            MEM_MSG=":white_check_mark: MEMORY CONSOLIDATED: project-memory.md updated."
+          elif grep -Eq '(^|/)(viktor|coderabbit)\.md$|^constitution/|^shared/' <<< "$FILES_CHANGED"; then
+            MEM_MSG=":warning: PARTIAL UPDATE: Governance files changed, but project-memory.md is STALE."
+          else
+            MEM_MSG=":x: MEMORY VOID: No ledger updates detected in this push."
+          fi
+
+          {
+            echo "role=$ROLE"
+            echo "color=$COLOR"
+            echo "mem_status=$MEM_MSG"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Verify Railway COOP/COEP survivability headers
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Enforce same-origin for COOP
+          git grep -nE "Cross-Origin-Opener-Policy[^[:alnum:]]*[:=][^[:alnum:]]*same-origin|crossOriginOpenerPolicy[^[:alnum:]]*[:=][^[:alnum:]]*['\"]same-origin['\"]" -- \
+            apps/backend/src apps/frontend/vite.config.ts railway.toml >/dev/null || {
+            echo "::error::Missing explicit COOP value same-origin for SharedArrayBuffer survivability."
+            exit 1
+          }
+          # Enforce require-corp for COEP
+          git grep -nE "Cross-Origin-Embedder-Policy[^[:alnum:]]*[:=][^[:alnum:]]*require-corp|crossOriginEmbedderPolicy[^[:alnum:]]*[:=][^[:alnum:]]*['\"]require-corp['\"]" -- \
+            apps/backend/src apps/frontend/vite.config.ts railway.toml >/dev/null || {
+            echo "::error::Missing explicit COEP value require-corp for SharedArrayBuffer survivability."
+            exit 1
+          }
+
+      - name: Send Slack Notification
+        uses: slackapi/slack-github-action@v1.26.0
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+        with:
+          payload: |
+            {
+              "attachments": [
+                {
+                  "color": "${{ steps.status.outputs.color }}",
+                  "blocks": [
+                    {
+                      "type": "header",
+                      "text": { "type": "plain_text", "text": "🛡️ AMIS Alert: ${{ steps.status.outputs.role }}" }
+                    },
+                    {
+                      "type": "section",
+                      "text": { "type": "mrkdwn", "text": "*Memory Status:* ${{ steps.status.outputs.mem_status }}" }
+                    },
+                    {
+                      "type": "section",
+                      "text": { "type": "mrkdwn", "text": "*Commit:* ${{ github.sha }}\n*Branch:* ${{ github.ref_name }}" }
+                    },
+                    {
+                      "type": "actions",
+                      "elements": [
+                        {
+                          "type": "button",
+                          "text": { "type": "plain_text", "text": "View on GitHub" },
+                          "url": "${{ github.event.head_commit.url || github.event.pull_request.html_url }}"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
