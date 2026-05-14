@@ -182,7 +182,7 @@ export class WasmDSPKernel {
     return new WasmDSPKernel(
       exports,
       statePtr,
-      wasmMemory.buffer as SharedArrayBuffer,
+      wasmMemory.buffer as unknown as SharedArrayBuffer,
       capacity,
       writeHeadPtr,
       readHeadPtr,

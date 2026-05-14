@@ -48,9 +48,9 @@ export class SharedRingBuffer {
    */
   static fromSharedArrayBuffer(sab: SharedArrayBuffer, capacity: number): SharedRingBuffer {
     const instance = Object.create(SharedRingBuffer.prototype) as SharedRingBuffer;
-    (instance as { capacity: number }).capacity = capacity;
-    (instance as { headers: Uint32Array }).headers = new Uint32Array(sab, 0, 2);
-    (instance as { data: Float32Array }).data = new Float32Array(sab, HEADER_BYTES, capacity);
+    (instance as unknown as { capacity: number }).capacity = capacity;
+    (instance as unknown as { headers: Uint32Array }).headers = new Uint32Array(sab, 0, 2);
+    (instance as unknown as { data: Float32Array }).data = new Float32Array(sab, HEADER_BYTES, capacity);
     return instance;
   }
 
@@ -131,9 +131,9 @@ export class SharedRingBuffer {
     }
 
     const instance = Object.create(SharedRingBuffer.prototype) as SharedRingBuffer;
-    (instance as { capacity: number }).capacity = capacity;
-    (instance as { headers: Uint32Array }).headers = new Uint32Array(sab, writeHeadPtr, 2);
-    (instance as { data: Float32Array }).data = new Float32Array(sab, dataPtr, capacity);
+    (instance as unknown as { capacity: number }).capacity = capacity;
+    (instance as unknown as { headers: Uint32Array }).headers = new Uint32Array(sab, writeHeadPtr, 2);
+    (instance as unknown as { data: Float32Array }).data = new Float32Array(sab, dataPtr, capacity);
     return instance;
   }
 

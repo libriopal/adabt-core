@@ -146,6 +146,34 @@ export const WASM_MAX_PAGES: Record<DeviceTier, number> = {
   4: 256,  // 16 MB
 } as const;
 
+/* ─── Worker ↔ Main Thread Messages (Phase 2) ────────────────────────────── */
+
+/** Messages sent from the main thread to the DSP Worker. */
+export type WorkerInboundMessage =
+  | { type: 'init'; capacity: number; sampleRate: number; tier?: DeviceTier; wasmUrl?: string }
+  | { type: 'setFrequency'; value: number }
+  | { type: 'setGain'; value: number }
+  | { type: 'getDiagnostics' }
+  | { type: 'stop' };
+
+/** Messages sent from the DSP Worker to the main thread. */
+export type WorkerOutboundMessage =
+  | { type: 'ready'; sab: SharedArrayBuffer; writeHeadPtr: number; readHeadPtr: number; dataPtr: number; capacity: number }
+  | { type: 'diagnostics'; framesProduced: number; overruns: number; state: number }
+  | { type: 'stopped' }
+  | { type: 'error'; message: string };
+
+/** Messages sent from the main thread to the AudioWorklet processor. */
+export type WorkletInboundMessage =
+  | { type: 'init'; sab: SharedArrayBuffer; writeHeadPtr: number; readHeadPtr: number; dataPtr: number; capacity: number }
+  | { type: 'stop' };
+
+/** Messages sent from the AudioWorklet processor to the main thread. */
+export type WorkletOutboundMessage =
+  | { type: 'ready' }
+  | { type: 'underrun'; count: number }
+  | { type: 'error'; message: string };
+
 /* ─── Kernel Lifecycle States ─────────────────────────────────────────────── */
 
 export const enum KernelState {

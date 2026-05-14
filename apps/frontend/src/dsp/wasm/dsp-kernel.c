@@ -168,10 +168,14 @@ DspKernelState* dsp_kernel_init(uint32_t capacity, uint32_t sample_rate) {
  *
  * HOT PATH — no allocations, no blocking, no function pointers.
  *
- * DSP pipeline (Phase 1):
+ * DSP pipeline (Phase 2 — "First Sound"):
  *   1. Sine oscillator (deterministic: phase accumulator, no random state)
- *   2. One-pole IIR smoothing (coefficient = 0.995, ~10ms decay at 48kHz)
- *   3. Gain stage
+ *   2. Gain stage
+ *
+ * Phase 1 had an IIR smoothing stage (coeff 0.995) whose ~38 Hz cutoff
+ * attenuated a 440 Hz sine by ≈ -21 dB — inaudible for a "First Sound"
+ * proof.  The IIR state (z1[]) is retained in DspKernelState for future
+ * envelope/filter work but bypassed in the hot path until Phase 3.
  *
  * Returns the number of samples actually written.  If the ring buffer is
  * full (back-pressure), returns 0 and increments the overrun counter.
@@ -209,8 +213,6 @@ uint32_t dsp_kernel_process(DspKernelState *state, uint32_t frame_count) {
     float phase      = state->phase;
     float phase_inc  = state->freq / (float)state->sample_rate;
     float gain       = state->gain;
-    float z1         = state->z1[0];
-    float coeff      = 0.995f;  /* One-pole smoothing: ~10ms @ 48kHz */
 
     float *data      = state->data;
     uint32_t mask    = state->mask;
@@ -223,11 +225,9 @@ uint32_t dsp_kernel_process(DspKernelState *state, uint32_t frame_count) {
         phase += phase_inc;
         if (phase >= 1.0f) phase -= 1.0f;
 
-        /* One-pole IIR smoothing */
-        z1 = coeff * z1 + (1.0f - coeff) * sample;
-
-        /* Gain stage */
-        float out = z1 * gain;
+        /* Gain stage — direct sine × gain for clean "First Sound" output.
+         * IIR smoothing (z1[]) bypassed until Phase 3 filter work. */
+        float out = sample * gain;
 
         /* Write to ring buffer — MASK APPLIED ONLY HERE */
         data[(write_head + i) & mask] = out;
@@ -235,7 +235,6 @@ uint32_t dsp_kernel_process(DspKernelState *state, uint32_t frame_count) {
 
     /* Persist DSP state */
     state->phase = phase;
-    state->z1[0] = z1;
 
     /* ── 3. Release store on WRITE_HEAD ─────────────────────────────────── */
     /*
