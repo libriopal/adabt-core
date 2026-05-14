@@ -21,3 +21,16 @@
 - TS bridge: async WASM loader, typed exports, lifecycle state machine.
 - Build: Emscripten, tier-adaptive flags (Tier 0: 256KB/1MB, no SIMD).
 - Tests: monotonic head contract, wrap-around, underrun, capacity validation.
+
+## Phase 1 — WASM Memory Ownership Bridge (2026-05-14)
+- Sovereign fixed: C kernel now owns memory layout (static g_ring_headers/g_audio_data in BSS).
+- Bridge (WasmDSPKernel.ts) updated: creates WebAssembly.Memory with tier-correct pages,
+  retrieves exported byte offsets via dsp_write_head_ptr/dsp_read_head_ptr/dsp_data_ptr,
+  exposes them as kernel.writeHeadPtr/readHeadPtr/dataPtr for AudioWorklet view attachment.
+- Added SharedRingBuffer.fromWasmMemory() — consumer-side adapter for WASM-owned SAB.
+  Accepts arbitrary byte offsets (not hard-coded 0/8), validates alignment (4-byte),
+  header contiguity (readHeadPtr == writeHeadPtr + 4), and SAB bounds. Allows
+  AudioWorklet to construct typed-array views at the exact linker-assigned addresses.
+- 8 new tests: WASM SAB attachment, raw Atomics interop, push/pull at non-zero offsets,
+  alignment rejection, contiguity rejection, capacity validation, bounds rejection.
+- Total test count: 22 (up from 14).

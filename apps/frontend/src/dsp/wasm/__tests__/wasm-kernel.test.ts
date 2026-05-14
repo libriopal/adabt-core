@@ -183,6 +183,129 @@ describe('Capacity Validation', () => {
   });
 });
 
+/* ─── SharedRingBuffer.fromWasmMemory ─────────────────────────────────────── */
+
+describe('SharedRingBuffer.fromWasmMemory — WASM SAB attachment', () => {
+  /**
+   * Simulate a WASM-owned SAB where headers and data live at non-zero
+   * offsets (as assigned by the linker in the WASM data/BSS segment).
+   *
+   * Typical WASM layout might look like:
+   *   [0 .. 16383]    g_heap (bump allocator)
+   *   [16384 .. 16391] g_ring_headers[2]  (WRITE_HEAD, READ_HEAD)
+   *   [16392 .. 24583] g_audio_data[2048]
+   *
+   * The exact offsets are determined at runtime by dsp_write_head_ptr() /
+   * dsp_read_head_ptr() / dsp_data_ptr().
+   */
+  const FAKE_WRITE_HEAD_PTR = 16384;   // 4-byte aligned
+  const FAKE_READ_HEAD_PTR  = 16388;   // WRITE_HEAD + 4
+  const FAKE_DATA_PTR       = 16392;   // after headers, 4-byte aligned
+  const CAPACITY            = 256;     // power of two
+
+  function makeWasmSab(): SharedArrayBuffer {
+    // Large enough to hold the heap + headers + data
+    const totalBytes = FAKE_DATA_PTR + CAPACITY * Float32Array.BYTES_PER_ELEMENT;
+    return new SharedArrayBuffer(totalBytes);
+  }
+
+  it('should construct views at the correct WASM byte offsets', () => {
+    const sab = makeWasmSab();
+    const ring = SharedRingBuffer.fromWasmMemory(
+      sab, FAKE_WRITE_HEAD_PTR, FAKE_READ_HEAD_PTR, FAKE_DATA_PTR, CAPACITY,
+    );
+
+    expect(ring.capacity).toBe(CAPACITY);
+    expect(ring.availableSamples).toBe(0);
+    expect(ring.freeSamples).toBe(CAPACITY);
+    expect(ring.sharedArrayBuffer).toBe(sab);
+  });
+
+  it('should read/write through the same bytes as raw Atomics views', () => {
+    const sab = makeWasmSab();
+    const ring = SharedRingBuffer.fromWasmMemory(
+      sab, FAKE_WRITE_HEAD_PTR, FAKE_READ_HEAD_PTR, FAKE_DATA_PTR, CAPACITY,
+    );
+
+    // Simulate the C kernel writing data and advancing WRITE_HEAD
+    const rawHeaders = new Uint32Array(sab, FAKE_WRITE_HEAD_PTR, 2);
+    const rawData    = new Float32Array(sab, FAKE_DATA_PTR, CAPACITY);
+
+    // "Kernel" writes 128 samples
+    for (let i = 0; i < 128; i++) {
+      rawData[i] = 0.42 + i * 0.001;
+    }
+    Atomics.store(rawHeaders, 0, 128);  // WRITE_HEAD = 128
+
+    // Consumer pulls via SharedRingBuffer
+    expect(ring.availableSamples).toBe(128);
+    const output = new Float32Array(128);
+    const ok = ring.pull(output, 128);
+    expect(ok).toBe(true);
+    for (let i = 0; i < 128; i++) {
+      expect(output[i]).toBeCloseTo(0.42 + i * 0.001, 5);
+    }
+    expect(ring.availableSamples).toBe(0);
+  });
+
+  it('should support push/pull cycles at non-zero offsets', () => {
+    const sab = makeWasmSab();
+    const ring = SharedRingBuffer.fromWasmMemory(
+      sab, FAKE_WRITE_HEAD_PTR, FAKE_READ_HEAD_PTR, FAKE_DATA_PTR, CAPACITY,
+    );
+
+    const input  = new Float32Array(128);
+    const output = new Float32Array(128);
+
+    for (let cycle = 0; cycle < 10; cycle++) {
+      for (let i = 0; i < 128; i++) input[i] = cycle * 100 + i;
+
+      expect(ring.push(input)).toBe(true);
+      expect(ring.pull(output, 128)).toBe(true);
+
+      for (let i = 0; i < 128; i++) {
+        expect(output[i]).toBeCloseTo(input[i], 5);
+      }
+    }
+  });
+
+  it('should reject misaligned writeHeadPtr', () => {
+    const sab = makeWasmSab();
+    expect(() =>
+      SharedRingBuffer.fromWasmMemory(sab, 3, 7, FAKE_DATA_PTR, CAPACITY),
+    ).toThrow(RangeError);
+  });
+
+  it('should reject misaligned dataPtr', () => {
+    const sab = makeWasmSab();
+    expect(() =>
+      SharedRingBuffer.fromWasmMemory(sab, FAKE_WRITE_HEAD_PTR, FAKE_READ_HEAD_PTR, 5, CAPACITY),
+    ).toThrow(RangeError);
+  });
+
+  it('should reject non-contiguous headers (readHeadPtr != writeHeadPtr + 4)', () => {
+    const sab = makeWasmSab();
+    expect(() =>
+      SharedRingBuffer.fromWasmMemory(sab, FAKE_WRITE_HEAD_PTR, FAKE_WRITE_HEAD_PTR + 8, FAKE_DATA_PTR, CAPACITY),
+    ).toThrow(RangeError);
+  });
+
+  it('should reject non-power-of-two capacity', () => {
+    const sab = makeWasmSab();
+    expect(() =>
+      SharedRingBuffer.fromWasmMemory(sab, FAKE_WRITE_HEAD_PTR, FAKE_READ_HEAD_PTR, FAKE_DATA_PTR, 1000),
+    ).toThrow(RangeError);
+  });
+
+  it('should reject data region exceeding SAB bounds', () => {
+    // Tiny SAB that can't hold the data region
+    const tinySab = new SharedArrayBuffer(FAKE_DATA_PTR + 4);
+    expect(() =>
+      SharedRingBuffer.fromWasmMemory(tinySab, FAKE_WRITE_HEAD_PTR, FAKE_READ_HEAD_PTR, FAKE_DATA_PTR, CAPACITY),
+    ).toThrow(RangeError);
+  });
+});
+
 /* ─── KernelState enum ────────────────────────────────────────────────────── */
 
 describe('KernelState enum', () => {

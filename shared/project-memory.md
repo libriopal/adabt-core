@@ -48,3 +48,10 @@
 - **Fix — TS side**: `WASM_SAB_OFFSET` removed from types. `WasmDSPKernel` stores `_writeHeadPtr`, `_readHeadPtr`, `_dataPtr`; exposes them via `kernel.writeHeadPtr`, `kernel.readHeadPtr`, `kernel.dataPtr`. `sharedBuffer` accessor retained. `ringBufferOffset` single accessor replaced by the three precise getters.
 - **Header constant rename**: `SAB_WRITE_HEAD_OFFSET` / `SAB_READ_HEAD_OFFSET` → `SAB_WRITE_HEAD_IDX` / `SAB_READ_HEAD_IDX` (array indices, not byte offsets). `SAB_HEADER_BYTES` / `SAB_HEADER_INTS` removed from C header (now internal detail of the static layout).
 - **build.sh**: `_dsp_write_head_ptr`, `_dsp_read_head_ptr`, `_dsp_data_ptr` added to `EXPORTED_FUNCTIONS`.
+
+## Phase 1 WASM DSP Kernel — Consumer-Side WASM SAB Adapter (2026-05-14)
+- [BRIDGE COMPLETE]: SharedRingBuffer.fromWasmMemory() added as the consumer-side counterpart to WasmDSPKernel's producer-side pointer exports.
+- **Problem**: SharedRingBuffer.fromSharedArrayBuffer() assumes WRITE_HEAD at byte 0 and data at byte 8. With WASM-owned memory, the linker places g_ring_headers and g_audio_data at arbitrary addresses in the data/BSS segment. The old factory would attach views at the wrong offsets — reading heap/stack bytes instead of ring buffer data.
+- **Fix — fromWasmMemory(sab, writeHeadPtr, readHeadPtr, dataPtr, capacity)**: New static factory accepts the exact byte offsets returned by the WASM kernel's pointer-getter exports. Constructs Uint32Array(sab, writeHeadPtr, 2) for headers and Float32Array(sab, dataPtr, capacity) for data. The AudioWorklet processor receives these offsets via postMessage and calls fromWasmMemory() to build a pull-side ring view that reads the exact bytes the C kernel writes. True zero-copy consumer path.
+- **Safety checks**: 4-byte alignment on all three pointers (Uint32/Float32 view requirement). Contiguity assertion: readHeadPtr == writeHeadPtr + 4 (g_ring_headers is a 2-element array). Bounds check: data region must fit within sab.byteLength. Capacity must be power-of-two.
+- **Backward compatible**: fromSharedArrayBuffer() unchanged; standalone (non-WASM) usage unaffected.
