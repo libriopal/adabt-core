@@ -109,7 +109,10 @@ emcc dsp-kernel.c \
         "_dsp_kernel_set_gain", \
         "_dsp_kernel_get_overruns", \
         "_dsp_kernel_get_frames_produced", \
-        "_dsp_kernel_teardown" \
+        "_dsp_kernel_teardown", \
+        "_dsp_write_head_ptr", \
+        "_dsp_read_head_ptr", \
+        "_dsp_data_ptr" \
     ]' \
     -s INITIAL_MEMORY=$INITIAL_MEMORY \
     -s MAXIMUM_MEMORY=$MAXIMUM_MEMORY \

@@ -11,7 +11,13 @@
  *
  * USAGE (inside a Web Worker):
  *
- *   const kernel = await WasmDSPKernel.create(sab, capacity, sampleRate);
+ *   const kernel = await WasmDSPKernel.create(128, 48000, 0);
+ *   postMessage({
+ *     sab:          kernel.sharedBuffer,
+ *     writeHeadPtr: kernel.writeHeadPtr,
+ *     readHeadPtr:  kernel.readHeadPtr,
+ *     dataPtr:      kernel.dataPtr,
+ *   });
  *   kernel.setFreq(440);
  *   kernel.setGain(0.5);
  *   const written = kernel.process(128);
@@ -20,7 +26,8 @@
  *
  * CONSTRAINTS:
  *   - Must run in a Worker, NEVER on the main thread.
- *   - The SAB must already be allocated by the main thread (DSPController).
+ *   - The Worker creates the WASM memory; the SAB is kernel.sharedBuffer.
+ *     Do NOT pre-allocate a SAB externally — the WASM module owns it.
  *   - crossOriginIsolated must be true (COOP/COEP headers required).
  */
 
@@ -28,9 +35,9 @@ import type { DspKernelExports, DeviceTier } from './WasmDSPKernel.types';
 import {
   KernelState,
   TIER_CAPACITY,
-  TIER_MAX_MEMORY,
-  SAB_HEADER_BYTES,
   DSP_BLOCK_SIZE,
+  WASM_INITIAL_PAGES,
+  WASM_MAX_PAGES,
 } from './WasmDSPKernel.types';
 
 /* ─── WASM Module URL ─────────────────────────────────────────────────────── */
@@ -49,6 +56,9 @@ export class WasmDSPKernel {
   private readonly statePtr: number;
   private readonly sab: SharedArrayBuffer;
   private readonly capacity: number;
+  private readonly _writeHeadPtr: number;
+  private readonly _readHeadPtr: number;
+  private readonly _dataPtr: number;
   private lifecycle: KernelState;
 
   private constructor(
@@ -56,11 +66,17 @@ export class WasmDSPKernel {
     statePtr: number,
     sab: SharedArrayBuffer,
     capacity: number,
+    writeHeadPtr: number,
+    readHeadPtr: number,
+    dataPtr: number,
   ) {
     this.exports = exports;
     this.statePtr = statePtr;
     this.sab = sab;
     this.capacity = capacity;
+    this._writeHeadPtr = writeHeadPtr;
+    this._readHeadPtr = readHeadPtr;
+    this._dataPtr = dataPtr;
     this.lifecycle = KernelState.READY;
   }
 
@@ -69,18 +85,28 @@ export class WasmDSPKernel {
   /**
    * Load the WASM module and initialize the DSP kernel.
    *
-   * @param sab         Pre-allocated SharedArrayBuffer (from DSPController).
-   * @param capacity    Ring buffer capacity in samples (must match SAB size).
+   * The WASM module owns the SharedArrayBuffer.  After create() resolves,
+   * callers must retrieve `kernel.sharedBuffer` and transfer it to the
+   * AudioWorklet via postMessage — do NOT allocate a separate SAB externally.
+   *
+   * The ring buffer storage (g_ring_headers, g_audio_data) is placed by the
+   * linker in the WASM data/BSS segment.  After instantiation the bridge calls
+   * dsp_write_head_ptr / dsp_read_head_ptr / dsp_data_ptr to learn the exact
+   * byte offsets and exposes them via kernel.writeHeadPtr / readHeadPtr / dataPtr
+   * for the AudioWorklet to attach typed-array views.
+   *
+   * @param capacity    Ring buffer capacity in samples (power of two, ≤ 16384).
    * @param sampleRate  Audio sample rate (e.g. 48000).
+   * @param tier        Device tier — governs WASM page budget (default: 0).
    * @param wasmUrl     Override for the .wasm file location.
    * @returns           A ready-to-use WasmDSPKernel instance.
    * @throws            If crossOriginIsolated is false, capacity is invalid,
-   *                    or WASM instantiation fails.
+   *                    or WASM instantiation / init fails.
    */
   static async create(
-    sab: SharedArrayBuffer,
     capacity: number,
     sampleRate: number,
+    tier: DeviceTier = 0,
     wasmUrl: string = DEFAULT_WASM_URL,
   ): Promise<WasmDSPKernel> {
     /* ── Pre-flight checks ─────────────────────────────────────────────── */
@@ -98,12 +124,23 @@ export class WasmDSPKernel {
       );
     }
 
-    const expectedSabSize = SAB_HEADER_BYTES + capacity * Float32Array.BYTES_PER_ELEMENT;
-    if (sab.byteLength !== expectedSabSize) {
-      throw new RangeError(
-        `WasmDSPKernel: SAB size mismatch. Expected ${expectedSabSize}, got ${sab.byteLength}.`,
-      );
-    }
+    const initialPages = WASM_INITIAL_PAGES[tier];
+    const maxPages = WASM_MAX_PAGES[tier];
+
+    /* ── WASM memory — the sole owner of the SharedArrayBuffer ────────── */
+
+    /*
+     * The WebAssembly.Memory is created here with the tier-correct page
+     * budget and shared: true (required for Atomics on the data region).
+     * wasmMemory.buffer is a SharedArrayBuffer that the kernel writes into
+     * directly.  The AudioWorklet must attach its views to THIS buffer —
+     * there is no separate SAB; the two are the same object.
+     */
+    const wasmMemory = new WebAssembly.Memory({
+      initial: initialPages,
+      maximum: maxPages,
+      shared: true,
+    });
 
     /* ── Load & instantiate WASM ───────────────────────────────────────── */
 
@@ -113,34 +150,6 @@ export class WasmDSPKernel {
     }
 
     const wasmBytes = await wasmResponse.arrayBuffer();
-
-    /*
-     * Import the SAB as WASM shared memory.
-     *
-     * The WASM module is compiled with SHARED_MEMORY=1, so its memory
-     * import expects a WebAssembly.Memory backed by a SharedArrayBuffer.
-     * We create a Memory object wrapping our SAB, giving the kernel
-     * direct zero-copy access to the ring buffer data.
-     *
-     * NOTE: For Phase 1, the SAB IS the WASM memory.  The kernel writes
-     * directly into the SAB's data region via pointer arithmetic.
-     * In later phases, the kernel may use a separate WASM memory heap
-     * and copy to the SAB — but for now, zero-copy is the contract.
-     */
-    const wasmMemory = new WebAssembly.Memory({
-      initial: Math.ceil(expectedSabSize / 65536),  /* Pages (64KB each) */
-      maximum: Math.ceil(expectedSabSize / 65536) + 1,
-      shared: true,
-    });
-
-    /*
-     * Copy the SAB content into WASM memory.
-     * The headers (WRITE_HEAD, READ_HEAD) start at offset 0.
-     * The data region starts at SAB_HEADER_BYTES.
-     */
-    const wasmBuffer = new Uint8Array(wasmMemory.buffer);
-    const sabView = new Uint8Array(sab);
-    wasmBuffer.set(sabView);
 
     const { instance } = await WebAssembly.instantiate(wasmBytes, {
       env: {
@@ -152,11 +161,7 @@ export class WasmDSPKernel {
 
     /* ── Initialize kernel state ───────────────────────────────────────── */
 
-    /*
-     * sab_ptr = 0 because the SAB is mapped at the start of WASM memory.
-     * The kernel uses this offset to locate the headers and data region.
-     */
-    const statePtr = exports.dsp_kernel_init(0, capacity, sampleRate);
+    const statePtr = exports.dsp_kernel_init(capacity, sampleRate);
     if (statePtr === 0) {
       throw new Error(
         'WasmDSPKernel: dsp_kernel_init() returned null. ' +
@@ -164,22 +169,39 @@ export class WasmDSPKernel {
       );
     }
 
-    return new WasmDSPKernel(exports, statePtr, sab, capacity);
+    /*
+     * Retrieve the compiler-assigned addresses of the ring buffer regions.
+     * These are byte offsets into wasmMemory.buffer (a SharedArrayBuffer).
+     * The AudioWorklet receives (sharedBuffer, writeHeadPtr, readHeadPtr,
+     * dataPtr, capacity) and constructs its typed-array views there.
+     */
+    const writeHeadPtr = exports.dsp_write_head_ptr();
+    const readHeadPtr  = exports.dsp_read_head_ptr();
+    const dataPtr      = exports.dsp_data_ptr();
+
+    return new WasmDSPKernel(
+      exports,
+      statePtr,
+      wasmMemory.buffer as SharedArrayBuffer,
+      capacity,
+      writeHeadPtr,
+      readHeadPtr,
+      dataPtr,
+    );
   }
 
   /* ─── Tier Helper ─────────────────────────────────────────────────────── */
 
   /**
-   * Create a kernel with tier-appropriate defaults.
+   * Create a kernel with tier-appropriate capacity and memory budget.
    */
   static async createForTier(
     tier: DeviceTier,
-    sab: SharedArrayBuffer,
     sampleRate: number = 48000,
     wasmUrl?: string,
   ): Promise<WasmDSPKernel> {
     const capacity = TIER_CAPACITY[tier];
-    return WasmDSPKernel.create(sab, capacity, sampleRate, wasmUrl);
+    return WasmDSPKernel.create(capacity, sampleRate, tier, wasmUrl);
   }
 
   /* ─── Hot Path ────────────────────────────────────────────────────────── */
@@ -215,6 +237,38 @@ export class WasmDSPKernel {
     this.exports.dsp_kernel_set_gain(this.statePtr, gain);
   }
 
+  /* ─── SAB / Pointer Access ───────────────────────────────────────────── */
+
+  /**
+   * The SharedArrayBuffer owned by this kernel's WASM memory.
+   *
+   * Pass this to the AudioWorklet via postMessage together with
+   * writeHeadPtr, readHeadPtr, and dataPtr so the worklet can attach its
+   * typed-array views at the correct positions:
+   *
+   *   const wh = new Int32Array(sab, kernel.writeHeadPtr, 1);
+   *   const rh = new Int32Array(sab, kernel.readHeadPtr,  1);
+   *   const d  = new Float32Array(sab, kernel.dataPtr, capacity);
+   */
+  get sharedBuffer(): SharedArrayBuffer {
+    return this.sab;
+  }
+
+  /** WASM byte offset of WRITE_HEAD — use as byteOffset for Int32Array views. */
+  get writeHeadPtr(): number {
+    return this._writeHeadPtr;
+  }
+
+  /** WASM byte offset of READ_HEAD — use as byteOffset for Int32Array views. */
+  get readHeadPtr(): number {
+    return this._readHeadPtr;
+  }
+
+  /** WASM byte offset of the Float32 audio data region. */
+  get dataPtr(): number {
+    return this._dataPtr;
+  }
+
   /* ─── Diagnostics ─────────────────────────────────────────────────────── */
 
   /** Cumulative overrun count (buffer-full rejections). */
@@ -246,7 +300,7 @@ export class WasmDSPKernel {
    *
    * After calling dispose():
    *   - The WASM state pointer is invalidated.
-   *   - The SAB is NOT freed (owned by DSPController on the main thread).
+   *   - The WASM memory (and its SharedArrayBuffer) are released by the GC.
    *   - No further process/setFreq/setGain calls are allowed.
    *
    * Safe to call multiple times (idempotent).

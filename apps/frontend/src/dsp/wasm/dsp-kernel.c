@@ -62,6 +62,25 @@ static inline void atomic_store_release(volatile uint32_t *ptr, uint32_t val) {
     __atomic_store_n(ptr, val, __ATOMIC_RELEASE);
 }
 
+/* ─── Ring Buffer Storage (compiler-placed in WASM data/BSS segment) ─────── */
+/*
+ * Declaring these as static globals lets the linker assign fixed addresses
+ * inside the WASM data segment.  This eliminates the sab_ptr parameter that
+ * previously required the TS bridge to guarantee a collision-free byte offset
+ * by hand.  The compiler owns the layout; the stack and bump heap cannot
+ * overlap these arrays.
+ *
+ * g_ring_headers[0] = WRITE_HEAD (producer, release-store on advance)
+ * g_ring_headers[1] = READ_HEAD  (consumer, relaxed store on advance)
+ * g_audio_data[]    = Float32 sample ring (capacity ≤ DSP_MAX_CAPACITY)
+ *
+ * The TS bridge retrieves the byte offsets via the dsp_*_ptr() exports and
+ * attaches Int32Array / Float32Array views at those offsets into wasmMemory.buffer.
+ */
+
+static volatile uint32_t g_ring_headers[2] = {0, 0};  /* WRITE_HEAD, READ_HEAD */
+static float              g_audio_data[DSP_MAX_CAPACITY];
+
 /* ─── Simple Bump Allocator (WASM linear memory) ─────────────────────────── */
 /*
  * We avoid malloc/free entirely. A trivial bump allocator is sufficient
@@ -96,18 +115,13 @@ static int is_power_of_two(uint32_t v) {
 /**
  * Initialize the DSP kernel.
  *
- * The `sab_ptr` is the byte offset into WASM linear memory where the
- * SharedArrayBuffer has been mapped by the TS bridge.  The bridge is
- * responsible for importing the SAB as WASM shared memory and passing
- * the correct base offset.
- *
- * Layout at sab_ptr:
- *   [sab_ptr + 0]  WRITE_HEAD  (uint32, atomic)
- *   [sab_ptr + 4]  READ_HEAD   (uint32, atomic)
- *   [sab_ptr + 8]  Float32 data[capacity]
+ * Ring buffer storage (g_ring_headers, g_audio_data) is compiler-placed in
+ * the WASM data/BSS segment.  Call dsp_write_head_ptr / dsp_read_head_ptr /
+ * dsp_data_ptr after this returns to retrieve the byte offsets for typed-array
+ * view attachment on the TS side.
  */
 __attribute__((export_name("dsp_kernel_init")))
-DspKernelState* dsp_kernel_init(uint32_t sab_ptr, uint32_t capacity, uint32_t sample_rate) {
+DspKernelState* dsp_kernel_init(uint32_t capacity, uint32_t sample_rate) {
     /* Validate capacity */
     if (!is_power_of_two(capacity) ||
         capacity < DSP_MIN_CAPACITY ||
@@ -124,13 +138,12 @@ DspKernelState* dsp_kernel_init(uint32_t sab_ptr, uint32_t capacity, uint32_t sa
     DspKernelState *state = (DspKernelState *)bump_alloc(sizeof(DspKernelState));
     if (!state) return 0;
 
-    /* Map SAB pointers.
-     * The TS bridge maps the SAB into WASM linear memory starting at sab_ptr.
-     * We cast the WASM memory byte offset to a pointer.
-     * Emscripten treats WASM memory as a flat uint8_t array starting at address 0.
+    /* Point at the compiler-placed static ring buffer storage.
+     * The linker guarantees g_ring_headers and g_audio_data live in the WASM
+     * data/BSS segment at fixed addresses — no manual offset arithmetic needed.
      */
-    state->headers     = (volatile uint32_t *)((uintptr_t)sab_ptr);
-    state->data        = (float *)((uintptr_t)(sab_ptr + SAB_HEADER_BYTES));
+    state->headers     = g_ring_headers;
+    state->data        = g_audio_data;
     state->capacity    = capacity;
     state->mask        = capacity - 1;
     state->sample_rate = sample_rate;
@@ -173,8 +186,8 @@ uint32_t dsp_kernel_process(DspKernelState *state, uint32_t frame_count) {
     }
 
     /* ── 1. Check available space (relaxed loads for space calculation) ──── */
-    uint32_t write_head = atomic_load_relaxed(&state->headers[SAB_WRITE_HEAD_OFFSET]);
-    uint32_t read_head  = atomic_load_relaxed(&state->headers[SAB_READ_HEAD_OFFSET]);
+    uint32_t write_head = atomic_load_relaxed(&state->headers[SAB_WRITE_HEAD_IDX]);
+    uint32_t read_head  = atomic_load_relaxed(&state->headers[SAB_READ_HEAD_IDX]);
 
     /*
      * Monotonic distance: unsigned subtraction.
@@ -235,11 +248,38 @@ uint32_t dsp_kernel_process(DspKernelState *state, uint32_t frame_count) {
      * wraps naturally at 2^32, matching the JS `(writeHead + n) >>> 0`.
      */
     uint32_t new_write_head = write_head + frame_count;  /* uint32 wrap-safe */
-    atomic_store_release(&state->headers[SAB_WRITE_HEAD_OFFSET], new_write_head);
+    atomic_store_release(&state->headers[SAB_WRITE_HEAD_IDX], new_write_head);
 
     state->frames_produced += frame_count;
 
     return frame_count;
+}
+
+/* ─── Ring Buffer Pointer Exports ────────────────────────────────────────── */
+/*
+ * These three functions return the WASM linear-memory byte offsets of the
+ * ring buffer's header words and data array.  The TS bridge calls them once
+ * after dsp_kernel_init() and uses the returned values as byteOffset arguments
+ * when constructing Int32Array / Float32Array views into wasmMemory.buffer:
+ *
+ *   const wh = new Int32Array(sab, exports.dsp_write_head_ptr(), 1);
+ *   const rh = new Int32Array(sab, exports.dsp_read_head_ptr(),  1);
+ *   const d  = new Float32Array(sab, exports.dsp_data_ptr(), capacity);
+ */
+
+__attribute__((export_name("dsp_write_head_ptr")))
+uint32_t dsp_write_head_ptr(void) {
+    return (uint32_t)(uintptr_t)&g_ring_headers[SAB_WRITE_HEAD_IDX];
+}
+
+__attribute__((export_name("dsp_read_head_ptr")))
+uint32_t dsp_read_head_ptr(void) {
+    return (uint32_t)(uintptr_t)&g_ring_headers[SAB_READ_HEAD_IDX];
+}
+
+__attribute__((export_name("dsp_data_ptr")))
+uint32_t dsp_data_ptr(void) {
+    return (uint32_t)(uintptr_t)g_audio_data;
 }
 
 /* ─── Parameter Setters ───────────────────────────────────────────────────── */

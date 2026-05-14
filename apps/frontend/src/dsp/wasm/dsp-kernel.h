@@ -10,6 +10,13 @@
  *   - Distance = (writeHead - readHead) as unsigned 32-bit.
  *   - Full: distance == capacity.  Empty: distance == 0.
  *
+ * Ring buffer storage:
+ *   - g_ring_headers[2] and g_audio_data[] are static globals placed by the
+ *     linker in the WASM data/BSS segment.  Their addresses are returned by
+ *     the dsp_write_head_ptr / dsp_read_head_ptr / dsp_data_ptr exports so
+ *     the TS bridge can attach typed-array views without relying on a
+ *     hard-coded offset or a separately-allocated SharedArrayBuffer.
+ *
  * This file is shared between dsp-kernel.c and the TS bridge types.
  */
 
@@ -18,12 +25,10 @@
 
 #include <stdint.h>
 
-/* ─── SAB Header Layout ────────────────────────────────────────────────────── */
+/* ─── Ring Buffer Header Indices (into g_ring_headers[]) ──────────────────── */
 
-#define SAB_WRITE_HEAD_OFFSET  0   /* Uint32 @ byte 0 — monotonic, producer-owned */
-#define SAB_READ_HEAD_OFFSET   1   /* Uint32 @ byte 4 — monotonic, consumer-owned */
-#define SAB_HEADER_INTS        2   /* Number of int32 slots before data region     */
-#define SAB_HEADER_BYTES       8   /* Byte offset where Float32 data begins        */
+#define SAB_WRITE_HEAD_IDX  0   /* g_ring_headers[0] — monotonic, producer-owned */
+#define SAB_READ_HEAD_IDX   1   /* g_ring_headers[1] — monotonic, consumer-owned */
 
 /* ─── Kernel Configuration ─────────────────────────────────────────────────── */
 
@@ -72,13 +77,32 @@ typedef struct {
 /**
  * Allocate and initialize the kernel state.
  *
- * @param sab_ptr     Byte offset into WASM memory where the SAB is mapped.
- *                    The TS bridge imports the SAB as WASM linear memory.
- * @param capacity    Ring buffer capacity in samples (must be power of two).
+ * The ring buffer storage (g_ring_headers, g_audio_data) is compiler-placed in
+ * the WASM data/BSS segment.  No sab_ptr argument is needed; call
+ * dsp_write_head_ptr / dsp_read_head_ptr / dsp_data_ptr after init to retrieve
+ * the byte offsets for typed-array view attachment on the TS side.
+ *
+ * @param capacity    Ring buffer capacity in samples (power of two, ≤ DSP_MAX_CAPACITY).
  * @param sample_rate Audio sample rate (e.g. 48000).
  * @return            Pointer to the allocated DspKernelState, or 0 on failure.
  */
-DspKernelState* dsp_kernel_init(uint32_t sab_ptr, uint32_t capacity, uint32_t sample_rate);
+DspKernelState* dsp_kernel_init(uint32_t capacity, uint32_t sample_rate);
+
+/**
+ * Return the WASM linear-memory byte offset of WRITE_HEAD (g_ring_headers[0]).
+ * Use as the byteOffset argument when constructing Int32Array / Atomics views.
+ */
+uint32_t dsp_write_head_ptr(void);
+
+/**
+ * Return the WASM linear-memory byte offset of READ_HEAD (g_ring_headers[1]).
+ */
+uint32_t dsp_read_head_ptr(void);
+
+/**
+ * Return the WASM linear-memory byte offset of the Float32 audio data region.
+ */
+uint32_t dsp_data_ptr(void);
 
 /**
  * Process `frame_count` frames of DSP and push them into the ring buffer.

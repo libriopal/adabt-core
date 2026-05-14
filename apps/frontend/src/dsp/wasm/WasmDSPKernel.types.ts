@@ -22,13 +22,27 @@ export interface DspKernelExports {
 
   /**
    * Initialize the DSP kernel state.
+   * Ring buffer storage is compiler-placed; no sab_ptr argument needed.
+   * Call dsp_write_head_ptr / dsp_read_head_ptr / dsp_data_ptr after this
+   * to retrieve byte offsets for typed-array view attachment.
    *
-   * @param sabPtr      Byte offset in WASM memory where the SAB is mapped.
-   * @param capacity    Ring buffer capacity in samples (power of two).
+   * @param capacity    Ring buffer capacity in samples (power of two, ≤ DSP_MAX_CAPACITY).
    * @param sampleRate  Audio sample rate (e.g. 48000).
    * @returns           Pointer (i32) to DspKernelState, or 0 on failure.
    */
-  dsp_kernel_init(sabPtr: number, capacity: number, sampleRate: number): number;
+  dsp_kernel_init(capacity: number, sampleRate: number): number;
+
+  /**
+   * Return the WASM byte offset of WRITE_HEAD (g_ring_headers[0]).
+   * Use as byteOffset when constructing Int32Array views for Atomics.
+   */
+  dsp_write_head_ptr(): number;
+
+  /** Return the WASM byte offset of READ_HEAD (g_ring_headers[1]). */
+  dsp_read_head_ptr(): number;
+
+  /** Return the WASM byte offset of the Float32 audio data region. */
+  dsp_data_ptr(): number;
 
   /**
    * Generate and push `frameCount` samples into the ring buffer.
@@ -105,6 +119,32 @@ export const SAB_HEADER_BYTES = 8;
 
 /** AudioWorklet render quantum (fixed by Web Audio spec). */
 export const DSP_BLOCK_SIZE = 128;
+
+/* ─── WASM Memory Layout ──────────────────────────────────────────────────── */
+
+/**
+ * Tier-indexed WASM initial page count (1 page = 65536 bytes).
+ * Must match the INITIAL_MEMORY values in build.sh.
+ */
+export const WASM_INITIAL_PAGES: Record<DeviceTier, number> = {
+  0: 4,   // 256 KB
+  1: 4,   // 256 KB
+  2: 8,   // 512 KB
+  3: 16,  // 1 MB
+  4: 16,  // 1 MB
+} as const;
+
+/**
+ * Tier-indexed WASM maximum page count.
+ * Must match the MAXIMUM_MEMORY values in build.sh.
+ */
+export const WASM_MAX_PAGES: Record<DeviceTier, number> = {
+  0: 16,   // 1 MB
+  1: 16,   // 1 MB
+  2: 64,   // 4 MB
+  3: 256,  // 16 MB
+  4: 256,  // 16 MB
+} as const;
 
 /* ─── Kernel Lifecycle States ─────────────────────────────────────────────── */
 

@@ -25,6 +25,7 @@ import {
   DSP_BLOCK_SIZE,
   TIER_CAPACITY,
   TIER_MAX_MEMORY,
+  WASM_INITIAL_PAGES,
   KernelState,
 } from '../WasmDSPKernel.types';
 
@@ -136,12 +137,26 @@ describe('SAB Layout Constants', () => {
     }
   });
 
-  it('expected SAB size for each tier', () => {
+  it('expected SAB size for each tier fits within TIER_MAX_MEMORY', () => {
     for (const [tier, cap] of Object.entries(TIER_CAPACITY)) {
       const expected = SAB_HEADER_BYTES + cap * Float32Array.BYTES_PER_ELEMENT;
-      // Sanity: all SAB sizes fit in their tier memory ceiling
       const tierNum = Number(tier) as 0 | 1 | 2 | 3 | 4;
       expect(expected).toBeLessThanOrEqual(TIER_MAX_MEMORY[tierNum]);
+    }
+  });
+
+  it('ring buffer payload fits within WASM initial memory for every tier', () => {
+    /*
+     * The ring buffer now lives in the WASM data/BSS segment at a compiler-
+     * assigned address.  We can only verify that the payload itself (headers +
+     * samples) is smaller than the initial memory budget — the exact address is
+     * resolved at runtime by dsp_write_head_ptr / dsp_data_ptr.
+     */
+    for (const [tier, cap] of Object.entries(TIER_CAPACITY)) {
+      const tierNum = Number(tier) as 0 | 1 | 2 | 3 | 4;
+      const sabByteLength = SAB_HEADER_BYTES + cap * Float32Array.BYTES_PER_ELEMENT;
+      const initialBytes = WASM_INITIAL_PAGES[tierNum] * 65536;
+      expect(sabByteLength).toBeLessThan(initialBytes);
     }
   });
 });
