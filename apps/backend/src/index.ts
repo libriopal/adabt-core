@@ -9,6 +9,13 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
+// SharedArrayBuffer requires COOP/COEP on every response (DSP AudioWorklet)
+app.use((_req, res, next) => {
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+  next();
+});
+
 app.use(helmet({
   contentSecurityPolicy: IS_PRODUCTION ? false : undefined,  // relax for SPA
 }));

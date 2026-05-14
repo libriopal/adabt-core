@@ -1,0 +1,10 @@
+name: 'DSP Latency Audit'
+description: 'Audits DSP AudioWorklet jitter against the Tier 0 latency threshold (12ms)'
+inputs:
+  threshold:
+    description: 'Maximum allowed jitter for Tier 0 stability'
+    required: false
+    default: '12ms'
+runs:
+  using: 'node20'
+  main: 'action.js'
