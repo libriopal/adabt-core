@@ -1,0 +1,4 @@
+# WASM build artifacts — compiled by build.sh, not checked in.
+dsp-kernel.wasm
+dsp-kernel.js
+*.wasm.map
