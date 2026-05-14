@@ -12,7 +12,7 @@ The soundtrack is not static media. It is a synchronized emotional-runtime layer
 - **Law of Deterministic Emergence:** Procedural orchestration MUST derive from synchronized seeds and bounded mutation. Uncontrolled generative divergence is a constitutional violation.
 - **Law of Emotional Continuity:** Transitions must preserve thematic identity. The engine recognizes 8 canonical states: Dread, Suspense, Escalation, Catastrophic Release, Mourning, Recovery, Silence, and Ritualistic Build.
 - **Law of Deployment Survivability:** Main-thread DSP execution is strictly prohibited. All DSP must reside in AudioWorklets or WASM Workers.
-- **Law of Memory Continuity:** Agents must consult and update the Persistent Memory Ledger (/shared/project-memory.md, /viktor.md, /coderabbit.md) before every major merge.
+- **Law of Memory Continuity:** Agents must consult and update the Persistent Memory Ledger (/shared/project-memory.md, /governance/ledgers/viktor.md, /governance/ledgers/coderabbit.md) before every major merge.
 
 ## IV. RUNTIME TOPOLOGY
 The system must adhere to the ERK pipeline:
