@@ -8,15 +8,21 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.19.3",
+    "eventemitter3": "^5.0.4",
+    "nanoid": "^5.1.11",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.23.0",
+    "three": "^0.184.0",
+    "uuid": "^14.0.0",
     "zustand": "^4.5.0"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",
     "@types/react": "^18.2.55",
     "@types/react-dom": "^18.2.19",
+    "@types/three": "^0.184.1",
     "@vitejs/plugin-react": "^4.2.1",
     "typescript": "^5.3.3",
     "vite": "^7.0.0",

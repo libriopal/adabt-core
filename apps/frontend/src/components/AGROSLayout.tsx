@@ -655,6 +655,7 @@ const NAV_ITEMS = [
   { label: 'Rhythm Engine', path: '/' },
   { label: 'ConceptForge',  path: '/concept-forge' },
   { label: 'Music Engine',  path: '/music-engine' },
+  { label: '⬡ ORGANIC VEGAS', path: '/organic-vegas' },
 ];
 
 /* ─── Knob sub-styles ─────────────────────────────────────────────────────── */

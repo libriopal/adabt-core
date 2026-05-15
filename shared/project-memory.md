@@ -125,3 +125,20 @@
 - [TIERING]: Android/mobile and desktop must auto-toggle LITE/ELITE graphics and sound by hardware capability; mobile must also fit and wrap the screen automatically.
 - [AUDIO DATA]: Training MP3s should become extracted spectral genome JSON artifacts rather than raw runtime MP3 assets.
 - [MULTIPLAYER]: Production-beta targets 2-player WebSocket multiplayer on day one, with an explicit plan for up to 4 players the following week.
+
+## Organic Vegas Integration — Phase 1 (2026-05-15)
+- [INTEGRATION]: FAR_NZY dual-repo merge into dream-core branch as Project Organic Vegas.
+- [ARCH]: `packages/game-core` copied from FAR_NZY; aliased in vite.config.ts + tsconfig as @match3d/game-core. Three.js + @dimforge/rapier3d-compat installed in frontend.
+- [SCENE]: `apps/frontend/src/components/game/OrganicVegasScene.tsx` — Three.js canvas with Rapier3D physics. LITE/ELITE shader tiers. Bio-Architectural iridescent die materials with bone-gold filigree lattice. Collision impulse events emitted to DreamAudioEngine ERK pipeline.
+- [HARDWARE]: `apps/frontend/src/utils/hardwareTier.ts` — auto-detects LITE/ELITE quality; Tier 0–4 DSP tier; mobile screen-wrap flag.
+- [CSPRNG FIX]: `apps/frontend/src/components/game/DreamApp.tsx` — replaced hardcoded mock dice with `seededRng` (deterministic xorshift, crypto-entropy seeded). `scoreFarkle` from Sacred Core evaluates every roll. Scores live in UI state.
+- [GAME PAGE]: `apps/frontend/src/pages/OrganicVegas.tsx` — full roll→score→bank loop. Life-Force system (FAR_NZY energy adapted as wrapper). `resolveModifiers` from Conflict Resolution Layer applied post-score (all RTP-gated in beta = multiplier stays 1.0).
+- [LOBBY]: `apps/frontend/src/pages/OrganicVegasLobby.tsx` — 2-player room create/join UI. Crypto-random room codes. Error and waiting states.
+- [MULTIPLAYER]: `apps/frontend/src/hooks/useOrganicMultiplayer.ts` — WebSocket hook. Symbolic replication only (seeds + scores, no frame data). 2-player cap enforced.
+- [BACKEND WS]: `apps/backend/src/index.ts` — WebSocket server added via ws.Server on /ws path. Room registry. `GameRoom` wired per connection. Math.random in error debugId replaced with crypto.getRandomValues.
+- [ROUTES]: `apps/frontend/src/App.tsx` — `/organic-vegas` (lobby) and `/organic-vegas/game` (game) added as parallel routes. Existing AGROS routes untouched.
+- [CONFLICT RESOLUTION]: `packages/dream-core/src/conflictResolution.ts` — priority-ordered genre modifier layer. All score multipliers RTP-gated (rtpGated=true) until 10k-session Monte Carlo validation. Hard multiplier cap 4.0.
+- [NEURAL CONDUCTOR]: `apps/frontend/src/audio/spectralGenome.ts` — SpectralGenome schema + fallback genomes (manual approximation of FAR_NZY training audio). Runtime fetches /spectral-genome/*.json; falls back to hardcoded until offline extraction pipeline runs.
+- [CSS]: `apps/frontend/src/styles/organic-vegas.css` — Bio-Architectural Dark Casino design tokens + layout primitives.
+- [4-PLAYER PLAN]: `shared/FOUR_PLAYER_PLAN.md` — concrete next-sprint plan for 4-player expansion.
+- [GOVERNANCE]: Sacred Core untouched. `ultimateRerollLoop` audit lock verified intact. No Math.random in gameplay paths (static check pending build).
