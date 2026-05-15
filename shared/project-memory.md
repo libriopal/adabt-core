@@ -143,6 +143,11 @@
 - [4-PLAYER PLAN]: `shared/FOUR_PLAYER_PLAN.md` — concrete next-sprint plan for 4-player expansion.
 - [GOVERNANCE]: Sacred Core untouched. `ultimateRerollLoop` audit lock verified intact. No Math.random in gameplay paths (static check pending build).
 
+## TITAN 1.0 — Bug Fix Pass (2026-05-15)
+- [INPUT FIX]: FAR_NZY `VoxelPileScene.tsx` — replaced R3F synthetic onPointerEnter chain-extend (fails in Capacitor WebView during touch drag) with `ChainDragController`: native touchmove on canvas DOM, ray-cast to z=0 play plane, O(n) nearest-chainable-body scan within 0.65-unit snap radius. Chain start remains on per-entity onPointerDown.
+- [AUDIO FIX]: Removed body-position-delta collision impulse subscriber from `useGameAudio.ts` — was firing ~60×/s during physics settling, saturating audio engine with harsh tones. `playCollisionImpact` retained in `gameAudio.ts` for future event-driven wiring.
+- [GOVERNANCE]: Sacred Core untouched.
+
 ## TITAN Rebuild — Phase 1.0 (2026-05-15)
 - [BALANCE]: FAR_NZY `levels.ts` LevelDef spawn weights rebalanced — bomb/rainbow_bomb/ice/lock/stone capped at ≤1 across all 10 levels. Entities now function as rare "Infection" events; redistributed weight to die/wild/catalyst.
 - [INPUT]: `VoxelPileScene.tsx` — EntityMesh groups expose `userData` (bodyId, face, column, chainable). SceneContent adds group-level `onPointerMove` fallback walker so chain-extend fires reliably on fast mobile drags. Resolves 6-die chain pointer-capture collision.
