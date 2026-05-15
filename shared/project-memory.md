@@ -142,3 +142,11 @@
 - [CSS]: `apps/frontend/src/styles/organic-vegas.css` — Bio-Architectural Dark Casino design tokens + layout primitives.
 - [4-PLAYER PLAN]: `shared/FOUR_PLAYER_PLAN.md` — concrete next-sprint plan for 4-player expansion.
 - [GOVERNANCE]: Sacred Core untouched. `ultimateRerollLoop` audit lock verified intact. No Math.random in gameplay paths (static check pending build).
+
+## TITAN Rebuild — Phase 1.0 (2026-05-15)
+- [BALANCE]: FAR_NZY `levels.ts` LevelDef spawn weights rebalanced — bomb/rainbow_bomb/ice/lock/stone capped at ≤1 across all 10 levels. Entities now function as rare "Infection" events; redistributed weight to die/wild/catalyst.
+- [INPUT]: `VoxelPileScene.tsx` — EntityMesh groups expose `userData` (bodyId, face, column, chainable). SceneContent adds group-level `onPointerMove` fallback walker so chain-extend fires reliably on fast mobile drags. Resolves 6-die chain pointer-capture collision.
+- [FAUCET ECONOMY]: `FarkleHUD.tsx` — `VitalityDripPanel` (animated life-force vial, PRIME regen drip / FRENZY bleed, rate label) and `ShardFaucetPanel` (5-diamond milestone tracker at 20k-pt intervals, partial fill bar) added to main HUD overlay.
+- [NEURAL CONDUCTOR]: `gameAudio.ts` synced to dream-core — `playBombCollapse` (necrotic sawtooth + resonant bandpass noise), `playCollisionImpact` (physics velocity magnitude → pitched impact, 25ms rate-limit), `startHeroJourneyTheme` / `stopHeroJourneyTheme` (6-stem A-minor pentatonic ambient pads). Detune jitter on `playChainAdd` prevents phase cancellation under simultaneous die collisions.
+- [WIRING]: `useGameAudio.ts` — subscribes to `explosionStore` for bomb-collapse trigger; tracks body position deltas per tick for collision impulse estimation; hero journey starts/stops with game phase transitions.
+- [GOVERNANCE]: Sacred Core (farkleStore.ts, gameStore.ts, useFarkleGame.ts, types.ts) untouched.
