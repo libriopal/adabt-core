@@ -101,3 +101,17 @@
 - **dsp-kernel.worker.ts** (apps/frontend/src/dsp/dsp-kernel.worker.ts): Web Worker host for WasmDSPKernel. Calls `process(128)` every 2ms (back-pressure prevents overflow). Posts `{ type: 'ready', sab, writeHeadPtr, readHeadPtr, dataPtr, capacity }` on init. Posts `{ type: 'tick', overruns, framesProduced }` every 100ms. Handles setFreq, setGain, dispose messages.
 - **AudioTestBench.tsx** (apps/frontend/src/components/AudioTestBench.tsx): Standalone dev harness with identical engine wiring. Includes frequency/gain sliders, oscilloscope canvas, and full diagnostics grid. Useful for isolated testing without the full layout shell.
 - **Emotional state pads**: Visual-only selector for all 8 canonical states (Dread, Suspense, Escalation, Catastrophic Release, Mourning, Recovery, Silence, Ritualistic Build). Each pad has a distinct color. DSP mapping is deferred to a future phase.
+
+## Dream Core Branch Goal (2026-05-15)
+- [BRANCH]: `dream-core` is the FAR_NZY-to-adabt-core migration lane for a unified Dream Core runtime.
+- [DESIGN HIERARCHY]: The dominant genre order is Horror, Roguelike, Casino, Match-3, then Rhythm.
+- [PRODUCT GOAL]: The game should feel like it is generating and modulating music, not simply playing music behind a Farkle clone.
+- [GOVERNANCE]: Dream Core systems should remain wrapper-level mechanics around the Sacred Core so RTP, scorer math, and authoritative randomness stay intact.
+
+## Dream Core Audit Lock + Beta Handoff (2026-05-15)
+- [AUDIT LOCK]: Commit `2989002` (`fix(dream-core): audit-lock ultimate rerolls`) locked `packages/dream-core/src/genres/moba.ts` so `ultimateRerollLoop` consumes exactly one authoritative roll and reports the reroll path as blocked with `RTP_WRAPPER_ONLY_NO_REROLL`.
+- [BALANCE]: The Rogue-like `CARDSHARP` free-turn loop risk was nerfed so the branch cannot grow into a free-Farkle extra-roll exploit.
+- [INTEGRATION]: Dream Core frontend/backend integration was repaired enough for clean branch builds without changing Sacred Core scorer files in that follow-up audit commit.
+- [VERIFICATION]: The audit sweep passed `npm run build`, the 16-case `packages/farkle-engine/src/farkleScorer.test.ts` regression suite, an explicit `ultimateRerollLoop` single-call probe, and `git diff --check`.
+- [PERFORMANCE RULE]: Dream Core visualization paths must preserve the existing requirement that the Neon Oscilloscope stays on a `requestAnimationFrame` canvas path rather than per-sample React re-renders.
+- [HANDOFF]: A Claude-ready hardening brief for cloning, auditing, fixing, and pushing Dream Core toward a production-grade beta is stored in `/shared/cc-prompt.md`.
