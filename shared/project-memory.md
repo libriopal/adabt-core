@@ -115,3 +115,6 @@
 - [VERIFICATION]: The audit sweep passed `npm run build`, the 16-case `packages/farkle-engine/src/farkleScorer.test.ts` regression suite, an explicit `ultimateRerollLoop` single-call probe, and `git diff --check`.
 - [PERFORMANCE RULE]: Dream Core visualization paths must preserve the existing requirement that the Neon Oscilloscope stays on a `requestAnimationFrame` canvas path rather than per-sample React re-renders.
 - [HANDOFF]: A Claude-ready hardening brief for cloning, auditing, fixing, and pushing Dream Core toward a production-grade beta is stored in `/shared/cc-prompt.md`.
+
+## Dream Core Dual-Repo Claude Handoff (2026-05-15)
+- [HANDOFF UPDATE]: `/shared/cc-prompt.md` now instructs Claude to clone `libriopal/FAR_NZY` first into `core/`, clone `libriopal/adabt-core` `dream-core` into `dream/`, treat `core/` as source material and `dream/` as the target repo, run read-only discovery, ask exactly ten clarifying questions before mutating merge work, then integrate the two into a production-beta Dream Core and audit/fix the result.
