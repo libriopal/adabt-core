@@ -10,6 +10,11 @@
  * AudioWorkletGlobalScope does not support ES module imports in all
  * browsers.  All ring buffer logic is inlined to avoid bundler issues.
  *
+ * STEREO OUTPUT:
+ *   The mono ring buffer is duplicated to all output channels so the
+ *   AudioContext destination receives a proper stereo signal regardless
+ *   of the hardware output configuration.  Wire with outputChannelCount: [2].
+ *
  * MEMORY CONTRACT (mirrors SharedRingBuffer.fromWasmMemory):
  *   - WRITE_HEAD and READ_HEAD are monotonic uint32 values.
  *   - Mask applied ONLY at data[] access: index & (capacity - 1).
@@ -31,6 +36,7 @@
 /* ─── Inline Ring Buffer Consumer ─────────────────────────────────────────── */
 
 const RENDER_QUANTUM = 128; // Web Audio spec: fixed 128-sample block
+const UNDERRUN_WARN_THRESHOLD = 50; // Consecutive underruns before console.warn
 
 /**
  * Minimal ring buffer pull — inlined to avoid imports.
@@ -75,6 +81,7 @@ class DSPWorkletProcessor extends AudioWorkletProcessor {
   private capacity = 0;
   private active = false;
   private underrunCount = 0;
+  private consecutiveUnderruns = 0;
 
   constructor() {
     super();
@@ -108,6 +115,7 @@ class DSPWorkletProcessor extends AudioWorkletProcessor {
         this.capacity = capacity;
         this.active   = true;
         this.underrunCount = 0;
+        this.consecutiveUnderruns = 0;
 
         this.port.postMessage({ type: 'ready' });
         break;
@@ -136,31 +144,55 @@ class DSPWorkletProcessor extends AudioWorkletProcessor {
       return true;
     }
 
-    const output = outputs[0]?.[0];
-    if (!output) return true;
+    // outputs[0][0] = Left channel, outputs[0][1] = Right channel
+    const left = outputs[0]?.[0];
+    if (!left) return true;
 
     const ok = pullFromRing(
       this.headers,
       this.data,
-      output,
+      left,             // Pull mono signal into Left channel
       RENDER_QUANTUM,
       this.capacity,
     );
 
     if (!ok) {
       this.underrunCount++;
-      // Report underruns periodically (every 100 = ~266ms at 48kHz)
+      this.consecutiveUnderruns++;
+
+      // Warn to console after sustained underrun streak
+      if (this.consecutiveUnderruns === UNDERRUN_WARN_THRESHOLD) {
+        console.warn(
+          `[DSPWorklet] Buffer consistently empty — ${this.underrunCount} total underruns. ` +
+          `Producer may be stalled or WASM kernel not running.`,
+        );
+      }
+
+      // Report underruns periodically via port (every 100 = ~266ms at 48kHz)
       if (this.underrunCount % 100 === 1) {
         this.port.postMessage({
           type: 'underrun',
           count: this.underrunCount,
         });
       }
+    } else {
+      // Reset consecutive underrun counter on successful pull
+      this.consecutiveUnderruns = 0;
+
+      // Detect all-zero output — may indicate gain=0 or NaN in ring buffer
+      let allZero = true;
+      for (let i = 0; i < RENDER_QUANTUM; i++) {
+        if (Math.abs(left[i]) > 1e-6) { allZero = false; break; }
+      }
+      if (allZero) {
+        this.port.postMessage({ type: 'warn', message: 'Buffer non-empty but output is all zeros — check gain and sample values' });
+      }
     }
 
-    // Copy channel 0 to all other output channels (mono → multi-channel).
+    // Copy Left (ch 0) → Right (ch 1) and any additional output channels.
+    // This converts the mono WASM ring buffer to stereo for the hardware output.
     for (let ch = 1; ch < outputs[0].length; ch++) {
-      outputs[0][ch].set(output);
+      outputs[0][ch].set(left);
     }
 
     return true; // Keep processor alive

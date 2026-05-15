@@ -127,7 +127,7 @@ export class DSPNode {
         {
           numberOfInputs: 0,
           numberOfOutputs: 1,
-          outputChannelCount: [1], // Mono for Phase 2
+          outputChannelCount: [2], // Stereo: ch0=Left, ch1=Right (mono → duplicated)
         },
       );
 

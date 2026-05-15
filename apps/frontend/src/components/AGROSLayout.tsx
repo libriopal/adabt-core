@@ -19,6 +19,9 @@ import React, {
 } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import type { DeviceTier } from '../dsp/wasm/WasmDSPKernel.types';
+import { TIER_CAPACITY } from '../dsp/wasm/WasmDSPKernel.types';
+import { DSPContext, type SabViews } from '../dsp/DSPContext';
+import Oscilloscope from './Oscilloscope';
 
 /* ─── AudioWorklet processor (Blob URL) ─────────────────────────────────── */
 
@@ -27,23 +30,40 @@ class DspKernelProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
     this._ready = false;
+    this._underruns = 0;
+    this._consecutive = 0;
     this.port.onmessage = ({ data: d }) => {
       this._heads = new Uint32Array(d.sab, d.writeHeadPtr, 2);
       this._data  = new Float32Array(d.sab, d.dataPtr, d.capacity);
       this._mask  = d.capacity - 1;
       this._ready = true;
+      this._underruns = 0;
+      this._consecutive = 0;
     };
   }
   process(_i, outputs) {
-    const ch = outputs[0]?.[0]; if (!ch) return true;
-    const n = ch.length;
-    if (!this._ready) { ch.fill(0); return true; }
+    // outputs[0][0] = Left, outputs[0][1] = Right
+    const left = outputs[0]?.[0]; if (!left) return true;
+    const n = left.length;
+    if (!this._ready) { left.fill(0); return true; }
     const wh = Atomics.load(this._heads, 0);
     const rh = Atomics.load(this._heads, 1);
-    if ((wh - rh) >>> 0 < n) { ch.fill(0); return true; }
+    if ((wh - rh) >>> 0 < n) {
+      left.fill(0);
+      this._underruns++;
+      this._consecutive++;
+      if (this._consecutive === 60) {
+        console.warn('[DSPWorklet] Buffer consistently empty — ' + this._underruns + ' underruns. Producer may be stalled.');
+      }
+      return true;
+    }
+    this._consecutive = 0;
     const { _data: d, _mask: m } = this;
-    for (let i = 0; i < n; i++) ch[i] = d[(rh + i) & m];
+    for (let i = 0; i < n; i++) left[i] = d[(rh + i) & m];
     Atomics.store(this._heads, 1, (rh + n) >>> 0);
+    // Copy Left → Right for stereo output
+    const right = outputs[0]?.[1];
+    if (right) right.set(left);
     return true;
   }
 }
@@ -82,16 +102,9 @@ const EMOTION_COLORS: Record<EmotionalState, string> = {
 const TIER_OPTIONS: DeviceTier[] = [0, 1, 2, 3, 4];
 const SCOPE_W = 292;
 const SCOPE_H = 108;
-const SCOPE_N = 512;
 
 /* ─── SAB views ─────────────────────────────────────────────────────────── */
-
-interface SabViews {
-  heads: Uint32Array;   // [WRITE_HEAD, READ_HEAD] at writeHeadPtr
-  data:  Float32Array;  // ring buffer audio data at dataPtr
-  capacity: number;
-  mask:     number;
-}
+// SabViews is imported from DSPContext
 
 /* ─── Sub-components ─────────────────────────────────────────────────────── */
 
@@ -300,79 +313,20 @@ const AGROSLayout: React.FC = () => {
   const audioCtxRef  = useRef<AudioContext | null>(null);
   const nodeRef      = useRef<AudioWorkletNode | null>(null);
   const sabRef       = useRef<SabViews | null>(null);
-  const canvasRef    = useRef<HTMLCanvasElement>(null);
-  const rafRef       = useRef<number>(0);
+  const diagTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  /* ── Oscilloscope draw ─────────────────────────────────────────────── */
-
-  const drawScope = useCallback(() => {
-    const views = sabRef.current;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    ctx.fillStyle = '#050810';
-    ctx.fillRect(0, 0, SCOPE_W, SCOPE_H);
-
-    /* grid */
-    ctx.strokeStyle = '#0d1a2f';
-    ctx.lineWidth = 1;
-    [0.25, 0.5, 0.75].forEach(frac => {
-      const y = frac * SCOPE_H;
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(SCOPE_W, y); ctx.stroke();
-    });
-    [0.25, 0.5, 0.75].forEach(frac => {
-      const x = frac * SCOPE_W;
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, SCOPE_H); ctx.stroke();
-    });
-
-    if (!views) return;
-
-    const wh = Atomics.load(views.heads, 0);
-    const rh = Atomics.load(views.heads, 1);
-    setWriteHead(wh);
-    setReadHead(rh);
-
-    /* waveform */
-    const n = Math.min(SCOPE_N, views.capacity);
-    ctx.strokeStyle = '#22d3ee';
-    ctx.lineWidth = 1.5;
-    ctx.shadowBlur = 4;
-    ctx.shadowColor = '#22d3ee55';
-    ctx.beginPath();
-    for (let i = 0; i < n; i++) {
-      const idx = ((wh - n + i) >>> 0) & views.mask;
-      const s   = views.data[idx];
-      const x   = (i / (n - 1)) * SCOPE_W;
-      const y   = SCOPE_H / 2 - s * (SCOPE_H / 2 - 6);
-      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-    }
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-
-    /* RMS level bar */
-    let rms = 0;
-    for (let i = 0; i < n; i++) {
-      const s = views.data[((wh - n + i) >>> 0) & views.mask];
-      rms += s * s;
-    }
-    rms = Math.sqrt(rms / n);
-    const barW = Math.min(rms * SCOPE_W * 2.2, SCOPE_W);
-    ctx.fillStyle = rms > 0.45 ? '#ef4444' : rms > 0.2 ? '#22d3ee' : '#0e4d3a';
-    ctx.fillRect(0, SCOPE_H - 4, barW, 3);
-  }, []);
-
-  /* ── Animation loop ────────────────────────────────────────────────── */
+  /* ── Diagnostics polling (WR_HEAD, RD_HEAD, overruns, frames) ──────── */
 
   useEffect(() => {
-    function frame() {
-      drawScope();
-      rafRef.current = requestAnimationFrame(frame);
-    }
-    rafRef.current = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(rafRef.current);
-  }, [drawScope]);
+    const id = setInterval(() => {
+      const views = sabRef.current;
+      if (views) {
+        setWriteHead(Atomics.load(views.heads, 0));
+        setReadHead(Atomics.load(views.heads, 1));
+      }
+    }, 100);
+    return () => clearInterval(id);
+  }, []);
 
   /* ── Start engine ──────────────────────────────────────────────────── */
 
@@ -403,7 +357,7 @@ const AGROSLayout: React.FC = () => {
           if (e.data.type === 'error') reject(new Error(e.data.message));
         };
         worker.onerror = (e) => reject(new Error(e.message));
-        worker.postMessage({ type: 'init', sampleRate: 48000, tier });
+        worker.postMessage({ type: 'init', capacity: TIER_CAPACITY[tier], sampleRate: 48000, tier });
       });
 
       sabRef.current = {
@@ -413,21 +367,31 @@ const AGROSLayout: React.FC = () => {
         mask:     ready.capacity - 1,
       };
 
+      /* Ongoing worker message handler — handles diagnostics responses */
       worker.onmessage = (e) => {
-        if (e.data.type !== 'tick') return;
-        setOverruns(e.data.overruns);
-        setFrames(e.data.framesProduced);
+        if (e.data.type === 'diagnostics') {
+          setOverruns(e.data.overruns);
+          setFrames(e.data.framesProduced);
+        }
       };
 
-      worker.postMessage({ type: 'setFreq', freq });
-      worker.postMessage({ type: 'setGain', gain });
+      /* Poll worker for diagnostics every 200ms */
+      diagTimerRef.current = setInterval(() => {
+        workerRef.current?.postMessage({ type: 'getDiagnostics' });
+      }, 200);
 
-      const actx = new AudioContext({ sampleRate: 48000 });
+      worker.postMessage({ type: 'setFrequency', value: freq });
+      worker.postMessage({ type: 'setGain', value: gain });
+
+      /* Resume AudioContext first — browser autoplay policy may suspend it */
+      const actx = new AudioContext({ sampleRate: 48000, latencyHint: 'interactive' });
       audioCtxRef.current = actx;
+      await actx.resume();
       await actx.audioWorklet.addModule(workletUrl());
 
+      /* Stereo output: ch0 = Left, ch1 = Right (mono signal duplicated) */
       const node = new AudioWorkletNode(actx, 'dsp-kernel-processor', {
-        numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1],
+        numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2],
       });
       nodeRef.current = node;
       node.port.postMessage({
@@ -451,7 +415,11 @@ const AGROSLayout: React.FC = () => {
   /* ── Stop engine ───────────────────────────────────────────────────── */
 
   const handleStop = useCallback(() => {
-    workerRef.current?.postMessage({ type: 'dispose' });
+    if (diagTimerRef.current !== null) {
+      clearInterval(diagTimerRef.current);
+      diagTimerRef.current = null;
+    }
+    workerRef.current?.postMessage({ type: 'stop' });
     workerRef.current?.terminate();
     workerRef.current = null;
     nodeRef.current?.disconnect();
@@ -469,12 +437,12 @@ const AGROSLayout: React.FC = () => {
 
   const setFreq = useCallback((v: number) => {
     setFreqState(v);
-    workerRef.current?.postMessage({ type: 'setFreq', freq: v });
+    workerRef.current?.postMessage({ type: 'setFrequency', value: v });
   }, []);
 
   const setGain = useCallback((v: number) => {
     setGainState(v);
-    workerRef.current?.postMessage({ type: 'setGain', gain: v });
+    workerRef.current?.postMessage({ type: 'setGain', value: v });
   }, []);
 
   /* ── Render ─────────────────────────────────────────────────────────── */
@@ -483,7 +451,10 @@ const AGROSLayout: React.FC = () => {
   const statusColor = engineError ? '#ef4444' : running ? '#22d3ee' : '#4a5568';
   const statusLabel = engineError ? 'ERROR' : starting ? 'STARTING' : running ? 'RUNNING' : 'IDLE';
 
+  const dspValue = { setFreq, setGain, running, sabViews: sabRef.current };
+
   return (
+    <DSPContext.Provider value={dspValue}>
     <div style={S.root}>
 
       {/* ── Top nav bar ────────────────────────────────────────────── */}
@@ -551,12 +522,7 @@ const AGROSLayout: React.FC = () => {
         {/* Oscilloscope */}
         <div style={S.scopePanel}>
           <div style={S.panelLabel}>OSCILLOSCOPE</div>
-          <canvas
-            ref={canvasRef}
-            width={SCOPE_W}
-            height={SCOPE_H}
-            style={S.canvas}
-          />
+          <Oscilloscope width={SCOPE_W} height={SCOPE_H} />
         </div>
 
         {/* Divider */}
@@ -620,13 +586,14 @@ const AGROSLayout: React.FC = () => {
       </div>
 
     </div>
+    </DSPContext.Provider>
   );
 };
 
 /* ─── Nav items ──────────────────────────────────────────────────────────── */
 
 const NAV_ITEMS = [
-  { label: 'SlotGen',       path: '/' },
+  { label: 'Rhythm Engine', path: '/' },
   { label: 'ConceptForge',  path: '/concept-forge' },
   { label: 'Music Engine',  path: '/music-engine' },
 ];
@@ -777,11 +744,6 @@ const S: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     flexShrink: 0,
-  },
-  canvas: {
-    display: 'block',
-    border: '1px solid #131d30',
-    borderRadius: 3,
   },
 
   /* oscillator */
