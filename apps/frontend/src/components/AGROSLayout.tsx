@@ -313,7 +313,10 @@ const AGROSLayout: React.FC = () => {
   const audioCtxRef  = useRef<AudioContext | null>(null);
   const nodeRef      = useRef<AudioWorkletNode | null>(null);
   const sabRef       = useRef<SabViews | null>(null);
-  const diagTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  /* Refs for hot-path audio coalescing (avoids React re-renders on every game frame) */
+  const freqRef         = useRef(440);
+  const gainRef         = useRef(0.5);
+  const workerDirtyRef  = useRef({ freq: false, gain: false });
 
   /* ── Diagnostics polling (WR_HEAD, RD_HEAD, overruns, frames) ──────── */
 
@@ -324,6 +327,48 @@ const AGROSLayout: React.FC = () => {
         setWriteHead(Atomics.load(views.heads, 0));
         setReadHead(Atomics.load(views.heads, 1));
       }
+    }, 100);
+    return () => clearInterval(id);
+  }, []);
+
+  /* ── Coalesced worker message flush (~60Hz cadence cap) ────────────── */
+  /* Keeps only the latest freq/gain and flushes to worker at most every
+     16ms.  Prevents worker-thread saturation from per-frame game engine
+     calls while maintaining <12ms Tier 0 jitter budget. */
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      const dirty = workerDirtyRef.current;
+      const worker = workerRef.current;
+      if (!worker) return;
+      if (dirty.freq) {
+        worker.postMessage({ type: 'setFreq', freq: freqRef.current });
+        dirty.freq = false;
+      }
+      if (dirty.gain) {
+        worker.postMessage({ type: 'setGain', gain: gainRef.current });
+        dirty.gain = false;
+      }
+    }, 16);
+    return () => clearInterval(id);
+  }, []);
+
+  /* ── Throttled UI sync (10Hz) — reflect engine-driven values in knobs */
+  /* When the game engine drives freq/gain via hot-path setters, the React
+     state (and therefore knob display) only updates at this cadence.
+     This keeps the status strip and knob labels live without per-frame
+     React reconciliation. */
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setFreqState(prev => {
+        const v = Math.round(freqRef.current);
+        return prev !== v ? v : prev;
+      });
+      setGainState(prev => {
+        const v = parseFloat(gainRef.current.toFixed(2));
+        return prev !== v ? v : prev;
+      });
     }, 100);
     return () => clearInterval(id);
   }, []);
@@ -367,21 +412,19 @@ const AGROSLayout: React.FC = () => {
         mask:     ready.capacity - 1,
       };
 
-      /* Ongoing worker message handler — handles diagnostics responses */
+      /* Ongoing worker message handler — receives tick diagnostics
+         (worker sends these autonomously every 100ms). */
       worker.onmessage = (e) => {
-        if (e.data.type === 'diagnostics') {
+        if (e.data.type === 'tick') {
           setOverruns(e.data.overruns);
           setFrames(e.data.framesProduced);
         }
       };
 
-      /* Poll worker for diagnostics every 200ms */
-      diagTimerRef.current = setInterval(() => {
-        workerRef.current?.postMessage({ type: 'getDiagnostics' });
-      }, 200);
-
-      worker.postMessage({ type: 'setFrequency', value: freq });
-      worker.postMessage({ type: 'setGain', value: gain });
+      /* Seed initial frequency/gain — post directly for instant startup,
+         then the coalescing timer takes over for ongoing updates. */
+      worker.postMessage({ type: 'setFreq', freq: freqRef.current });
+      worker.postMessage({ type: 'setGain', gain: gainRef.current });
 
       /* Resume AudioContext first — browser autoplay policy may suspend it */
       const actx = new AudioContext({ sampleRate: 48000, latencyHint: 'interactive' });
@@ -410,16 +453,12 @@ const AGROSLayout: React.FC = () => {
     } finally {
       setStarting(false);
     }
-  }, [tier, freq, gain]);
+  }, [tier]);
 
   /* ── Stop engine ───────────────────────────────────────────────────── */
 
   const handleStop = useCallback(() => {
-    if (diagTimerRef.current !== null) {
-      clearInterval(diagTimerRef.current);
-      diagTimerRef.current = null;
-    }
-    workerRef.current?.postMessage({ type: 'stop' });
+    workerRef.current?.postMessage({ type: 'dispose' });
     workerRef.current?.terminate();
     workerRef.current = null;
     nodeRef.current?.disconnect();
@@ -427,22 +466,42 @@ const AGROSLayout: React.FC = () => {
     audioCtxRef.current?.close();
     audioCtxRef.current = null;
     sabRef.current = null;
+    workerDirtyRef.current = { freq: false, gain: false };
     setRunning(false);
     setWriteHead(0); setReadHead(0); setOverruns(0); setFrames(0);
   }, []);
 
   useEffect(() => () => { handleStop(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* ── Param setters ─────────────────────────────────────────────────── */
+  /* ── Audio parameter setters ─────────────────────────────────────── */
+
+  /* UI setters: update React state (for knob display) + ref + dirty flag.
+     The coalescing timer flushes dirty values to the worker at ≤60Hz. */
 
   const setFreq = useCallback((v: number) => {
     setFreqState(v);
-    workerRef.current?.postMessage({ type: 'setFrequency', value: v });
+    freqRef.current = v;
+    workerDirtyRef.current.freq = true;
   }, []);
 
   const setGain = useCallback((v: number) => {
     setGainState(v);
-    workerRef.current?.postMessage({ type: 'setGain', value: v });
+    gainRef.current = v;
+    workerDirtyRef.current.gain = true;
+  }, []);
+
+  /* Hot-path setters: ref + dirty flag ONLY — no React re-render.
+     Use these in game loops / RAF callbacks where per-frame updates
+     would otherwise saturate the main thread with React reconciliation. */
+
+  const setFreqHot = useCallback((v: number) => {
+    freqRef.current = v;
+    workerDirtyRef.current.freq = true;
+  }, []);
+
+  const setGainHot = useCallback((v: number) => {
+    gainRef.current = v;
+    workerDirtyRef.current.gain = true;
   }, []);
 
   /* ── Render ─────────────────────────────────────────────────────────── */
@@ -451,7 +510,7 @@ const AGROSLayout: React.FC = () => {
   const statusColor = engineError ? '#ef4444' : running ? '#22d3ee' : '#4a5568';
   const statusLabel = engineError ? 'ERROR' : starting ? 'STARTING' : running ? 'RUNNING' : 'IDLE';
 
-  const dspValue = { setFreq, setGain, running, sabViews: sabRef.current };
+  const dspValue = { setFreq, setGain, setFreqHot, setGainHot, running, sabViews: sabRef.current };
 
   return (
     <DSPContext.Provider value={dspValue}>

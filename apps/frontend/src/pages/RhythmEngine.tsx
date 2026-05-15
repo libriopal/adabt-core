@@ -158,7 +158,7 @@ function drawFrame(
 /* ─── Component ──────────────────────────────────────────────────────────── */
 
 const RhythmEnginePage: React.FC = () => {
-  const { setFreq, setGain, running } = useDSP();
+  const { setFreq, setGain, setFreqHot, setGainHot, running } = useDSP();
   const canvasRef  = useRef<HTMLCanvasElement>(null);
   const rafRef     = useRef<number>(0);
   const lastTsRef  = useRef<number>(0);
@@ -185,11 +185,14 @@ const RhythmEnginePage: React.FC = () => {
     return () => ro.disconnect();
   }, [resize]);
 
-  /* ── Init singleton with audio callbacks ───────────────────────────── */
+  /* ── Init singleton with hot-path audio callbacks ────────────────── */
+  /* Wire hot-path setters to the engine — these bypass React state
+     so the per-frame frequency/gain pushes from RhythmEngine.update()
+     don't trigger reconciliation (stays within 12ms Tier 0 budget). */
 
   useEffect(() => {
-    RhythmEngine.init({ setFreq, setGain });
-  }, [setFreq, setGain]);
+    RhythmEngine.init({ setFreq: setFreqHot, setGain: setGainHot });
+  }, [setFreqHot, setGainHot]);
 
   /* ── Activate / deactivate singleton when engine starts/stops ──────── */
 
