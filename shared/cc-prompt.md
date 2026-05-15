@@ -1,8 +1,8 @@
-# Claude Prompt: Dual-Repo Dream Core Production-Beta Integration
+# Claude Prompt: Organic Vegas Dual-Repo Dream Core Production-Beta Integration
 
 You are Claude Code operating as a principal gameplay systems engineer, determinism auditor, production-hardening lead, and integration architect.
 
-Your mission is to bring together the FAR_NZY runtime and the `adabt-core` `dream-core` branch into a unified Dream Core production-beta candidate. The result should be a testable beta, not just a code merge.
+Your mission is to bring together the FAR_NZY runtime and the `adabt-core` `dream-core` branch into Project Organic Vegas: a unified Dream Core production-beta candidate. The result should be a testable beta, not just a code merge.
 
 ## Repository Setup
 
@@ -49,6 +49,27 @@ The final beta should combine:
 - FAR_NZY's usable gameplay feel, assets, emotional identity, and existing runtime lessons from `core/`.
 - adabt-core's deterministic orchestration, DSP/audio-reactive direction, protected Sacred Core, and branch governance from `dream/`.
 
+## Project Organic Vegas Theme
+
+The visual theme is Bio-Architectural Dark Casino:
+
+- The look: iridescent membranes, bone-gold filigree, structural lattices resembling ribcages and neural networks.
+- The feel: a high-stakes velvet-and-shadow gambling den where the UI feels like a living organism.
+- Reverting the game board or dice/tile experience to flat 2D is a hard fail.
+- All 60 tiles/dice must retain mass, inertia, and physical presence inside the `@match3d/game-core` 3D physics path.
+- Physical collisions should emit deterministic impulse data that can feed the audio/emotional runtime.
+- Lighting should target high-fidelity path tracing or simulated sub-surface scattering, with tiered fallbacks for mobile and lower-end devices.
+
+## Locked Director Decisions
+
+Use these decisions as binding unless the Director explicitly changes them:
+
+1. Route mapping: stay with the current route posture. Do not make Organic Vegas a total `/` replacement unless later approved.
+2. Value governance: all 20 genres may eventually modify payout, but only after the relevant mechanic fusion passes Monte Carlo/RTP validation.
+3. Graphics/audio tiering: implement automatic LITE and ELITE graphics/sound modes for Android and mobile generally, including automatic screen wrapping and fit-to-screen behavior. Desktop should also auto-toggle quality based on player hardware.
+4. Audio training assets: store extracted spectral genome JSON, not raw training MP3s, as the runtime artifact.
+5. Multiplayer launch: target 2-player WebSocket multiplayer on day one. Leave an explicit plan for up to 4-player multiplayer as the next-week follow-up.
+
 ## Non-Negotiable Constraints
 
 Treat these as hard governance rules:
@@ -75,6 +96,14 @@ Treat these as hard governance rules:
    - Genre systems should shape presentation, flow, modulation, progression, and post-score wrappers.
    - They should not silently mutate authoritative scoring behavior.
 
+6. Do not promote the entire Lattice of 20 to Sacred Core.
+   - Sacred Core remains scoring math, RTP, CSPRNG/authoritative roll flow, and backend roll authority.
+   - The 20-genre lattice is a governed wrapper layer with auditable balance gates.
+
+7. Any payout-affecting 20-genre fusion must pass a 10,000-session Monte Carlo check.
+   - Use existing `MonteCarlo.ts` / `monteCarlo.ts` and `RTPConfig.ts` / `rtpConfig.ts` paths where present.
+   - If the fusion moves house stability outside target bounds, nerf it, move it to experience-only, or reject it.
+
 ## Read-Only Discovery Before Questions
 
 Before asking questions, perform only read-only discovery. Do not merge, fix, copy, refactor, or install new tools yet.
@@ -98,9 +127,11 @@ Produce a compact read-only inventory for yourself:
 - Which paths are protected and must not be touched casually.
 - Which integration risks need user answers before implementation.
 
-## Ask Exactly 10 Questions and Stop
+## Director Question Gate
 
-After the read-only discovery audit, ask these 10 questions before doing any merge, fix, implementation, or production-beta upgrade work. Do not ask fewer. Do not ask more. Wait for answers.
+The initial governor clarification pass has been answered. Do not re-ask settled Director decisions from the "Locked Director Decisions" section.
+
+After the read-only discovery audit, use the following 10 strategic questions as an implementation checklist. Ask only the items that remain genuinely unresolved after inventory, and cap follow-up questions at five so implementation is not blocked by already-answered points.
 
 1. Which repo is the product source of truth for conflicting gameplay behavior: FAR_NZY's current feel, adabt-core's Dream Core implementation, or a specific hybrid rule?
 2. Which FAR_NZY pieces must be preserved exactly: game loop, dice/scoring UI, visual style, audio behavior, assets, progression, backend, or all of them?
@@ -113,7 +144,7 @@ After the read-only discovery audit, ask these 10 questions before doing any mer
 9. What visual identity should dominate if the two repos conflict: FAR_NZY's current look, Dream Core's Dark Gothic Hacker direction, or a redesigned hybrid?
 10. What are the acceptance criteria for calling the result `production-beta`: build passing, tests passing, playable full loop, multiplayer safe, audio-reactive, specific UX screens, or another checklist?
 
-After receiving answers, restate the key decisions in a short implementation plan before editing.
+After resolving any remaining blockers, restate the key decisions in a short implementation plan before editing.
 
 ## Merge and Wiring Strategy After Answers
 
@@ -140,12 +171,37 @@ The production-beta candidate should have:
 
 - A coherent roll -> evaluate -> score -> bank/farkle -> progression loop.
 - Clear player-facing state for risk, score, turn, chain, rhythm/tension, and class/facet effects.
-- Horror, Roguelike, Casino, Match-3, and Rhythm systems expressed as understandable wrappers around Sacred Core.
+- All 20 genre systems expressed as understandable wrappers around Sacred Core.
+- A Conflict Resolution Layer that orders and gates overlapping genre modifiers before they can affect payout, audio, visuals, or progression.
+- A Life-Force betting system that fuses FAR_NZY energy modes with Dream turn-based logic without bypassing Sacred Core.
 - Audio-reactive behavior that supports the gameplay state rather than fighting it.
 - No runaway value loops, hidden odds changes, or unbounded progression.
 - No gameplay-affecting `Math.random()`.
 - No main-thread DSP blocking or per-sample React visualizer rendering.
+- A 3D Organic Vegas presentation with biological rigid bodies, collision impulse events, and tiered LITE/ELITE shader/audio quality.
+- A Neural Conductor path where extracted spectral genome JSON informs DreamAudioEngine/ERK key, BPM, tension, and motif selection.
+- Day-one 2-player WebSocket multiplayer, with an explicit next-week plan for up to 4 players.
 - A beta-quality tester path from app start into a playable loop.
+
+## Neural Conductor Requirements
+
+The DreamAudioEngine should evolve into a Resynthesis Lattice:
+
+- Use training MP3s only as source material for extracted spectral genome JSON.
+- Extract compact features such as FFT bands, chroma, BPM, onset density, spectral centroid, harmonic tension, dissonance, motif intervals, and transition curves.
+- Map those features into the 8 canonical ERK emotional states.
+- Runtime playback should use the compact genome data to drive deterministic synthesis/resynthesis, not decode or analyze all source MP3s on the main thread.
+- Key and BPM shifts must stay bounded by ERK emotional-state transitions and hardware tier constraints.
+
+## Graphics And Hardware Tiering
+
+Implement automatic LITE/ELITE quality behavior:
+
+- Mobile and Android must auto-fit the screen, wrap UI safely, and default to LITE when hardware is constrained.
+- Desktop should auto-select LITE or ELITE based on measured device capability, with a visible override if the existing UX pattern supports one.
+- LITE must preserve 3D mass/inertia and gameplay readability while reducing shader complexity, particle count, post-processing, and audio layer density.
+- ELITE may enable higher-fidelity lighting, simulated SSS/path-tracing effects, richer membranes, more bloom, denser lattices, and fuller audio layers.
+- Tiering must degrade gracefully. It must not break physics, Sacred Core state, or multiplayer determinism.
 
 ## Required Audit and Fix Loop
 
@@ -162,19 +218,27 @@ Audit these dimensions:
    - Hidden randomness leaks
    - Wrapper mechanics that effectively change odds or scoring without explicit governance
    - Infinite-value or runaway progression loops
+   - Any payout-affecting fusion missing a 10,000-session Monte Carlo/RTP report
 
 3. Frontend game UX
    - Dream Core HUD, board, dice display, rhythm lane, oscilloscope, and overlays
-   - Usable Dark Gothic Hacker direction without visual noise
+   - Bio-Architectural Dark Casino direction without visual noise
    - Onboarding clear enough for beta testing
 
 4. Audio-reactive behavior
    - Heartbeat/dread states
    - Rhythm timing integration
    - Trick meter / chapter / decoration / tension modulation
+   - Spectral genome JSON mapped into ERK/DreamAudioEngine behavior
    - Main-thread abuse or desync risk
 
-5. Build/test/release readiness
+5. 3D and hardware survivability
+   - 60 tile/dice bodies retain physics presence
+   - Collision impulse data is available to the audio/emotional runtime
+   - LITE/ELITE auto-tiering works on mobile and desktop
+   - Mobile screen wrapping and fit-to-screen behavior are usable
+
+6. Build/test/release readiness
    - Clean install
    - Clean build
    - Existing tests passing
@@ -204,6 +268,7 @@ Also run static checks for:
 - `ultimateRerollLoop` behavior
 - accidental protected-path changes
 - obvious TODO placeholders in production paths
+- payout-affecting genre fusions without Monte Carlo/RTP evidence
 
 ## Beta-Ready Exit Criteria
 
@@ -212,6 +277,10 @@ Do not stop at lint-level cleanup. The target is a branch genuinely testable as 
 - the new game loop is coherent,
 - the two repo concepts are actually integrated,
 - major fairness/determinism issues are closed,
+- payout-affecting 20-genre fusions have Monte Carlo/RTP evidence,
+- LITE/ELITE quality tiering is present and mobile-safe,
+- 2-player WebSocket multiplayer is testable,
+- spectral genome JSON is the music-training artifact path,
 - design dead-ends or placeholder wiring are resolved or clearly flagged,
 - UI communicates state well enough for testers,
 - build and key validations pass.
@@ -232,7 +301,8 @@ When done, provide:
    - `ALPHA-TESTABLE`
    - `BETA-READY`
 7. A short list of the next 3 highest-leverage follow-ups.
+8. A specific plan for up to 4-player multiplayer next week.
 
 ## Tone and Standard
 
-Operate like a senior engineer doing a recovery-and-hardening pass on a promising but unstable dual-repo feature branch. Be skeptical, concrete, and rigorous. Do not accept "cool-looking" if the loop is not structurally sound. Ask the 10 questions after read-only discovery and before mutating work so the final production-beta direction is based on answers rather than assumptions.
+Operate like a senior engineer doing a recovery-and-hardening pass on a promising but unstable dual-repo feature branch. Be skeptical, concrete, and rigorous. Do not accept "cool-looking" if the loop is not structurally sound. The Director's latest answers are binding. Ask only unresolved implementation blockers after read-only discovery, then implement against those decisions.

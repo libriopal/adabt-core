@@ -118,3 +118,10 @@
 
 ## Dream Core Dual-Repo Claude Handoff (2026-05-15)
 - [HANDOFF UPDATE]: `/shared/cc-prompt.md` now instructs Claude to clone `libriopal/FAR_NZY` first into `core/`, clone `libriopal/adabt-core` `dream-core` into `dream/`, treat `core/` as source material and `dream/` as the target repo, run read-only discovery, ask exactly ten clarifying questions before mutating merge work, then integrate the two into a production-beta Dream Core and audit/fix the result.
+
+## Organic Vegas Director Answers (2026-05-15)
+- [ROUTE]: Organic Vegas should stay with the current route posture; do not make it a total `/` replacement unless explicitly approved later.
+- [VALUE GOVERNANCE]: All 20 genres may modify payout only after the relevant fusion passes Monte Carlo/RTP validation.
+- [TIERING]: Android/mobile and desktop must auto-toggle LITE/ELITE graphics and sound by hardware capability; mobile must also fit and wrap the screen automatically.
+- [AUDIO DATA]: Training MP3s should become extracted spectral genome JSON artifacts rather than raw runtime MP3 assets.
+- [MULTIPLAYER]: Production-beta targets 2-player WebSocket multiplayer on day one, with an explicit plan for up to 4 players the following week.
