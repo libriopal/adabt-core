@@ -101,12 +101,12 @@ export const FACET_REGISTRY: Record<FacetId, FacetDef> = {
   CARDSHARP: {
     id: 'CARDSHARP',
     name: 'The Cardsharp',
-    description: 'Farkle recovery: 30% returns. Plus: first Farkle each run is free.',
+    description: 'Farkle recovery: 30% returns. No free-turn loops.',
     mutatesTo: null,
     mutationThreshold: Infinity,
     modifier: {
       farkleRecoveryPct: 0.30,
-      extraRollOnFarkle: true,
+      extraRollOnFarkle: false,
     },
   },
   BULWARK: {

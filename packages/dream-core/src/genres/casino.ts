@@ -68,6 +68,7 @@ export function recordRollResult(
   return {
     recentScores: scores,
     variance,
+    standardDeviation: Math.sqrt(variance),
     surgeActive,
     surgeExpiresAt,
     juiceAmplifier: surgeActive ? 2.0 : 1.0,

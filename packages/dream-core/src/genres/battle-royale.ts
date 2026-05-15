@@ -33,7 +33,7 @@ export function tickClosingCircle(
   state: ClosingCircleState,
   now: number,
   totalTiles: number = 60,
-  rngFn: () => number = Math.random,
+  rngFn: () => number = deterministicCircleRng,
 ): ClosingCircleState {
   if (now - state.lastShrinkAt < state.tickIntervalMs) return state;
   if (state.radius <= MIN_RADIUS) return state;
@@ -55,6 +55,15 @@ export function tickClosingCircle(
     scorched: newScorched,
     active: newRadius > MIN_RADIUS,
   };
+}
+
+let circleRngState = 0xC10C1E;
+function deterministicCircleRng(): number {
+  circleRngState = (circleRngState + 0x6D2B79F5) >>> 0;
+  let t = circleRngState;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 }
 
 /**

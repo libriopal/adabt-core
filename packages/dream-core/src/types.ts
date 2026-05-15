@@ -6,6 +6,7 @@
 // ─────────────────────────────────────────────────────
 
 import type { DieFace } from '../../farkle-shared/src/types';
+export type { DieFace } from '../../farkle-shared/src/types';
 
 // ── Genre Hierarchy (descending dominance) ────────────────────────────────────
 export type GenreTag =

@@ -3,8 +3,7 @@
 // Pocket 1 scoring die for future deployment.
 // ─────────────────────────────────────────────────────
 
-import type { HiddenPocketState } from '../types';
-import type { DieFace } from '../../farkle-shared/src/types';
+import type { HiddenPocketState, DieFace } from '../types';
 
 // ── Factory ───────────────────────────────────────────────────────────────────
 export function createHiddenPocketState(maxPockets: number = 1): HiddenPocketState {

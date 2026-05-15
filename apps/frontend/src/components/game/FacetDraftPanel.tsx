@@ -30,8 +30,8 @@ export const FacetDraftPanel: React.FC<FacetDraftPanelProps> = ({
 
   // Generate 3 draft options
   const options = useMemo(() => {
-    return generateDraftOptions(facetState, 3, Math.random);
-  }, [facetState.round]);
+    return generateDraftOptions(facetState, createDraftRng(facetState.roundsEquipped, facetState.mutationTier));
+  }, [facetState.availableFacets, facetState.equipped, facetState.mutationTier, facetState.roundsEquipped]);
 
   const handleSelect = useCallback((facetId: FacetId) => {
     equipFacet(facetId);
@@ -56,7 +56,8 @@ export const FacetDraftPanel: React.FC<FacetDraftPanelProps> = ({
       }}>
         {options.map(facetId => {
           const facet = FACET_REGISTRY[facetId]!;
-          const rarityColor = RARITY_COLORS[facet.rarity] ?? '#aaaaaa';
+          const rarity = facet.mutatesTo ? 'COMMON' : 'RARE';
+          const rarityColor = RARITY_COLORS[rarity] ?? '#aaaaaa';
 
           return (
             <button
@@ -82,7 +83,7 @@ export const FacetDraftPanel: React.FC<FacetDraftPanelProps> = ({
                 letterSpacing: '0.15em',
                 marginBottom: '6px',
               }}>
-                {facet.rarity}
+                {rarity}
               </div>
               <div style={{
                 fontSize: '14px',
@@ -99,7 +100,7 @@ export const FacetDraftPanel: React.FC<FacetDraftPanelProps> = ({
               }}>
                 {facet.description}
               </div>
-              {facet.mutation && (
+              {facet.mutatesTo && (
                 <div style={{
                   marginTop: '8px',
                   fontSize: '10px',
@@ -116,3 +117,14 @@ export const FacetDraftPanel: React.FC<FacetDraftPanelProps> = ({
     </div>
   );
 };
+
+function createDraftRng(roundsEquipped: number, mutationTier: number): () => number {
+  let state = (0xFA7E7 + roundsEquipped * 101 + mutationTier * 997) >>> 0;
+  return () => {
+    state = (state + 0x6D2B79F5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}

@@ -9,6 +9,7 @@ import { useDreamStore } from '../../../../../packages/dream-core/src/state/drea
 import { isTileScorched, getScorchedVisuals } from '../../../../../packages/dream-core/src/genres/battle-royale';
 import { getGravityTransform, getSettleCSS } from '../../../../../packages/dream-core/src/genres/platformer';
 import { getTerritoryVisuals } from '../../../../../packages/dream-core/src/genres/strategy';
+import type { SealCondition } from '../../../../../packages/dream-core/src/types';
 
 interface DreamGameBoardProps {
   playerId: string;
@@ -48,7 +49,7 @@ export const DreamGameBoard: React.FC<DreamGameBoardProps> = ({
         row: Math.floor(i / COLS),
         col: i % COLS,
         sealed: sealed?.sealed ?? false,
-        sealCondition: sealed?.condition ?? '',
+        sealCondition: sealed ? formatSealCondition(sealed.condition) : '',
         scorched,
         territoryOwned: territoryTile?.owned ?? false,
         territoryContested: territoryTile?.contested ?? false,
@@ -184,4 +185,17 @@ interface TileInfo {
   territoryDomain: boolean;
   territoryColor: string;
   territoryBorder: string;
+}
+
+function formatSealCondition(condition: SealCondition): string {
+  switch (condition.type) {
+    case 'consecutive_on_beat':
+      return `${condition.count} consecutive beat rolls`;
+    case 'straight_4plus':
+      return '4+ straight';
+    case 'exact_bank':
+      return `Bank exactly ${condition.target}`;
+    case 'streak':
+      return `${condition.count} bank streak`;
+  }
 }

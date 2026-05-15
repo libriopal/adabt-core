@@ -8,6 +8,7 @@
     "skipLibCheck": true,
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
+    "baseUrl": ".",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
@@ -15,7 +16,13 @@
     "strict": true,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+    "paths": {
+      "@match3d/farkle-engine": ["../../packages/farkle-engine/src/index.ts"],
+      "@match3d/farkle-shared": ["../../packages/farkle-shared/src/index.ts"],
+      "zustand": ["./node_modules/zustand/index.d.ts"],
+      "zustand/middleware": ["./node_modules/zustand/middleware.d.ts"]
+    }
   },
   "include": ["src"]
 }

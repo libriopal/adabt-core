@@ -22,7 +22,7 @@ export const NeonOscilloscope: React.FC<NeonOscilloscopeProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const rafRef = useRef<number>(0);
-  const dataRef = useRef<Uint8Array | null>(null);
+  const dataRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
 
   // Initialize analyser node
   useEffect(() => {
@@ -32,7 +32,7 @@ export const NeonOscilloscope: React.FC<NeonOscilloscopeProps> = ({
     analyser.fftSize = 512;
     analyser.smoothingTimeConstant = 0.75;
     analyserRef.current = analyser;
-    dataRef.current = new Uint8Array(analyser.frequencyBinCount);
+    dataRef.current = new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount));
 
     // Connect to destination for monitoring (tap into master)
     // In a real setup, this would tap the master gain

@@ -57,7 +57,9 @@ export function useDreamCore(bpm: number = 120) {
         if (active) {
           const heartbeat = useDreamStore.getState().heartbeat;
           const params = getHeartbeatAudioParams(heartbeat);
-          dreamAudio.startHeartbeat(params);
+          if (params) {
+            dreamAudio.startHeartbeat(params);
+          }
         } else {
           dreamAudio.stopHeartbeat();
           dreamAudio.restoreAllStems();

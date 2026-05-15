@@ -1,7 +1,9 @@
 // ─────────────────────────────────────────────────────
 // DREAM-CORE — Genre #19: MOBA (The Ultimate)
-// Shared team meter; at 100 charge, next roll guaranteed not-Farkle.
-// ⚠️ FLAGGED FOR CODERABBIT AUDIT: Server re-roll loop (max 3).
+// Shared team meter; at 100 charge, the next roll receives a cinematic
+// "ultimate" wrapper only. It must never force dice, reroll CSPRNG output,
+// or guarantee a non-Farkle outcome.
+// [CODERABBIT AUDIT]: The former reroll loop is intentionally disabled.
 // ─────────────────────────────────────────────────────
 
 import type { UltimateState } from '../types';
@@ -61,20 +63,10 @@ export function loseChargeOnFarkle(state: UltimateState): UltimateState {
 }
 
 /**
- * Fire the Ultimate — next roll guaranteed not-Farkle.
+ * Fire the Ultimate — arms the next roll's cinematic/audio wrapper.
  *
- * IMPLEMENTATION NOTE (for CodeRabbit audit):
- * This does NOT modify the Sacred Core scorer. The server-side implementation:
- * 1. Calls csprng.rollDice() normally
- * 2. Checks lookupScore(faces) against the score table
- * 3. If score === 0 (Farkle), re-rolls (up to MAX_SERVER_REROLLS times)
- * 4. If all re-rolls Farkle, accepts the Farkle (safety valve)
- *
- * The client receives the FINAL dice faces — it never knows about re-rolls.
- * This maintains RTP integrity because:
- * - The Ultimate fires at most once per match
- * - Max 3 re-rolls caps the statistical impact
- * - Each re-roll uses the same CSPRNG stream (no bias)
+ * This does not modify the Sacred Core scorer and does not change the dice
+ * stream. The actual roll must still come from the authoritative CSPRNG path.
  */
 export function fireUltimate(state: UltimateState): {
   state: UltimateState;
@@ -95,26 +87,40 @@ export function fireUltimate(state: UltimateState): {
   };
 }
 
+export interface UltimateRerollAuditResult {
+  faces: number[];
+  attempts: number;
+  succeeded: boolean;
+  blocked: true;
+  score: number;
+  reason: 'RTP_WRAPPER_ONLY_NO_REROLL';
+}
+
 /**
- * Server-side re-roll loop for Ultimate activation.
- * Returns the dice faces that result in a non-Farkle (or last attempt).
+ * Audit-locked compatibility shim for the rejected Ultimate reroll mechanic.
+ *
+ * The old design repeatedly called rollFn until a non-Farkle appeared. That
+ * changes outcome distribution and violates RTP/CSPRNG integrity. Keep this
+ * export so integration code cannot accidentally reintroduce the loop: it
+ * consumes exactly one authoritative roll, reports the score, and marks the
+ * reroll path blocked.
  */
 export function ultimateRerollLoop(
   rollFn: () => number[],    // returns 6 dice faces
   scoreFn: (faces: number[]) => number, // Sacred Core lookupScore
   maxAttempts: number = MAX_SERVER_REROLLS,
-): { faces: number[]; attempts: number; succeeded: boolean } {
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const faces = rollFn();
-    const score = scoreFn(faces);
-    if (score > 0) {
-      return { faces, attempts: attempt, succeeded: true };
-    }
-  }
-
-  // Safety valve: accept the Farkle
-  const finalFaces = rollFn();
-  return { faces: finalFaces, attempts: maxAttempts + 1, succeeded: false };
+): UltimateRerollAuditResult {
+  void maxAttempts;
+  const faces = rollFn();
+  const score = scoreFn(faces);
+  return {
+    faces,
+    attempts: 1,
+    succeeded: false,
+    blocked: true,
+    score,
+    reason: 'RTP_WRAPPER_ONLY_NO_REROLL',
+  };
 }
 
 /**

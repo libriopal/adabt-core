@@ -107,7 +107,7 @@ export const TrickMeterBar: React.FC<TrickMeterBarProps> = ({ className = '' }) 
           <div style={{
             position: 'absolute',
             inset: 0,
-            background: `radial-gradient(circle at ${50 + Math.random() * 20}% ${50 + Math.random() * 20}%, ${vis.fillColor}15 0%, transparent 70%)`,
+            background: `radial-gradient(circle at ${50 + particleOffset(vis.streak, 0)}% ${50 + particleOffset(vis.streak, 1)}%, ${vis.fillColor}15 0%, transparent 70%)`,
             animation: 'pulse-glow 0.8s ease-in-out infinite',
           }} />
         </div>
@@ -115,3 +115,8 @@ export const TrickMeterBar: React.FC<TrickMeterBarProps> = ({ className = '' }) 
     </div>
   );
 };
+
+function particleOffset(streak: number, salt: number): number {
+  const x = Math.sin((streak + 1) * (salt + 3) * 12.9898) * 43758.5453;
+  return (x - Math.floor(x)) * 20;
+}

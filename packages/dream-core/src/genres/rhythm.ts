@@ -195,6 +195,7 @@ export function tickRhythm(
 
 export interface BeatMarker {
   id: number;
+  timeMs: number;
   position: number;    // 0.0 = far, 1.0 = hit zone
   isCurrent: boolean;
 }
@@ -216,9 +217,11 @@ export function generateBeatMarkers(
 
   const markers: BeatMarker[] = [];
   for (let i = 0; i < markerCount; i++) {
+    const timeMs = audioStartTimeMs + (currentBeatIndex + i) * beatIntervalMs;
     const position = 1.0 - (beatProgress + i) / markerCount;
     markers.push({
       id: currentBeatIndex + i,
+      timeMs,
       position: Math.max(0, Math.min(1, position)),
       isCurrent: i === 0,
     });

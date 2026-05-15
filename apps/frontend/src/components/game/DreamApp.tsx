@@ -19,6 +19,7 @@ import { ClassSelector } from './ClassSelector';
 import { FacetDraftPanel } from './FacetDraftPanel';
 
 import '../../styles/dream-gothic.css';
+import type { DieFace } from '../../../../../packages/dream-core/src/types';
 
 interface DreamAppProps {
   playerId?: string;
@@ -36,7 +37,7 @@ export const DreamApp: React.FC<DreamAppProps> = ({
   const heartbeat = useDreamStore(s => s.heartbeat);
 
   // Mock game state (to be connected to farkle engine)
-  const [currentFaces, setCurrentFaces] = useState<number[]>([]);
+  const [currentFaces, setCurrentFaces] = useState<DieFace[]>([]);
   const [scoringMask, setScoringMask] = useState<boolean[]>([]);
   const [showDraft, setShowDraft] = useState(false);
   const [gamePhase, setGamePhase] = useState<'CLASS_SELECT' | 'PLAYING' | 'DRAFT'>('CLASS_SELECT');

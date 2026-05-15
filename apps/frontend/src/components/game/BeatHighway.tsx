@@ -52,10 +52,10 @@ export const BeatHighway: React.FC<BeatHighwayProps> = ({
     // Generate visible beat markers
     const visibleWindowMs = 3000; // show 3 seconds ahead
     const markers = generateBeatMarkers(
+      now,
       rhythm.bpm,
       state.matchStartedAt,
-      now,
-      visibleWindowMs,
+      6,
     );
 
     // Effective beat window for visualization

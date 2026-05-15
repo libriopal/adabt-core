@@ -3,8 +3,7 @@
 // Custom 7th die with player-assigned face values (1–6 only).
 // ─────────────────────────────────────────────────────
 
-import type { BuildADieState, CustomDie, AcousticDecorationId } from '../types';
-import type { DieFace } from '../../farkle-shared/src/types';
+import type { BuildADieState, CustomDie, AcousticDecorationId, DieFace } from '../types';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const SHARDS_PER_DIE = 6;

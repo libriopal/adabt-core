@@ -144,7 +144,16 @@ export interface DreamStoreActions {
 export type DreamStore = DreamCoreState & DreamStoreActions;
 
 // ── Default RNG ───────────────────────────────────────────────────────────────
-const defaultRng = () => Math.random();
+// Deterministic wrapper RNG for genre layout/draft state. Authoritative dice
+// outcomes still belong to the Sacred Core CSPRNG path.
+let defaultRngState = 0xD12EA5E;
+const defaultRng = () => {
+  defaultRngState = (defaultRngState + 0x6D2B79F5) >>> 0;
+  let t = defaultRngState;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
 
 // ── Store ─────────────────────────────────────────────────────────────────────
 
@@ -424,7 +433,7 @@ export const useDreamStore = create<DreamStore>()(
       set(s => ({ buildADie: awardShard(s.buildADie) }));
     },
 
-    buildDie: (faces, skin = 'OBSIDIAN') => {
+    buildDie: (faces, skin: CustomDie['skin'] = 'OBSIDIAN') => {
       const result = buildCustomDie(get().buildADie, faces, skin);
       if (result.success) set({ buildADie: result.state });
       return result.success;
