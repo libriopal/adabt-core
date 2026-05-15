@@ -1,0 +1,8 @@
+{
+  "name": "@adabt/game-core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Game-Core: EventBus, ECS systems, object pool, and game session management.",
+  "main": "src/index.ts",
+  "types": "src/index.ts"
+}

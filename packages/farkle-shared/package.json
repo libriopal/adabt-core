@@ -1,0 +1,8 @@
+{
+  "name": "@adabt/farkle-shared",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared types for the Farkle engine and game systems.",
+  "main": "src/types.ts",
+  "types": "src/types.ts"
+}

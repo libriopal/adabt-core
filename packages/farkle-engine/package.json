@@ -1,0 +1,8 @@
+{
+  "name": "@adabt/farkle-engine",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sacred Core: Farkle scoring engine, CSPRNG, RTP, and Monte Carlo simulation.",
+  "main": "src/index.ts",
+  "types": "src/index.ts"
+}

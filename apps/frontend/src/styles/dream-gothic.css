@@ -1,0 +1,450 @@
+/* ─────────────────────────────────────────────────────
+   DREAM-CORE — Dark Gothic Hacker Aesthetic
+   Neon cyan/magenta on deep black. Glass/Gold shaders.
+   The game IS music. Every pixel pulses.
+   ───────────────────────────────────────────────────── */
+
+:root {
+  /* ── Core Palette ─────────────────────────────────── */
+  --dream-black: #050508;
+  --dream-void: #0a0a12;
+  --dream-surface: #111118;
+  --dream-elevated: #1a1a24;
+  --dream-border: #2a2a3a;
+
+  /* ── Neon Accents ─────────────────────────────────── */
+  --neon-cyan: #00ffff;
+  --neon-magenta: #ff00ff;
+  --neon-gold: #ffd700;
+  --neon-red: #ff3333;
+  --neon-green: #33ff88;
+  --neon-blue: #4488ff;
+
+  /* ── Glass/Gold Materials ─────────────────────────── */
+  --glass-bg: rgba(10, 10, 18, 0.85);
+  --glass-border: rgba(0, 255, 255, 0.15);
+  --glass-glow: rgba(0, 255, 255, 0.05);
+  --gold-gradient: linear-gradient(135deg, #ffd700 0%, #ff8c00 50%, #ffd700 100%);
+  --gold-text: linear-gradient(135deg, #ffd700, #ffaa00);
+
+  /* ── Typography ──────────────────────────────────── */
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  --font-display: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-gothic: 'Cinzel', 'Playfair Display', serif;
+
+  /* ── Transitions ─────────────────────────────────── */
+  --transition-fast: 100ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-medium: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 500ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ── Spacing ─────────────────────────────────────── */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+}
+
+/* ── Global Reset & Base ───────────────────────────── */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--dream-black);
+  color: #e0e0e8;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Glass Panel ───────────────────────────────────── */
+
+.glass-panel {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  backdrop-filter: blur(12px);
+  box-shadow:
+    0 0 20px var(--glass-glow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition: border-color var(--transition-medium);
+}
+
+.glass-panel:hover {
+  border-color: rgba(0, 255, 255, 0.3);
+}
+
+.glass-panel--gold {
+  border-color: rgba(255, 215, 0, 0.2);
+  box-shadow:
+    0 0 20px rgba(255, 215, 0, 0.05),
+    inset 0 1px 0 rgba(255, 215, 0, 0.1);
+}
+
+.glass-panel--danger {
+  border-color: rgba(255, 51, 51, 0.3);
+  box-shadow:
+    0 0 20px rgba(255, 51, 51, 0.08),
+    inset 0 1px 0 rgba(255, 51, 51, 0.1);
+}
+
+/* ── Neon Text ─────────────────────────────────────── */
+
+.neon-text {
+  color: var(--neon-cyan);
+  text-shadow:
+    0 0 4px var(--neon-cyan),
+    0 0 8px rgba(0, 255, 255, 0.3);
+}
+
+.neon-text--magenta {
+  color: var(--neon-magenta);
+  text-shadow:
+    0 0 4px var(--neon-magenta),
+    0 0 8px rgba(255, 0, 255, 0.3);
+}
+
+.neon-text--gold {
+  background: var(--gold-text);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 0 4px rgba(255, 215, 0, 0.5));
+}
+
+/* ── Gothic Headers ────────────────────────────────── */
+
+.gothic-header {
+  font-family: var(--font-gothic);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.gothic-header--lg {
+  font-size: 28px;
+  line-height: 1.2;
+}
+
+.gothic-header--md {
+  font-size: 20px;
+  line-height: 1.3;
+}
+
+.gothic-header--sm {
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+/* ── HUD Elements ──────────────────────────────────── */
+
+.hud-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: rgba(224, 224, 232, 0.5);
+}
+
+.hud-value {
+  font-family: var(--font-mono);
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Meter / Progress Bar ──────────────────────────── */
+
+.meter {
+  position: relative;
+  height: 6px;
+  background: var(--dream-surface);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.meter__fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  border-radius: 3px;
+  transition: width var(--transition-medium);
+}
+
+.meter__fill--cyan {
+  background: linear-gradient(90deg, var(--neon-cyan), rgba(0, 255, 255, 0.6));
+  box-shadow: 0 0 8px var(--neon-cyan);
+}
+
+.meter__fill--magenta {
+  background: linear-gradient(90deg, var(--neon-magenta), rgba(255, 0, 255, 0.6));
+  box-shadow: 0 0 8px var(--neon-magenta);
+}
+
+.meter__fill--gold {
+  background: var(--gold-gradient);
+  box-shadow: 0 0 8px rgba(255, 215, 0, 0.5);
+}
+
+/* ── Dice ──────────────────────────────────────────── */
+
+.die {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: 700;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  user-select: none;
+}
+
+.die--glass {
+  background: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.1);
+}
+
+.die--gold {
+  background: var(--gold-gradient);
+  border: 1px solid rgba(255, 215, 0, 0.4);
+  color: #1a0a00;
+  box-shadow: 0 0 12px rgba(255, 215, 0, 0.3);
+}
+
+.die--obsidian {
+  background: linear-gradient(135deg, #1a1a2e 0%, #0a0a1a 100%);
+  border: 1px solid rgba(0, 255, 255, 0.2);
+  color: var(--neon-cyan);
+}
+
+.die--neon {
+  background: linear-gradient(135deg, rgba(255,0,255,0.15) 0%, rgba(0,255,255,0.15) 100%);
+  border: 1px solid var(--neon-magenta);
+  color: #ffffff;
+  box-shadow:
+    0 0 8px rgba(255, 0, 255, 0.2),
+    0 0 8px rgba(0, 255, 255, 0.2);
+}
+
+.die:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.die:active {
+  transform: translateY(0);
+}
+
+.die--scoring {
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 12px rgba(0, 255, 255, 0.3);
+}
+
+.die--pocketed {
+  opacity: 0.5;
+  transform: scale(0.9);
+}
+
+/* ── Grid Tile ─────────────────────────────────────── */
+
+.grid-tile {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border: 1px solid var(--dream-border);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.grid-tile--sealed {
+  background: rgba(255, 0, 255, 0.08);
+  border-color: rgba(255, 0, 255, 0.3);
+}
+
+.grid-tile--scorched {
+  background: rgba(255, 60, 20, 0.15);
+  border-color: rgba(255, 60, 20, 0.4);
+  pointer-events: none;
+}
+
+.grid-tile--territory {
+  border-width: 2px;
+}
+
+.grid-tile--domain {
+  box-shadow: inset 0 0 12px rgba(0, 255, 204, 0.15);
+}
+
+/* ── Oscilloscope ──────────────────────────────────── */
+
+.oscilloscope {
+  position: relative;
+  height: 80px;
+  background: var(--dream-void);
+  border: 1px solid var(--glass-border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.oscilloscope canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.oscilloscope::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 255, 255, 0.02) 2px,
+    rgba(0, 255, 255, 0.02) 4px
+  );
+  pointer-events: none;
+}
+
+/* ── Beat Highway ──────────────────────────────────── */
+
+.beat-highway {
+  position: relative;
+  height: 40px;
+  background: var(--dream-void);
+  border: 1px solid var(--glass-border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.beat-marker {
+  position: absolute;
+  width: 4px;
+  height: 100%;
+  background: var(--neon-cyan);
+  border-radius: 2px;
+  transition: left 50ms linear;
+}
+
+.beat-marker--current {
+  background: var(--neon-magenta);
+  box-shadow: 0 0 8px var(--neon-magenta);
+}
+
+.beat-hit-zone {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 24px;
+  height: 100%;
+  background: rgba(0, 255, 255, 0.08);
+  border-left: 2px solid rgba(0, 255, 255, 0.3);
+}
+
+/* ── Vignette Overlay ──────────────────────────────── */
+
+.vignette-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1000;
+  transition: box-shadow var(--transition-medium);
+}
+
+.vignette-overlay--active {
+  box-shadow: inset 0 0 150px 60px rgba(0, 0, 0, 0.85);
+}
+
+.vignette-overlay--red {
+  box-shadow: inset 0 0 150px 60px rgba(80, 0, 0, 0.85);
+}
+
+/* ── Animations ────────────────────────────────────── */
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-3px) rotate(-0.5deg); }
+  75% { transform: translateX(3px) rotate(0.5deg); }
+}
+
+@keyframes score-pop {
+  0% { transform: scale(0.8); opacity: 0; }
+  50% { transform: scale(1.15); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes flatline {
+  0% { transform: scaleX(0); }
+  100% { transform: scaleX(1); }
+}
+
+@keyframes gravity-settle {
+  0% { transform: var(--gravity-from); }
+  60% { transform: var(--gravity-to) scale(1.02); }
+  100% { transform: var(--gravity-to) scale(1); }
+}
+
+.animate-pulse { animation: pulse-glow 1.5s ease-in-out infinite; }
+.animate-shake { animation: shake 0.15s ease-in-out; }
+.animate-score-pop { animation: score-pop 0.3s ease-out; }
+.animate-flatline { animation: flatline 0.6s ease-out; }
+.animate-gravity { animation: gravity-settle 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+/* ── Scrollbar ─────────────────────────────────────── */
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--dream-void);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--dream-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 255, 255, 0.3);
+}
+
+/* ── Utility ───────────────────────────────────────── */
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
