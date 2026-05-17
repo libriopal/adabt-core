@@ -155,3 +155,10 @@
 - [NEURAL CONDUCTOR]: `gameAudio.ts` synced to dream-core — `playBombCollapse` (necrotic sawtooth + resonant bandpass noise), `playCollisionImpact` (physics velocity magnitude → pitched impact, 25ms rate-limit), `startHeroJourneyTheme` / `stopHeroJourneyTheme` (6-stem A-minor pentatonic ambient pads). Detune jitter on `playChainAdd` prevents phase cancellation under simultaneous die collisions.
 - [WIRING]: `useGameAudio.ts` — subscribes to `explosionStore` for bomb-collapse trigger; tracks body position deltas per tick for collision impulse estimation; hero journey starts/stops with game phase transitions.
 - [GOVERNANCE]: Sacred Core (farkleStore.ts, gameStore.ts, useFarkleGame.ts, types.ts) untouched.
+
+## Organic Vegas Source-of-Truth r1 Handoff (2026-05-17)
+- [SOURCE OF TRUTH]: `shared/source-of-truth/organic-vegas/` now contains `organic-vegas-sot-r1`: `design_tokens.json`, `performance_budget.md`, and `unified_lattice.json`. This supersedes the earlier r0 artifact baseline.
+- [PIPELINE]: r1 makes human-in-the-loop polish a hard production gate: Discovery/Pre-Production, no-art Prototype/Technical Spike, one final-quality Vertical Slice, then 50+ stages and systems only after the slice passes review.
+- [LOOP QUALITY]: Immediate understanding, clear feedback/juice, balanced difficulty, meaningful choices, layered objectives, social loops, and competitive integration are explicit gates rather than optional polish.
+- [MULTIPLAYER]: r1 requires snappy tap/drag controls, shared-struggle co-op, unintended-solution checks, no unnecessary inputs, deterministic animation sync, authoritative ranked outcomes, and reconnect-safe reward handling.
+- [CLAUDE HANDOFF]: `shared/cc-prompt.md` now instructs Claude Code to re-pull `dream-core`, read the committed source-of-truth files, discard conflicting older plans, and reconstruct the implementation plan from the current repo state toward a truthful polished beta path.

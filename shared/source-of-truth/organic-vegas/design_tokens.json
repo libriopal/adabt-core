@@ -1,0 +1,471 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "artifact": "design_tokens.json",
+  "project": "Organic Vegas",
+  "release": {
+    "id": "organic-vegas-sot-r1",
+    "supersedes": "organic-vegas-sot-r0",
+    "status": "production-polish-pipeline",
+    "immutability": "immutable-release-with-explicit-supersession",
+    "generatedAtUtc": "2026-05-17T00:00:00Z",
+    "epistemicRule": "Project aesthetic constants are authoritative for this release. Platform performance claims belong in performance_budget.md."
+  },
+  "productionPolishDoctrine": {
+    "sourceDirective": "Polished replayable competitive multiplayer puzzle game with human-in-the-loop iteration before content scaling.",
+    "visualTruthRule": "A token is production-ready only when it improves immediate understanding, feedback clarity, balanced difficulty communication, or meaningful choice readability.",
+    "humanGate": {
+      "requiredBeforeScalingContent": true,
+      "minimumPlaytestSessionsPerMilestone": 5,
+      "approvalRoles": ["design_director", "art_director", "audio_director", "multiplayer_design", "qa_balance"],
+      "failureRule": "If players do not understand the objective without explanation, the visual language fails regardless of technical completeness."
+    },
+    "loopQualityTargets": {
+      "immediateUnderstanding": "Objective, legal action, blocked action, reward preview, and teammate dependency are visible within the first 3 seconds.",
+      "clearFeedbackJuice": "Every accepted input produces visual, audio, haptic-ready, numeric, and state-change confirmation within one frame plus presentation latency.",
+      "balancedDifficulty": "Difficulty indicators expose pressure without hiding solvability or creating frustration spikes.",
+      "meaningfulChoices": "UI distinguishes strategic options, risk, role contribution, and replay modifiers without extra clicks."
+    }
+  },
+  "aestheticCompression": {
+    "name": "Dark Gothic Hacker",
+    "semanticAxes": {
+      "organic": 0.32,
+      "vegas": 0.24,
+      "gothic": 0.20,
+      "hacker": 0.16,
+      "ritual": 0.08
+    },
+    "negativeSpace": {
+      "dominant": "void",
+      "motionDensity": "low-at-rest-high-on-resolution",
+      "backgroundNoiseVisibility": 0.18,
+      "rule": "UI chrome must never outshine puzzle-state readability."
+    }
+  },
+  "color": {
+    "requiredHex": {
+      "acidLime": "#c8d400",
+      "syncBlue": "#3388ff",
+      "ritualGold": "#c9a84c",
+      "voidBlack": "#050008"
+    },
+    "roles": {
+      "background": {
+        "base": "#050008",
+        "elevated": "#0d0712",
+        "sunken": "#020003",
+        "scrim": "rgba(5, 0, 8, 0.72)"
+      },
+      "primaryAction": {
+        "base": "#c8d400",
+        "hover": "#dce81c",
+        "active": "#a8b300",
+        "textOnBase": "#050008"
+      },
+      "networkSync": {
+        "base": "#3388ff",
+        "pulse": "#79b2ff",
+        "desync": "#ff4d6d",
+        "textOnBase": "#ffffff"
+      },
+      "reward": {
+        "base": "#c9a84c",
+        "glint": "#ffe28a",
+        "spent": "#6e5b2c",
+        "textOnBase": "#050008"
+      },
+      "danger": {
+        "base": "#ff2b55",
+        "low": "#7a1026",
+        "high": "#ff8aa2"
+      },
+      "state": {
+        "valid": "#c8d400",
+        "pending": "#3388ff",
+        "banked": "#c9a84c",
+        "blocked": "#ff2b55",
+        "disabled": "#5a5260"
+      }
+    },
+    "gradients": {
+      "voidToPanel": {
+        "type": "linear",
+        "angleDeg": 180,
+        "stops": [
+          { "offset": 0, "color": "#100817" },
+          { "offset": 1, "color": "#050008" }
+        ]
+      },
+      "syncEdge": {
+        "type": "linear",
+        "angleDeg": 90,
+        "stops": [
+          { "offset": 0, "color": "rgba(51, 136, 255, 0)" },
+          { "offset": 0.5, "color": "rgba(51, 136, 255, 0.8)" },
+          { "offset": 1, "color": "rgba(200, 212, 0, 0)" }
+        ]
+      }
+    },
+    "contrastPolicy": {
+      "minimumBodyTextRatio": 4.5,
+      "minimumLargeTextRatio": 3,
+      "minimumStateGlyphRatio": 3,
+      "testMethod": "WCAG contrast calculation against computed background color"
+    }
+  },
+  "typography": {
+    "fontStacks": {
+      "display": "\"Cinzel\", \"Cormorant Garamond\", Georgia, serif",
+      "interface": "\"Inter\", \"Roboto\", \"Helvetica Neue\", Arial, sans-serif",
+      "code": "\"JetBrains Mono\", \"SFMono-Regular\", Consolas, monospace"
+    },
+    "metrics": {
+      "display": {
+        "fontSizePx": { "min": 28, "target": 40, "max": 52 },
+        "lineHeight": 1.04,
+        "letterSpacingEm": 0,
+        "fontWeight": 700
+      },
+      "sectionTitle": {
+        "fontSizePx": { "min": 18, "target": 22, "max": 28 },
+        "lineHeight": 1.12,
+        "letterSpacingEm": 0,
+        "fontWeight": 650
+      },
+      "body": {
+        "fontSizePx": { "min": 14, "target": 16, "max": 18 },
+        "lineHeight": 1.45,
+        "letterSpacingEm": 0,
+        "fontWeight": 450
+      },
+      "caption": {
+        "fontSizePx": { "min": 11, "target": 12, "max": 14 },
+        "lineHeight": 1.32,
+        "letterSpacingEm": 0,
+        "fontWeight": 500
+      },
+      "hudNumeric": {
+        "fontSizePx": { "min": 18, "target": 24, "max": 32 },
+        "lineHeight": 1,
+        "letterSpacingEm": 0,
+        "fontWeight": 700,
+        "tabularNumbers": true
+      }
+    },
+    "fitRules": {
+      "noViewportScaledFonts": true,
+      "longTokenHandling": "wrap-or-shrink-with-container-query",
+      "buttonTextOverflow": "single-line-ellipsis-only-for-non-critical-labels",
+      "criticalCounters": "tabular-fixed-width"
+    }
+  },
+  "spacing": {
+    "unitPx": 4,
+    "scalePx": [0, 2, 4, 6, 8, 12, 16, 20, 24, 32, 40, 48, 64],
+    "touch": {
+      "minimumTargetPx": 44,
+      "preferredTargetPx": 48,
+      "dragHandlePx": 56,
+      "edgeSafeInsetPx": 12
+    },
+    "layout": {
+      "panelGapPx": 8,
+      "boardInsetPx": 12,
+      "hudBandHeightPx": { "compact": 56, "regular": 72 },
+      "modalMaxWidthPx": 520
+    }
+  },
+  "shape": {
+    "radiusPx": {
+      "none": 0,
+      "tile": 6,
+      "button": 8,
+      "panel": 8,
+      "modal": 8,
+      "token": 999
+    },
+    "borderWidthPx": {
+      "hairline": 1,
+      "focus": 2,
+      "ritualFrame": 3
+    },
+    "biomorphicBorders": {
+      "tileOrganicA": {
+        "viewBox": "0 0 100 100",
+        "path": "M12 5 C28 0 52 3 70 10 C88 17 98 34 95 54 C92 78 75 96 51 98 C27 100 8 88 4 64 C0 39 1 15 12 5 Z",
+        "winding": "nonzero"
+      },
+      "tileOrganicB": {
+        "viewBox": "0 0 100 100",
+        "path": "M18 4 C37 -2 62 1 80 15 C98 29 99 56 87 75 C75 94 45 101 23 91 C1 81 -4 50 7 27 C10 17 10 8 18 4 Z",
+        "winding": "nonzero"
+      },
+      "hudCrown": {
+        "viewBox": "0 0 240 64",
+        "path": "M4 58 C22 38 42 22 65 20 C84 19 96 34 120 34 C144 34 156 19 175 20 C198 22 218 38 236 58 L220 62 C189 44 160 42 120 47 C80 42 51 44 20 62 Z",
+        "winding": "nonzero"
+      },
+      "modalRib": {
+        "viewBox": "0 0 320 180",
+        "path": "M16 28 C62 4 111 8 160 18 C209 8 258 4 304 28 C317 64 316 116 304 152 C257 174 207 172 160 160 C113 172 63 174 16 152 C4 116 3 64 16 28 Z",
+        "winding": "nonzero"
+      }
+    }
+  },
+  "zIndexStratigraphy": {
+    "rule": "Higher strata are interaction blockers only when explicitly marked modal or capture.",
+    "layers": [
+      { "name": "voidBackground", "z": 0, "blocksInput": false },
+      { "name": "shaderAtmosphere", "z": 5, "blocksInput": false },
+      { "name": "boardSurface", "z": 10, "blocksInput": true },
+      { "name": "tileBodies", "z": 20, "blocksInput": true },
+      { "name": "tileDragGhost", "z": 30, "blocksInput": false },
+      { "name": "matchPreview", "z": 35, "blocksInput": false },
+      { "name": "particleLow", "z": 40, "blocksInput": false },
+      { "name": "hud", "z": 50, "blocksInput": true },
+      { "name": "syncStatus", "z": 60, "blocksInput": false },
+      { "name": "toast", "z": 70, "blocksInput": false },
+      { "name": "tooltip", "z": 80, "blocksInput": false },
+      { "name": "modalScrim", "z": 90, "blocksInput": true },
+      { "name": "modalSurface", "z": 100, "blocksInput": true },
+      { "name": "systemPermission", "z": 110, "blocksInput": true },
+      { "name": "debugProbe", "z": 120, "blocksInput": false }
+    ],
+    "collisionAvoidance": {
+      "dragGhostAboveTilesBelowHud": true,
+      "particlesBelowHud": true,
+      "syncStatusNonBlocking": true,
+      "modalCapturesAllBoardInput": true
+    }
+  },
+  "motion": {
+    "durationsMs": {
+      "tapDown": 55,
+      "tapUp": 85,
+      "tileSlide": 135,
+      "matchLock": 110,
+      "bankReward": 220,
+      "desyncWarning": 160,
+      "modalIn": 180,
+      "modalOut": 130
+    },
+    "easing": {
+      "snap": "cubic-bezier(0.2, 0.8, 0.2, 1)",
+      "ritualRise": "cubic-bezier(0.12, 0.76, 0.24, 1)",
+      "dangerCut": "cubic-bezier(0.72, 0, 0.84, 0.22)",
+      "linearSync": "linear"
+    },
+    "reducedMotion": {
+      "replaceSlideWithCrossfade": true,
+      "disableScreenShake": true,
+      "particleEmissionScale": 0.25
+    }
+  },
+  "feedbackStrata": {
+    "inputResponse": {
+      "tapAccepted": {
+        "latencyFramesMax": 1,
+        "visualToken": "syncBlue",
+        "scale": 0.96,
+        "durationMs": 55,
+        "soundIntent": "short-click-confirm",
+        "hapticIntent": "light"
+      },
+      "dragLatched": {
+        "latencyFramesMax": 1,
+        "visualToken": "acidLime",
+        "trailOpacity": 0.72,
+        "durationMs": 85,
+        "soundIntent": "low-friction-slide",
+        "hapticIntent": "selection"
+      },
+      "inputRejected": {
+        "latencyFramesMax": 1,
+        "visualToken": "danger.base",
+        "shakePx": 2,
+        "durationMs": 110,
+        "soundIntent": "dry-block",
+        "hapticIntent": "warning"
+      }
+    },
+    "rewardResponse": {
+      "micro": { "glowPx": 8, "countUpMs": 120, "particleBudget": 12 },
+      "combo": { "glowPx": 16, "countUpMs": 220, "particleBudget": 48 },
+      "bank": { "glowPx": 22, "countUpMs": 320, "particleBudget": 96 },
+      "rankSwing": { "glowPx": 28, "countUpMs": 420, "particleBudget": 128 }
+    },
+    "multiplayerResponse": {
+      "teammateIntent": { "stroke": "#3388ff", "dashArray": "4 3", "durationMs": 160 },
+      "sharedObjective": { "stroke": "#c9a84c", "pulseHz": 1.25, "durationMs": 300 },
+      "desyncRisk": { "stroke": "#ff2b55", "pulseHz": 7.5, "durationMs": 160 },
+      "remoteLock": { "stroke": "#c8d400", "opacity": 0.84, "durationMs": 120 }
+    }
+  },
+  "shaderUniforms": {
+    "global": {
+      "uTimeScale": 1,
+      "uPixelRatioMax": 2,
+      "uDitherStrength": 0.012,
+      "uChromaticAberrationPx": 0.65,
+      "uVignetteStrength": 0.42
+    },
+    "voidNoise": {
+      "uNoiseFrequencyLow": 0.85,
+      "uNoiseFrequencyMid": 3.2,
+      "uNoiseFrequencyHigh": 11.5,
+      "uNoiseOctaves": 4,
+      "uNoiseLacunarity": 2.02,
+      "uNoiseGain": 0.48,
+      "uFlowSpeed": 0.035
+    },
+    "tileFresnel": {
+      "uFresnelPowerIdle": 2.8,
+      "uFresnelPowerActive": 4.6,
+      "uFresnelBias": 0.08,
+      "uFresnelScale": 1.15,
+      "uRimColor": "#3388ff",
+      "uRewardRimColor": "#c9a84c"
+    },
+    "organicMembrane": {
+      "uWarpFrequency": 2.4,
+      "uWarpAmplitudePx": 1.8,
+      "uPulseFrequencyHz": 0.72,
+      "uPulseAmplitude": 0.06,
+      "uVeinThreshold": 0.61,
+      "uVeinSoftness": 0.08
+    },
+    "casinoGlint": {
+      "uGlintWidth": 0.055,
+      "uGlintSpeed": 0.8,
+      "uGlintIntensity": 0.72,
+      "uGoldBias": 0.35
+    },
+    "syncField": {
+      "uPhaseBands": 6,
+      "uPhaseDrift": 0.015,
+      "uDesyncPulseHz": 7.5,
+      "uLatencyColorLow": "#c8d400",
+      "uLatencyColorMid": "#c9a84c",
+      "uLatencyColorHigh": "#ff2b55"
+    }
+  },
+  "components": {
+    "tile": {
+      "sizePx": { "min": 44, "target": 56, "max": 72 },
+      "aspectRatio": "1 / 1",
+      "borderPathRef": "tileOrganicA",
+      "states": ["idle", "hover", "held", "validTarget", "blocked", "matched", "banked", "desynced"],
+      "stateTokens": {
+        "idle": { "fill": "#0d0712", "stroke": "rgba(201, 168, 76, 0.42)", "glowPx": 0 },
+        "held": { "fill": "#15101b", "stroke": "#3388ff", "glowPx": 12 },
+        "validTarget": { "fill": "#12170a", "stroke": "#c8d400", "glowPx": 10 },
+        "blocked": { "fill": "#17060d", "stroke": "#ff2b55", "glowPx": 8 },
+        "matched": { "fill": "#161900", "stroke": "#c8d400", "glowPx": 18 },
+        "banked": { "fill": "#171006", "stroke": "#c9a84c", "glowPx": 16 },
+        "desynced": { "fill": "#08111f", "stroke": "#3388ff", "glowPx": 20 }
+      }
+    },
+    "board": {
+      "grid": {
+        "minCols": 5,
+        "targetCols": 7,
+        "maxCols": 9,
+        "minRows": 5,
+        "targetRows": 7,
+        "maxRows": 9
+      },
+      "gapPx": 6,
+      "surfaceFill": "#050008",
+      "surfaceStroke": "rgba(201, 168, 76, 0.38)",
+      "validPathStroke": "#c8d400",
+      "blockedPathStroke": "#ff2b55"
+    },
+    "hud": {
+      "heightPx": { "compact": 56, "regular": 72 },
+      "background": "rgba(5, 0, 8, 0.86)",
+      "divider": "rgba(201, 168, 76, 0.38)",
+      "syncBadge": {
+        "ok": "#c8d400",
+        "jitter": "#c9a84c",
+        "desync": "#ff2b55"
+      }
+    },
+    "objectiveRail": {
+      "position": "top-hud-primary",
+      "heightPx": { "compact": 44, "regular": 56 },
+      "visibleFields": ["shortTermGoal", "teamDependency", "movePressure", "rewardPreview"],
+      "hiddenFields": ["internalDifficultyScore", "seedCursor"],
+      "clarityRule": "The current objective must remain visible during drag, reward, modal-free play, and multiplayer sync warnings."
+    },
+    "competitiveHud": {
+      "rankDelta": {
+        "positive": "#c8d400",
+        "neutral": "#c9a84c",
+        "negative": "#ff2b55",
+        "animationMs": 220
+      },
+      "leaderboardStrip": {
+        "maxVisibleRows": 3,
+        "heightPx": { "compact": 88, "regular": 104 },
+        "updateMode": "batched-post-bank",
+        "antiDistractionRule": "Rank updates never cover the active board or teammate intent markers."
+      },
+      "matchmakingBadge": {
+        "states": ["searching", "matched", "reconnecting", "forfeitRisk"],
+        "zIndexRef": "syncStatus",
+        "blocksInput": false
+      }
+    },
+    "buttons": {
+      "primary": {
+        "heightPx": 48,
+        "radiusPx": 8,
+        "fill": "#c8d400",
+        "text": "#050008",
+        "icon": "#050008"
+      },
+      "secondary": {
+        "heightPx": 44,
+        "radiusPx": 8,
+        "fill": "#0d0712",
+        "stroke": "#3388ff",
+        "text": "#ffffff",
+        "icon": "#3388ff"
+      },
+      "danger": {
+        "heightPx": 44,
+        "radiusPx": 8,
+        "fill": "#ff2b55",
+        "text": "#ffffff",
+        "icon": "#ffffff"
+      }
+    }
+  },
+  "screenStateContracts": {
+    "firstPlayableFrame": {
+      "mustShow": ["board", "objectiveRail", "validMoveAffordance", "scoreOrRankContext"],
+      "mustNotShow": ["tutorialWallText", "blockingOffer", "multiStepClaim"],
+      "understandingGate": "A new tester can state the immediate goal after one glance."
+    },
+    "verticalSliceQualityBar": {
+      "mustShow": ["finalTileArt", "finalCoreSfx", "finalHudHierarchy", "multiplayerSyncBadge", "rewardCountUp"],
+      "mustNotShow": ["placeholderLayout", "unfinalizedInputFeedback", "unexplainedEconomy"],
+      "approvalGate": "One polished level must feel shippable before 50+ level production begins."
+    },
+    "qaFailureState": {
+      "softlock": { "color": "#ff2b55", "labelPolicy": "debug-only", "playerRecovery": "offer-reset-without-loss" },
+      "desync": { "color": "#3388ff", "labelPolicy": "player-readable", "playerRecovery": "reconnect-or-resync" },
+      "unintendedShortcut": { "color": "#c9a84c", "labelPolicy": "internal-review", "playerRecovery": "preserve-completion-then-patch" }
+    }
+  },
+  "audioVisualBinding": {
+    "eventToTokenMap": {
+      "tap": { "colorImpulse": "#3388ff", "shader": "tileFresnel", "durationMs": 85 },
+      "validSlide": { "colorImpulse": "#c8d400", "shader": "organicMembrane", "durationMs": 135 },
+      "match": { "colorImpulse": "#c8d400", "shader": "casinoGlint", "durationMs": 220 },
+      "bank": { "colorImpulse": "#c9a84c", "shader": "casinoGlint", "durationMs": 320 },
+      "desync": { "colorImpulse": "#ff2b55", "shader": "syncField", "durationMs": 160 }
+    },
+    "determinismRule": "All audiovisual impulses must be derived from deterministic event ids and local presentation time, not from divergent random calls."
+  }
+}

@@ -1,8 +1,45 @@
-# Claude Prompt: Organic Vegas Dual-Repo Dream Core Production-Beta Integration
+# Claude Prompt: Organic Vegas Source-of-Truth Reconstruction
 
 You are Claude Code operating as a principal gameplay systems engineer, determinism auditor, production-hardening lead, and integration architect.
 
-Your mission is to bring together the FAR_NZY runtime and the `adabt-core` `dream-core` branch into Project Organic Vegas: a unified Dream Core production-beta candidate. The result should be a testable beta, not just a code merge.
+Your mission is to re-pull the latest `adabt-core` `dream-core` branch, load the committed Organic Vegas source-of-truth artifacts, and reconstruct the current implementation plan so the game can truthfully move toward a polished, replayable, competitive multiplayer puzzle game. The result should be a testable beta trajectory grounded in the current repo state, not a speculative redesign.
+
+## Mandatory Source-of-Truth Repull
+
+Before continuing any current plan, run this exact refresh sequence inside the target `dream/` repo:
+
+```bash
+git fetch origin
+git checkout dream-core
+git pull --ff-only origin dream-core
+git status --short --branch
+```
+
+Then read these files before editing:
+
+```bash
+cat CLAUDE.md
+cat shared/project-memory.md
+cat shared/source-of-truth/organic-vegas/design_tokens.json
+cat shared/source-of-truth/organic-vegas/performance_budget.md
+cat shared/source-of-truth/organic-vegas/unified_lattice.json
+```
+
+Treat `shared/source-of-truth/organic-vegas/*` as the current release `organic-vegas-sot-r1`. It supersedes `organic-vegas-sot-r0`. If your existing local plan conflicts with these files, stop following the older plan and rebuild the plan around `r1`.
+
+## Direct State Target
+
+The target state is not "more features." The target state is a truthful production path toward a polished, replayable, competitive multiplayer puzzle game in 2026. You must enforce the source-of-truth pipeline:
+
+1. Discovery and Pre-Production: define hook, target audience, core loop, monetization model, GDD, and high-fidelity wireframes.
+2. Prototype and Technical Spike: prove the no-art matching/sliding core is fun before scaling art, economy, or content.
+3. Vertical Slice: produce one final-quality level with final art, sound, UI, multiplayer sync presentation, and recoverable fail states.
+4. Content and Systems: create 50+ stages only after the vertical slice passes human review; integrate backend multiplayer, leaderboards, and economy systems.
+5. Iterative QA and Balancing: remove softlocks, patch unintended shortcuts, tune difficulty from playtests, and keep puzzles stimulating without arbitrary frustration.
+6. Pre-Launch and LiveOps: finalize analytics, monetization SDK plan, server scaling, matchmaking pools, leaderboard policy, and competitive season rules.
+7. Launch and Post-Launch: operate live balance and events without unreviewed mechanical rewrites.
+
+Human-in-the-loop polish is binding. Automated tests cannot replace player understanding, core fun, juice, flow, meaningful choices, co-op value, or competitive fairness review.
 
 ## Repository Setup
 
@@ -26,8 +63,14 @@ After cloning, enter the target repo and read repo-local instructions:
 
 ```bash
 cd dream
+git fetch origin
+git checkout dream-core
+git pull --ff-only origin dream-core
 git status --short --branch
 cat CLAUDE.md
+cat shared/source-of-truth/organic-vegas/performance_budget.md
+cat shared/source-of-truth/organic-vegas/unified_lattice.json
+cat shared/source-of-truth/organic-vegas/design_tokens.json
 ```
 
 Follow `CLAUDE.md` and any repo-local constraints before editing.
@@ -48,6 +91,7 @@ The final beta should combine:
 
 - FAR_NZY's usable gameplay feel, assets, emotional identity, and existing runtime lessons from `core/`.
 - adabt-core's deterministic orchestration, DSP/audio-reactive direction, protected Sacred Core, and branch governance from `dream/`.
+- Organic Vegas `r1` source-of-truth gates for production stages, replayability, multiplayer puzzle design, QA, competitive integrity, and LiveOps readiness.
 
 ## Project Organic Vegas Theme
 
@@ -104,6 +148,20 @@ Treat these as hard governance rules:
    - Use existing `MonteCarlo.ts` / `monteCarlo.ts` and `RTPConfig.ts` / `rtpConfig.ts` paths where present.
    - If the fusion moves house stability outside target bounds, nerf it, move it to experience-only, or reject it.
 
+8. Do not scale content before the vertical slice gate passes.
+   - `50+` stages are blocked until one final-quality level passes human review.
+   - Placeholder UX, unclear objectives, missing feedback, or non-recoverable fail states block scale-out.
+
+9. Do not ship boring or arbitrary loops.
+   - Immediate understanding, clear feedback/juice, balanced difficulty, and meaningful choices are source-of-truth gates.
+   - If testers cannot explain the goal quickly or name at least two viable strategies, redesign the loop before adding content.
+
+10. Do not fake multiplayer quality.
+   - Tap/drag controls must be snappy.
+   - Co-op must require shared struggle through asymmetric roles, timing dependency, spatial dependency, or resource tradeoff.
+   - Remote animation must be deterministic presentation of accepted events, not authority.
+   - Ranked rewards, leaderboard changes, reconnects, and rollback must preserve competitive integrity.
+
 ## Read-Only Discovery Before Questions
 
 Before asking questions, perform only read-only discovery. Do not merge, fix, copy, refactor, or install new tools yet.
@@ -113,6 +171,7 @@ Read and map:
 - `core/` repository structure, game loop, state model, UI, assets, audio, and build scripts.
 - `dream/CLAUDE.md`
 - `dream/shared/project-memory.md`
+- `dream/shared/source-of-truth/organic-vegas/**`
 - `dream/packages/dream-core/src/**`
 - `dream/apps/frontend/src/components/game/**`
 - `dream/apps/frontend/src/hooks/useDreamCore.ts`
@@ -121,11 +180,24 @@ Read and map:
 
 Produce a compact read-only inventory for yourself:
 
+- Which `organic-vegas-sot-r1` gates are already satisfied, partially satisfied, or absent.
 - What FAR_NZY systems appear production-relevant.
 - What Dream Core systems already exist.
 - Where the systems overlap or conflict.
 - Which paths are protected and must not be touched casually.
 - Which integration risks need user answers before implementation.
+
+## Plan Reconstruction Requirement
+
+Before editing, rebuild your implementation plan from the actual repo state and `organic-vegas-sot-r1`. Your plan must identify:
+
+1. The current playable state of Organic Vegas in `dream/`.
+2. The smallest vertical-slice path that can become final-quality.
+3. Which work is blocked by human review versus normal engineering.
+4. Which systems are needed now for replayability, co-op, competitive integrity, and LiveOps readiness.
+5. Which attractive ideas must be deferred because they do not improve the core loop or truthful beta readiness.
+
+Do not continue an older plan that starts with broad content, broad genre expansion, or cosmetic-only work. Reconstruct toward the source-of-truth target first.
 
 ## Director Question Gate
 

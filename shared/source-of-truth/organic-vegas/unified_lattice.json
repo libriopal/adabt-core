@@ -1,0 +1,459 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "artifact": "unified_lattice.json",
+  "project": "Organic Vegas",
+  "release": {
+    "id": "organic-vegas-sot-r1",
+    "supersedes": "organic-vegas-sot-r0",
+    "status": "production-polish-pipeline",
+    "immutability": "immutable-release-with-explicit-supersession",
+    "generatedAtUtc": "2026-05-17T00:00:00Z",
+    "epistemicRule": "Genre math, state bytes, hooks, and emotion weights are project-defined source-of-truth constants, not external platform standards."
+  },
+  "globalAxes": {
+    "emotionalVectorOrder": ["tension", "momentum", "risk", "chaos", "resolution"],
+    "executionHooks": ["pre_roll", "input_tick", "state_tick", "audio_tick", "match_resolve", "post_bank", "rollback_repair", "liveops_tick"],
+    "stateEncoding": {
+      "byteOrder": "little-endian",
+      "checksum": "crc16-per-authoritative-tick",
+      "seedPolicy": "authoritative-seed-cursor-plus-local-presentation-derivations",
+      "totalModuleOverheadBytes": 312
+    }
+  },
+  "productionState": {
+    "currentArtifactState": "r0 baseline existed with 20 genre modules, 312-byte state overhead, deterministic replay, and performance budgets.",
+    "r1Directive": "Enforce a human-in-the-loop production pipeline for a polished, replayable, competitive multiplayer puzzle game before scaling content.",
+    "hardBlocks": [
+      "Do not scale to 50+ stages before one final-quality vertical slice passes human review.",
+      "Do not treat adaptive AI as permission to change ranked-match rules during play.",
+      "Do not accept co-op levels that are only larger solo boards.",
+      "Do not ship stages that fail softlock, unintended shortcut, or unnecessary input review."
+    ]
+  },
+  "productionPipeline": [
+    {
+      "id": "discovery_preproduction",
+      "weeks": "1-4",
+      "outputs": ["hook", "targetAudience", "coreLoop", "monetizationModel", "gdd", "highFidelityWireframes"],
+      "humanGate": "Reviewers can explain goal, primary action, reward, and multiplayer promise without developer coaching.",
+      "unlocks": ["prototype_technical_spike"]
+    },
+    {
+      "id": "prototype_technical_spike",
+      "weeks": "5-8",
+      "outputs": ["playableNoArtPrototype", "coreMechanicFunReport", "inputLatencyProbe", "softlockProbe"],
+      "humanGate": "Players voluntarily replay the matching/sliding core before final art, economy, or content volume is added.",
+      "unlocks": ["vertical_slice"]
+    },
+    {
+      "id": "vertical_slice",
+      "phase": "production_phase_1",
+      "outputs": ["oneFinalQualityLevel", "finalArtPass", "finalSoundPass", "finalUiPass", "multiplayerSyncPass"],
+      "humanGate": "Director signs the shippable quality bar and placeholder UX is removed.",
+      "unlocks": ["content_systems"]
+    },
+    {
+      "id": "content_systems",
+      "phase": "production_phase_2",
+      "outputs": ["50PlusStages", "backendMultiplayer", "leaderboards", "economySystems", "stageTemplateLibrary"],
+      "humanGate": "Each stage archetype has a distinct strategy and passes QA gates.",
+      "unlocks": ["iterative_qa_balancing"]
+    },
+    {
+      "id": "iterative_qa_balancing",
+      "phase": "testing",
+      "outputs": ["softlockReport", "shortcutReport", "difficultyCurveReport", "frustrationBoredomReport"],
+      "humanGate": "Playtesters report intellectual pressure without arbitrary frustration.",
+      "unlocks": ["prelaunch_liveops_setup"]
+    },
+    {
+      "id": "prelaunch_liveops_setup",
+      "phase": "release_candidate",
+      "outputs": ["analyticsPlan", "monetizationSdkPlan", "serverScalingPlan", "matchmakingPolicy", "competitiveSeasonPolicy"],
+      "humanGate": "Launch review finds no blocking telemetry, economy, scale, or ranked-fairness unknowns.",
+      "unlocks": ["launch_postlaunch"]
+    },
+    {
+      "id": "launch_postlaunch",
+      "phase": "live",
+      "outputs": ["liveOpsCalendar", "balancePatchPolicy", "communityEngagementLoop", "seasonTelemetryReview"],
+      "humanGate": "Live tuning remains bounded by the source-of-truth mechanics and competitive integrity rules.",
+      "unlocks": []
+    }
+  ],
+  "loopQualityGates": {
+    "immediateUnderstanding": {
+      "weight": 1.0,
+      "machinePredicate": "firstPlayableFrame.includes(objective,validInput,blockedInput,rewardPreview)",
+      "humanPredicate": "newTesterStatesGoalWithinSeconds<=3",
+      "failureAction": "redesign objective rail, affordances, or level intro"
+    },
+    "clearFeedbackJuice": {
+      "weight": 1.0,
+      "machinePredicate": "acceptedInput.feedbackFrameDelta<=1",
+      "humanPredicate": "testerDescribesActionsAsResponsiveAndSatisfying",
+      "failureAction": "repair visual/audio/numeric/haptic-ready feedback before adding content"
+    },
+    "balancedDifficulty": {
+      "weight": 1.0,
+      "machinePredicate": "difficultyDeltaWithinBounds && noHiddenRuleMutation",
+      "humanPredicate": "testerReportsPressureWithoutHelplessness",
+      "failureAction": "retune objectives, hints, board generation, or adaptive bounds"
+    },
+    "meaningfulChoices": {
+      "weight": 1.0,
+      "machinePredicate": "viableStrategyCount>=2",
+      "humanPredicate": "testerCanNameAtLeastTwoStrategies",
+      "failureAction": "add strategic role, risk, reward, or board variation"
+    }
+  },
+  "multiplayerPuzzleRules": {
+    "snappyControls": {
+      "inputModes": ["tap", "drag"],
+      "unnecessaryInputBudget": 0,
+      "inputToFeedbackFrameBudget": 1
+    },
+    "sharedStruggle": {
+      "required": true,
+      "acceptedForms": ["asymmetricRoles", "timingDependency", "spatialDependency", "resourceTradeoff"],
+      "rejectedForms": ["sameSoloBoardButLarger", "parallelSoloPlayOnly"]
+    },
+    "unintendedSolutionCheck": {
+      "requiredBeforeStageApproval": true,
+      "methods": ["solverSearch", "humanExploitReview", "telemetryAfterLaunch"],
+      "patchPolicy": "preserve legitimate wins, patch degenerate repeatability"
+    },
+    "highSpeedAnimationSync": {
+      "source": "acceptedEventLog",
+      "animationRule": "remote animation is deterministic presentation, not authority",
+      "desyncTolerance": "zero after rollback_repair"
+    },
+    "competitiveIntegrity": {
+      "authoritativeRank": true,
+      "leaderboardUpdateHook": "post_bank",
+      "matchmakingInputs": ["skillBand", "latencyBand", "rolePreference", "recentDisconnectRisk"],
+      "antiExploitChecks": ["stalling", "disconnectAbuse", "scoreDuplication", "collusion"]
+    }
+  },
+  "genreModules": [
+    {
+      "id": "match3_core",
+      "index": 0,
+      "label": "Match-3 Core",
+      "stateBytes": 18,
+      "hooks": ["input_tick", "state_tick", "match_resolve", "rollback_repair"],
+      "emotionalWeights": { "tension": 0.12, "momentum": 0.36, "risk": 0.10, "chaos": 0.14, "resolution": 0.28 },
+      "math": { "boardVector": "B[tileIndex]=tileKind|flags", "matchPredicate": "runLength(kind)>=3", "slideCost": "manhattan(from,to)+lockPenalty" }
+    },
+    {
+      "id": "casino_bank",
+      "index": 1,
+      "label": "Casino Bank",
+      "stateBytes": 14,
+      "hooks": ["match_resolve", "post_bank", "rollback_repair"],
+      "emotionalWeights": { "tension": 0.18, "momentum": 0.24, "risk": 0.28, "chaos": 0.08, "resolution": 0.22 },
+      "math": { "bankDelta": "floor(comboValue*multiplier*riskModifier)", "riskModifier": "1+min(0.5,streak*0.04)", "lossRule": "unbankedOnly" }
+    },
+    {
+      "id": "rhythm_phase",
+      "index": 2,
+      "label": "Rhythm Phase",
+      "stateBytes": 16,
+      "hooks": ["pre_roll", "audio_tick", "input_tick", "rollback_repair"],
+      "emotionalWeights": { "tension": 0.20, "momentum": 0.34, "risk": 0.12, "chaos": 0.10, "resolution": 0.24 },
+      "math": { "phase": "(serverTick+seedOffset)%beatWindow", "perfectWindowMs": 42, "goodWindowMs": 84 }
+    },
+    {
+      "id": "roguelike_facets",
+      "index": 3,
+      "label": "Roguelike Facets",
+      "stateBytes": 18,
+      "hooks": ["pre_roll", "post_bank", "rollback_repair"],
+      "emotionalWeights": { "tension": 0.26, "momentum": 0.14, "risk": 0.28, "chaos": 0.18, "resolution": 0.14 },
+      "math": { "facetDraw": "seededChoice(pool,seedCursor)", "facetCap": 3, "mutationBound": "oneFacetPerStage" }
+    },
+    {
+      "id": "rpg_classes",
+      "index": 4,
+      "label": "RPG Classes",
+      "stateBytes": 18,
+      "hooks": ["pre_roll", "state_tick", "post_bank"],
+      "emotionalWeights": { "tension": 0.16, "momentum": 0.20, "risk": 0.18, "chaos": 0.08, "resolution": 0.38 },
+      "math": { "classVector": "roleId|rank|cooldown", "cooldownTick": "max(0,cooldown-1)", "roleBonus": "classScalar[roleId]*objectiveAffinity" }
+    },
+    {
+      "id": "gothic_horror",
+      "index": 5,
+      "label": "Gothic Horror",
+      "stateBytes": 14,
+      "hooks": ["pre_roll", "state_tick", "audio_tick"],
+      "emotionalWeights": { "tension": 0.38, "momentum": 0.10, "risk": 0.20, "chaos": 0.22, "resolution": 0.10 },
+      "math": { "dread": "clamp(dread+threatDelta-resolutionDelta,0,255)", "visibility": "1-dread/320", "scareCooldown": "seededInterval(3,7)" }
+    },
+    {
+      "id": "puzzle_logic",
+      "index": 6,
+      "label": "Puzzle Logic",
+      "stateBytes": 20,
+      "hooks": ["state_tick", "match_resolve", "rollback_repair"],
+      "emotionalWeights": { "tension": 0.22, "momentum": 0.18, "risk": 0.14, "chaos": 0.06, "resolution": 0.40 },
+      "math": { "objectiveProgress": "sum(requirementSatisfied_i*weight_i)", "softlockProbe": "reachableMoves(B)>0", "hintEntropy": "log2(candidateMoves+1)" }
+    },
+    {
+      "id": "multiplayer_sync",
+      "index": 7,
+      "label": "Multiplayer Sync",
+      "stateBytes": 24,
+      "hooks": ["pre_roll", "input_tick", "state_tick", "rollback_repair"],
+      "emotionalWeights": { "tension": 0.24, "momentum": 0.22, "risk": 0.20, "chaos": 0.12, "resolution": 0.22 },
+      "math": { "authority": "serverTick|seedCursor|checksum", "rollbackWindowTicks": 12, "inputOrder": "serverAcceptedOrder" }
+    },
+    {
+      "id": "audio_reactive",
+      "index": 8,
+      "label": "Audio Reactive",
+      "stateBytes": 16,
+      "hooks": ["audio_tick", "match_resolve", "post_bank"],
+      "emotionalWeights": { "tension": 0.12, "momentum": 0.38, "risk": 0.08, "chaos": 0.16, "resolution": 0.26 },
+      "math": { "energy": "rmsWindow*beatAffinity", "shaderPulse": "smoothstep(0.2,0.9,energy)", "voiceSteal": "min(audibility*priority)" }
+    },
+    {
+      "id": "economy",
+      "index": 9,
+      "label": "Economy",
+      "stateBytes": 16,
+      "hooks": ["post_bank", "liveops_tick", "rollback_repair"],
+      "emotionalWeights": { "tension": 0.14, "momentum": 0.16, "risk": 0.30, "chaos": 0.06, "resolution": 0.34 },
+      "math": { "walletDelta": "bankedReward-spend", "sinkRate": "spend/sessionMinutes", "sourceRate": "reward/sessionMinutes" }
+    },
+    {
+      "id": "narrative",
+      "index": 10,
+      "label": "Narrative",
+      "stateBytes": 12,
+      "hooks": ["pre_roll", "post_bank", "liveops_tick"],
+      "emotionalWeights": { "tension": 0.20, "momentum": 0.12, "risk": 0.10, "chaos": 0.08, "resolution": 0.50 },
+      "math": { "beatUnlock": "objectiveProgress>=threshold && seedGate", "memoryFlag": "bitset(sceneId)", "lineSelect": "seededChoice(validLines)" }
+    },
+    {
+      "id": "liveops",
+      "index": 11,
+      "label": "LiveOps",
+      "stateBytes": 12,
+      "hooks": ["pre_roll", "liveops_tick", "post_bank"],
+      "emotionalWeights": { "tension": 0.10, "momentum": 0.22, "risk": 0.18, "chaos": 0.10, "resolution": 0.40 },
+      "math": { "eventEligibility": "segmentMask & calendarMask & progressionGate", "rewardScale": "base*(1+eventBoost)", "expiry": "serverTime<endTime" }
+    },
+    {
+      "id": "tutorial",
+      "index": 12,
+      "label": "Tutorial",
+      "stateBytes": 10,
+      "hooks": ["pre_roll", "input_tick", "state_tick"],
+      "emotionalWeights": { "tension": 0.06, "momentum": 0.18, "risk": 0.04, "chaos": 0.02, "resolution": 0.70 },
+      "math": { "step": "firstIncompleteStep", "gate": "requiredActionObserved", "hintDelayMs": 2200 }
+    },
+    {
+      "id": "accessibility",
+      "index": 13,
+      "label": "Accessibility",
+      "stateBytes": 12,
+      "hooks": ["pre_roll", "input_tick", "state_tick"],
+      "emotionalWeights": { "tension": 0.04, "momentum": 0.14, "risk": 0.04, "chaos": 0.02, "resolution": 0.76 },
+      "math": { "motionScale": "userPref.reducedMotion?0.25:1", "contrastMode": "max(userPref,ambientNeed)", "assistWindow": "baseWindow*assistScalar" }
+    },
+    {
+      "id": "input_precision",
+      "index": 14,
+      "label": "Input Precision",
+      "stateBytes": 14,
+      "hooks": ["input_tick", "state_tick"],
+      "emotionalWeights": { "tension": 0.14, "momentum": 0.32, "risk": 0.08, "chaos": 0.04, "resolution": 0.42 },
+      "math": { "dragIntent": "argmax(axisProjection)", "deadzonePx": 8, "snapThreshold": 0.62 }
+    },
+    {
+      "id": "physics_blockers",
+      "index": 15,
+      "label": "Physics Blockers",
+      "stateBytes": 16,
+      "hooks": ["state_tick", "match_resolve", "rollback_repair"],
+      "emotionalWeights": { "tension": 0.24, "momentum": 0.18, "risk": 0.20, "chaos": 0.18, "resolution": 0.20 },
+      "math": { "blockerState": "bodyId|cell|sleepFlag", "physicsAuthority": "presentationOnlyUnlessVerified", "collisionGate": "cellOccupancy && coarseContact" }
+    },
+    {
+      "id": "vfx_juice",
+      "index": 16,
+      "label": "VFX Juice",
+      "stateBytes": 16,
+      "hooks": ["match_resolve", "post_bank", "audio_tick"],
+      "emotionalWeights": { "tension": 0.08, "momentum": 0.34, "risk": 0.06, "chaos": 0.24, "resolution": 0.28 },
+      "math": { "particleCount": "min(cap,base+combo*scale)", "shake": "reducedMotion?0:impact*0.8", "glow": "smoothstep(0,1,rewardEnergy)" }
+    },
+    {
+      "id": "adaptive_ai",
+      "index": 17,
+      "label": "Adaptive AI",
+      "stateBytes": 20,
+      "hooks": ["state_tick", "post_bank", "liveops_tick"],
+      "emotionalWeights": { "tension": 0.22, "momentum": 0.18, "risk": 0.20, "chaos": 0.08, "resolution": 0.32 },
+      "math": { "skill": "ema(successRate,0.08)", "difficultyDelta": "clamp(targetFlow-skill,-1,1)", "interventionCooldown": 3 }
+    },
+    {
+      "id": "progression",
+      "index": 18,
+      "label": "Progression",
+      "stateBytes": 14,
+      "hooks": ["post_bank", "liveops_tick"],
+      "emotionalWeights": { "tension": 0.10, "momentum": 0.22, "risk": 0.12, "chaos": 0.04, "resolution": 0.52 },
+      "math": { "xpDelta": "floor(baseXp*objectiveMultiplier)", "unlockGate": "xp>=threshold && objectiveSetComplete", "stageIndex": "monotonic" }
+    },
+    {
+      "id": "telemetry",
+      "index": 19,
+      "label": "Telemetry",
+      "stateBytes": 12,
+      "hooks": ["state_tick", "post_bank", "liveops_tick"],
+      "emotionalWeights": { "tension": 0.06, "momentum": 0.10, "risk": 0.10, "chaos": 0.02, "resolution": 0.72 },
+      "math": { "eventBudget": "ringBufferFixed", "privacy": "noRawChatNoSecrets", "sampleRate": "tierGateDependent" }
+    }
+  ],
+  "dependencies": [
+    { "from": "match3_core", "to": "puzzle_logic", "type": "requires", "weight": 1.0, "equation": "legalMoves=PuzzleLogic.reachable(B)" },
+    { "from": "match3_core", "to": "casino_bank", "type": "feeds", "weight": 0.86, "equation": "comboValue->bankDelta" },
+    { "from": "match3_core", "to": "vfx_juice", "type": "triggers", "weight": 0.78, "equation": "matchEvent->particleCount" },
+    { "from": "casino_bank", "to": "economy", "type": "feeds", "weight": 0.92, "equation": "bankedReward->walletDelta" },
+    { "from": "casino_bank", "to": "roguelike_facets", "type": "risk-couples", "weight": 0.64, "equation": "riskModifier->facetOfferBias" },
+    { "from": "rhythm_phase", "to": "audio_reactive", "type": "clocks", "weight": 1.0, "equation": "phase->energyWindow" },
+    { "from": "rhythm_phase", "to": "multiplayer_sync", "type": "requires", "weight": 0.95, "equation": "phase=(serverTick+seedOffset)%beatWindow" },
+    { "from": "roguelike_facets", "to": "rpg_classes", "type": "left_right_arrow", "weight": 0.72, "equation": "facetAffinity*classScalar" },
+    { "from": "rpg_classes", "to": "adaptive_ai", "type": "modulates", "weight": 0.48, "equation": "roleBonus->difficultyDelta" },
+    { "from": "gothic_horror", "to": "audio_reactive", "type": "modulates", "weight": 0.66, "equation": "dread->minorTimbreBias" },
+    { "from": "gothic_horror", "to": "vfx_juice", "type": "modulates", "weight": 0.70, "equation": "dread->visibility,glow" },
+    { "from": "puzzle_logic", "to": "tutorial", "type": "constrains", "weight": 0.58, "equation": "legalMoveSet->requiredAction" },
+    { "from": "puzzle_logic", "to": "adaptive_ai", "type": "observes", "weight": 0.84, "equation": "successRate,hintEntropy->skill" },
+    { "from": "multiplayer_sync", "to": "match3_core", "type": "authorizes", "weight": 1.0, "equation": "acceptedInputOrder->stateTransition" },
+    { "from": "multiplayer_sync", "to": "casino_bank", "type": "protects", "weight": 1.0, "equation": "checksum->noDuplicateReward" },
+    { "from": "audio_reactive", "to": "vfx_juice", "type": "syncs", "weight": 0.74, "equation": "energy->shaderPulse" },
+    { "from": "economy", "to": "liveops", "type": "reports", "weight": 0.52, "equation": "sourceRate,sinkRate->eventTuning" },
+    { "from": "narrative", "to": "gothic_horror", "type": "themes", "weight": 0.62, "equation": "sceneFlag->dreadCurve" },
+    { "from": "liveops", "to": "progression", "type": "gates", "weight": 0.56, "equation": "eventEligibility->unlockGateModifier" },
+    { "from": "tutorial", "to": "input_precision", "type": "guides", "weight": 0.70, "equation": "step->assistWindow" },
+    { "from": "accessibility", "to": "input_precision", "type": "modulates", "weight": 0.80, "equation": "assistScalar->snapThreshold" },
+    { "from": "accessibility", "to": "vfx_juice", "type": "limits", "weight": 0.90, "equation": "motionScale->particleCount,shake" },
+    { "from": "input_precision", "to": "match3_core", "type": "feeds", "weight": 0.94, "equation": "dragIntent->slideAction" },
+    { "from": "physics_blockers", "to": "puzzle_logic", "type": "constrains", "weight": 0.68, "equation": "cellOccupancy->reachableMoves" },
+    { "from": "physics_blockers", "to": "match3_core", "type": "blocks", "weight": 0.60, "equation": "coarseContact->blockedSlide" },
+    { "from": "adaptive_ai", "to": "puzzle_logic", "type": "modulates", "weight": 0.50, "equation": "difficultyDelta->objectiveThreshold" },
+    { "from": "adaptive_ai", "to": "tutorial", "type": "modulates", "weight": 0.42, "equation": "skill->hintDelayMs" },
+    { "from": "progression", "to": "rpg_classes", "type": "unlocks", "weight": 0.76, "equation": "stageIndex->classRankCap" },
+    { "from": "progression", "to": "narrative", "type": "unlocks", "weight": 0.82, "equation": "unlockGate->beatUnlock" },
+    { "from": "telemetry", "to": "adaptive_ai", "type": "observes", "weight": 0.38, "equation": "aggregates->targetFlowCalibration" },
+    { "from": "telemetry", "to": "liveops", "type": "observes", "weight": 0.44, "equation": "cohortMetrics->eventTuning" },
+    { "from": "tutorial", "to": "loopQualityGates.immediateUnderstanding", "type": "validates", "weight": 0.88, "equation": "goalRecognitionSeconds<=3" },
+    { "from": "vfx_juice", "to": "loopQualityGates.clearFeedbackJuice", "type": "validates", "weight": 0.90, "equation": "feedbackFrameDelta<=1" },
+    { "from": "adaptive_ai", "to": "loopQualityGates.balancedDifficulty", "type": "bounds", "weight": 0.86, "equation": "difficultyDeltaWithinBounds" },
+    { "from": "roguelike_facets", "to": "loopQualityGates.meaningfulChoices", "type": "amplifies", "weight": 0.74, "equation": "strategyVariance+=facetVariance" },
+    { "from": "multiplayer_sync", "to": "multiplayerPuzzleRules.highSpeedAnimationSync", "type": "authorizes", "weight": 1.0, "equation": "acceptedEventLog->deterministicAnimation" },
+    { "from": "puzzle_logic", "to": "multiplayerPuzzleRules.unintendedSolutionCheck", "type": "validates", "weight": 0.92, "equation": "solverSearch && humanExploitReview" },
+    { "from": "input_precision", "to": "multiplayerPuzzleRules.snappyControls", "type": "enforces", "weight": 0.94, "equation": "tapOrDrag && unnecessaryInputBudget=0" },
+    { "from": "progression", "to": "multiplayerPuzzleRules.competitiveIntegrity", "type": "reports", "weight": 0.78, "equation": "rankDelta=authoritativePostBankDelta" }
+  ],
+  "executionHooks": {
+    "pre_roll": {
+      "order": 0,
+      "deadlineMs": 2.0,
+      "modules": ["rhythm_phase", "roguelike_facets", "rpg_classes", "gothic_horror", "multiplayer_sync", "narrative", "liveops", "tutorial", "accessibility"],
+      "outputs": ["seedCursor", "stageModifiers", "beatWindow", "capabilityProfile"]
+    },
+    "input_tick": {
+      "order": 1,
+      "deadlineMs": 0.4,
+      "modules": ["match3_core", "rhythm_phase", "multiplayer_sync", "tutorial", "accessibility", "input_precision"],
+      "outputs": ["canonicalInput", "inputId", "intentAxis"]
+    },
+    "state_tick": {
+      "order": 2,
+      "deadlineMs": 4.3,
+      "modules": ["match3_core", "rhythm_phase", "rpg_classes", "gothic_horror", "puzzle_logic", "multiplayer_sync", "tutorial", "accessibility", "input_precision", "physics_blockers", "adaptive_ai", "telemetry"],
+      "outputs": ["boardDelta", "checksum", "difficultyDelta", "softlockFlag"]
+    },
+    "audio_tick": {
+      "order": 3,
+      "deadlineMs": 0.35,
+      "modules": ["rhythm_phase", "gothic_horror", "audio_reactive", "vfx_juice"],
+      "outputs": ["controlQueue", "energy", "phase"]
+    },
+    "match_resolve": {
+      "order": 4,
+      "deadlineMs": 1.1,
+      "modules": ["match3_core", "casino_bank", "puzzle_logic", "audio_reactive", "physics_blockers", "vfx_juice"],
+      "outputs": ["comboValue", "rewardPreview", "particleImpulse"]
+    },
+    "post_bank": {
+      "order": 5,
+      "deadlineMs": 1.0,
+      "modules": ["casino_bank", "roguelike_facets", "rpg_classes", "audio_reactive", "economy", "narrative", "liveops", "vfx_juice", "adaptive_ai", "progression", "telemetry"],
+      "outputs": ["bankedReward", "walletDelta", "unlockDelta", "narrativeBeat"]
+    },
+    "rollback_repair": {
+      "order": 6,
+      "deadlineMs": 2.0,
+      "modules": ["match3_core", "casino_bank", "rhythm_phase", "roguelike_facets", "puzzle_logic", "multiplayer_sync", "economy", "physics_blockers"],
+      "outputs": ["authoritativeState", "repairDiff", "rewardDeduplication"]
+    },
+    "liveops_tick": {
+      "order": 7,
+      "deadlineMs": 0.6,
+      "modules": ["economy", "narrative", "liveops", "adaptive_ai", "progression", "telemetry"],
+      "outputs": ["eventEligibility", "cohortMetrics", "progressionOffer"]
+    }
+  },
+  "stateMemoryLayout": {
+    "totalBytes": 312,
+    "segments": [
+      { "module": "match3_core", "offset": 0, "bytes": 18 },
+      { "module": "casino_bank", "offset": 18, "bytes": 14 },
+      { "module": "rhythm_phase", "offset": 32, "bytes": 16 },
+      { "module": "roguelike_facets", "offset": 48, "bytes": 18 },
+      { "module": "rpg_classes", "offset": 66, "bytes": 18 },
+      { "module": "gothic_horror", "offset": 84, "bytes": 14 },
+      { "module": "puzzle_logic", "offset": 98, "bytes": 20 },
+      { "module": "multiplayer_sync", "offset": 118, "bytes": 24 },
+      { "module": "audio_reactive", "offset": 142, "bytes": 16 },
+      { "module": "economy", "offset": 158, "bytes": 16 },
+      { "module": "narrative", "offset": 174, "bytes": 12 },
+      { "module": "liveops", "offset": 186, "bytes": 12 },
+      { "module": "tutorial", "offset": 198, "bytes": 10 },
+      { "module": "accessibility", "offset": 208, "bytes": 12 },
+      { "module": "input_precision", "offset": 220, "bytes": 14 },
+      { "module": "physics_blockers", "offset": 234, "bytes": 16 },
+      { "module": "vfx_juice", "offset": 250, "bytes": 16 },
+      { "module": "adaptive_ai", "offset": 266, "bytes": 20 },
+      { "module": "progression", "offset": 286, "bytes": 14 },
+      { "module": "telemetry", "offset": 300, "bytes": 12 }
+    ]
+  },
+  "reconstruction": {
+    "minimumInputs": ["releaseId", "serverTick", "seedCursor", "stateMemoryLayout", "boardCells", "moduleFlags", "acceptedInputLog"],
+    "deterministicReplay": {
+      "stepOrder": ["pre_roll", "input_tick", "state_tick", "match_resolve", "post_bank"],
+      "audioVisualRule": "Presentation derives from deterministic events; audio and VFX must not mutate authoritative state.",
+      "repairRule": "If checksum mismatch occurs, run rollback_repair from last agreed tick."
+    },
+    "productionReplay": {
+      "requiredReviewInputs": ["stageId", "stageArchetype", "playtestNotes", "qaReports", "difficultyCurve", "rankPolicyVersion"],
+      "stageApprovalRule": "Stage approval is reconstructable only when automated checks and human gates both pass.",
+      "contentScalingRule": "50PlusStages can be produced only after vertical_slice passes."
+    },
+    "failurePreservation": {
+      "softlock": "store boardCells, seedCursor, objectiveState, reachableMoves=0",
+      "desync": "store localChecksum, authoritativeChecksum, acceptedInputLogWindow",
+      "audioUnderrun": "store processor counters and 16x128-frame underrun window",
+      "contextLoss": "store capabilityProfile and GPU resource reconstruction result",
+      "boringLoop": "store stageId, moveSequence, lowRiskDominance, replayDropReason",
+      "frustrationSpike": "store stageId, failCount, hintUse, abandonmentTick, testerNote",
+      "unintendedShortcut": "store stageId, shortcutPath, solverTrace, humanReviewDecision",
+      "competitiveExploit": "store matchId, acceptedInputLog, scoreDelta, rankDelta, exploitClass"
+    }
+  }
+}
