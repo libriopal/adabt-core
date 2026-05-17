@@ -4,6 +4,33 @@ You are Claude Code operating as a principal gameplay systems engineer, determin
 
 Your mission is to re-pull the latest `adabt-core` `dream-core` branch, load the committed Organic Vegas source-of-truth artifacts, and reconstruct the current implementation plan so the game can truthfully move toward a polished, replayable, competitive multiplayer puzzle game. The result should be a testable beta trajectory grounded in the current repo state, not a speculative redesign.
 
+## Binding Machine-Readable Mission Contract
+
+Before executing implementation work, read and obey:
+
+```bash
+cat shared/titan-reclamation-beta-synthesis.xml
+```
+
+That XML mission contract is the deterministic execution layer for this handoff. It combines the Organic Vegas source-of-truth reconstruction brief with the TITAN reclamation beta synthesis rules for:
+
+- deterministic execution from machine-readable evidence, markdown source truth, and AST/code analysis;
+- no fabricated paths, modules, scripts, dependencies, generated files, or library versions;
+- inert-reference protection for uploaded/generated imagery;
+- Sacred Core protection for RTP, scorer math, CSPRNG, authoritative roll flow, and backend roll authority;
+- strict uncertainty, error-escalation, phase-gate, and completion-response formats.
+
+If this Markdown prompt conflicts with `shared/titan-reclamation-beta-synthesis.xml`, follow the XML unless it conflicts with `shared/source-of-truth/organic-vegas/*`, `CLAUDE.md`, or verified current repo code. The source-truth hierarchy is:
+
+1. `shared/source-of-truth/organic-vegas/design_tokens.json`
+2. `shared/source-of-truth/organic-vegas/performance_budget.md`
+3. `shared/source-of-truth/organic-vegas/unified_lattice.json`
+4. `CLAUDE.md`
+5. `shared/project-memory.md`
+6. AST/code analysis of the refreshed `dream-core` branch for actual path, import, export, and script existence
+7. `shared/titan-reclamation-beta-synthesis.xml` for execution gates and response formats
+8. inert visual references only
+
 ## Mandatory Source-of-Truth Repull
 
 Before continuing any current plan, run this exact refresh sequence inside the target `dream/` repo:
@@ -146,6 +173,8 @@ Treat these as hard governance rules:
 
 7. Any payout-affecting 20-genre fusion must pass a 10,000-session Monte Carlo check.
    - Use existing `MonteCarlo.ts` / `monteCarlo.ts` and `RTPConfig.ts` / `rtpConfig.ts` paths where present.
+   - In the current `dream-core` layout, prefer `packages/farkle-engine/src/monteCarlo.ts` and `packages/farkle-engine/src/rtpConfig.ts`.
+   - If `scripts/simulateEconomy.ts` is absent, do not pretend it exists. Create a thin wrapper only after proving the imported Monte Carlo/RTP APIs exist, or trigger the Uncertainty Protocol.
    - If the fusion moves house stability outside target bounds, nerf it, move it to experience-only, or reject it.
 
 8. Do not scale content before the vertical slice gate passes.
@@ -171,6 +200,7 @@ Read and map:
 - `core/` repository structure, game loop, state model, UI, assets, audio, and build scripts.
 - `dream/CLAUDE.md`
 - `dream/shared/project-memory.md`
+- `dream/shared/titan-reclamation-beta-synthesis.xml`
 - `dream/shared/source-of-truth/organic-vegas/**`
 - `dream/packages/dream-core/src/**`
 - `dream/apps/frontend/src/components/game/**`

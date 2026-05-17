@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mission_contract id="TITAN_RECLAMATION_BETA_SYNTHESIS" version="1.0">
+  <metadata>
+    <repository>libriopal/adabt-core</repository>
+    <branch>dream-core</branch>
+    <target_runtime>Project Organic Vegas / Dream Core</target_runtime>
+    <source_truth_release>organic-vegas-sot-r1</source_truth_release>
+    <supersedes>organic-vegas-sot-r0</supersedes>
+    <primary_handoff>shared/cc-prompt.md</primary_handoff>
+    <canonical_source_truth_dir>shared/source-of-truth/organic-vegas</canonical_source_truth_dir>
+  </metadata>
+
+  <meta_governance>
+    <rule id="DETERMINISTIC_EXECUTION">
+      Prohibit conversational drift, improvised commands, and unstated assumptions. All implementation logic must be derived from machine-readable evidence inputs, markdown source-of-truth files, or AST/code analysis.
+    </rule>
+    <rule id="DEPENDENCY_INTEGRITY">
+      Do not fabricate dependencies, library versions, generated files, scripts, routes, assets, or repo paths. If a required module or script is missing from the workspace, trigger the Uncertainty Protocol.
+    </rule>
+    <rule id="INERT_REFERENCE_PROTECTION">
+      Generated, uploaded, or discovered imagery is classified as Inert Visual Reference only. Imagery must not override Sacred Core math, RTP, CSPRNG, scoring, audio/runtime architecture, worker topology, DSP placement, or performance budgets. Defer to design_tokens.json, performance_budget.md, unified_lattice.json, and verified code for canonical truth.
+    </rule>
+    <rule id="SOURCE_TRUTH_HIERARCHY">
+      Resolve conflicts in this order: shared/source-of-truth/organic-vegas/design_tokens.json, shared/source-of-truth/organic-vegas/performance_budget.md, shared/source-of-truth/organic-vegas/unified_lattice.json, CLAUDE.md, shared/project-memory.md, AST/code analysis of the refreshed dream-core branch, then inert visual references.
+    </rule>
+    <rule id="UNCERTAINTY_PROTOCOL">
+      <threshold value="0.35"/>
+      <action>If internal confidence drops below 0.35, halt execution. Present a four-option multiple-choice matrix labeled a, b, c, d to the Director and wait for resolution before proceeding.</action>
+    </rule>
+    <rule id="ERROR_ESCALATION">
+      <repeated_failure_limit value="4"/>
+      <action>Upon the fourth consecutive failure, terminate the task and output a redacted stack trace plus state summary. Do not leak environment secrets, raw keys, provider tokens, or private credentials.</action>
+    </rule>
+  </meta_governance>
+
+  <objective>
+    Synthesize the visual foundation, deterministic music engine, and mathematical balance into a production-grade Mobile Beta while strictly enforcing the Organic Vegas design system, Sacred Core protection, human-in-the-loop polish gates, and competitive multiplayer truthfulness.
+  </objective>
+
+  <direct_state_target>
+    <target>Produce a truthful production path toward a polished, replayable, competitive multiplayer puzzle game in 2026.</target>
+    <requirement>Core action must feel satisfying before scaling content, economy, or spectacle.</requirement>
+    <requirement>Vertical slice quality must be proven before 50-plus stage production.</requirement>
+    <requirement>Human review is a hard gate for clarity, juice, fun, flow, co-op value, and competitive fairness.</requirement>
+  </direct_state_target>
+
+  <mandatory_preflight>
+    <step id="REFRESH_BRANCH">
+      <command>git fetch origin</command>
+      <command>git checkout dream-core</command>
+      <command>git pull --ff-only origin dream-core</command>
+      <command>git status --short --branch</command>
+    </step>
+    <step id="READ_CANONICAL_FILES">
+      <path>CLAUDE.md</path>
+      <path>shared/project-memory.md</path>
+      <path>shared/cc-prompt.md</path>
+      <path>shared/source-of-truth/organic-vegas/design_tokens.json</path>
+      <path>shared/source-of-truth/organic-vegas/performance_budget.md</path>
+      <path>shared/source-of-truth/organic-vegas/unified_lattice.json</path>
+    </step>
+    <step id="NO_MUTATION_BEFORE_AUDIT">
+      Perform read-only discovery and path validation before editing. Do not install tools, copy code, refactor, or change gameplay until the audit response is produced.
+    </step>
+  </mandatory_preflight>
+
+  <success_conditions>
+    <condition id="PERF_GATE">
+      Validation through local performance harness or equivalent repo tests must confirm zero main-thread DSP execution, no Long Tasks greater than 50ms in the target surface, and confirmed Worker or Worklet isolation for DSP and physics-heavy work.
+    </condition>
+    <condition id="ECON_STABILITY">
+      A 10,000-generation Monte Carlo simulation or equivalent existing RTP harness must show less than 2% deviance from target RTP before any payout-affecting wrapper ships.
+    </condition>
+    <condition id="AESTHETIC_PARITY">
+      The Organic Vegas palette must preserve Lime-Yellow #c8d400, Medium-Blue #3388ff, and Skeletal Gold #c9a84c through CSS variables, design tokens, and shader uniforms where applicable.
+    </condition>
+    <condition id="MUSICAL_DETERMINISM">
+      Phrase generation must preserve leitmotif identity across the 5-axis emotional vector and must remain deterministic for replay and multiplayer synchronization.
+    </condition>
+    <condition id="PUZZLE_LOOP_TRUTH">
+      Player-facing loop must satisfy immediate understanding, clear feedback, balanced difficulty, meaningful choices, snappy controls, shared-struggle co-op, and competitive integrity before content scale-out.
+    </condition>
+  </success_conditions>
+
+  <evidence_inputs>
+    <visual_source type="machine_readable">
+      Use shared/source-of-truth/organic-vegas/design_tokens.json for canonical Organic Vegas colors, tissues, visual roles, and design constraints.
+    </visual_source>
+    <visual_source type="inert_reference">
+      Root images or uploaded images may inform biomorphic border geometry and Ice-Stone grain frequency only after their actual paths are verified. They must not override source-of-truth files or runtime architecture.
+    </visual_source>
+    <music_source type="json_corpus">
+      Use verified JSON training data and existing spectral genome artifacts for interval contours, rhythmic cells, cadence tendencies, emotional vectors, and deterministic motif selection.
+    </music_source>
+    <logic_source type="machine_readable">
+      Use performance_budget.md and unified_lattice.json for all system constraints, phase gates, competitive rules, and protected Sacred Core boundaries.
+    </logic_source>
+    <code_source type="ast_analysis">
+      Use AST-aware or code-structure analysis to prove imports, exports, functions, tests, and dependency availability before implementing.
+    </code_source>
+  </evidence_inputs>
+
+  <protected_boundaries>
+    <boundary id="SACRED_CORE">
+      Preserve RTP, scorer math, CSPRNG, authoritative roll flow, and backend roll authority. Do not directly edit scorer math, RTP config, CSPRNG authority, or gameRoom.ts unless separately approved after proving wrapper/adaptor mechanics cannot solve the issue.
+    </boundary>
+    <boundary id="WRAPPER_FIRST_GENRE_SYSTEMS">
+      Horror, Roguelike, Casino, Match-3, Rhythm, Archivist, Conductor, and all lattice genre systems must be wrapper/adaptor mechanics unless a separately approved Monte Carlo-verified core change is required.
+    </boundary>
+    <boundary id="NO_GAMEPLAY_MATH_RANDOM">
+      Gameplay-affecting behavior must not use Math.random(). Use deterministic or seeded randomness compatible with replay, auditability, and multiplayer sync.
+    </boundary>
+    <boundary id="NO_CONTENT_SCALE_BEFORE_VERTICAL_SLICE">
+      Do not produce 50-plus stages until one final-quality vertical slice passes human review for clarity, juice, flow, recoverable fail states, co-op value, and competitive fairness.
+    </boundary>
+  </protected_boundaries>
+
+  <verified_path_expectations>
+    <path status="required">apps/frontend/src/erk/receptor.ts</path>
+    <path status="required">apps/frontend/src/erk/leitmotifs.ts</path>
+    <path status="required">apps/frontend/src/components/game/OrganicVegasScene.tsx</path>
+    <path status="required">apps/backend/src/gameRoom.ts</path>
+    <path status="required">apps/frontend/src/audio/spectralGenome.ts</path>
+    <path status="preferred_existing">packages/farkle-engine/src/monteCarlo.ts</path>
+    <path status="preferred_existing">packages/farkle-engine/src/rtpConfig.ts</path>
+    <path status="missing_unless_created_with_evidence">scripts/simulateEconomy.ts</path>
+    <rule>If scripts/simulateEconomy.ts is absent, do not pretend it exists. Prefer existing Monte Carlo/RTP modules or create a thin wrapper only after proving the imported APIs exist.</rule>
+  </verified_path_expectations>
+
+  <operational_phases>
+    <phase id="PHASE_1_DETERMINISTIC_AUDIT_AND_PATH_VALIDATION">
+      <step>Verify apps/frontend/src/erk/receptor.ts existence and file integrity.</step>
+      <step>Verify all required and preferred paths listed in verified_path_expectations.</step>
+      <step>Extract design tokens and map #c8d400, #3388ff, and #c9a84c to CSS variables and shader uniform candidates without assuming file names.</step>
+      <step>Map JSON music corpus and spectral genome features into existing leitmotifs.ts runtime structures only after proving the structure shape.</step>
+      <step>Inventory which organic-vegas-sot-r1 gates are satisfied, partial, absent, or blocked by human review.</step>
+      <gate>HALT: Present Audit Findings, verified path mapping, missing-script handling, and a reconstructed implementation plan to the Director before mutation.</gate>
+    </phase>
+
+    <phase id="PHASE_2_CORE_INFRASTRUCTURE_RECLAMATION">
+      <step>Establish or adapt ThemeRegistry.ts using the Three Tissues token system: Gold, Neon, and Obsidian. If the target theme registry path is absent, prove the nearest existing theme architecture first.</step>
+      <step>Refactor OrganicVegasScene.tsx toward Single-Mesh or Dynamic-Material pool optimization only after measuring or identifying the actual performance pressure.</step>
+      <step>Bind ERK_5AxisVector or the verified receptor equivalent to shader intensities and musical phrase generation through typed adaptors.</step>
+      <gate>VERIFY: Build succeeds; DSP and physics-heavy work remain isolated from main-thread DSP execution; Sacred Core protected paths are unchanged unless separately approved.</gate>
+    </phase>
+
+    <phase id="PHASE_3_SYNTHETIC_ASSET_AND_MUSICAL_EVOLUTION">
+      <step>Implement or adapt PhraseGenerator.ts for deterministic 4-bar and 8-bar melodic generation based on gameplay tension and verified leitmotif structures.</step>
+      <step>Develop ViralShard and ShadowBlocker entities using source-truth visual DNA: Ice-Stone grain and Matte Obsidian contrast. Treat imagery as inert reference only.</step>
+      <step>Deploy a NeuralLattice background through SVG or Canvas using mix-blend-mode screen only if it preserves readability and performance budgets.</step>
+      <gate>VERIFY: Tests or probes confirm leitmotif stability, deterministic seed behavior, and Neural Twitch particle performance within budget.</gate>
+    </phase>
+
+    <phase id="PHASE_4_MATHEMATICAL_VALIDATION_AND_STRESS">
+      <step>Run a 10,000-generation Monte Carlo simulation through existing packages/farkle-engine/src/monteCarlo.ts and rtpConfig.ts, or create scripts/simulateEconomy.ts only as a proven wrapper around existing APIs.</step>
+      <step>Integrate HMAC-SHA256 Provably Fair audit panel as UI/audit presentation unless backend authority support already exists and is verified.</step>
+      <step>Bind The Archivist and The Conductor class mechanics through wrapper/adaptor mechanics only. No direct edits to scorer math, CSPRNG, RTP config, or gameRoom.ts authority unless separately approved.</step>
+      <gate>VERIFY: Simulation report confirms Life-Force and RTP stability within 2% tolerance.</gate>
+    </phase>
+
+    <phase id="PHASE_5_MOBILE_FINALIZATION_AND_HARDENING">
+      <step>Run final frame-pacing audit and eliminate any main-thread task greater than 50ms in the target Organic Vegas flow.</step>
+      <step>Validate server-side turn authority in apps/backend/src/gameRoom.ts without mutating authority unless separately approved.</step>
+      <step>Confirm snappy tap/drag controls, deterministic remote animation presentation, reconnect-safe ranked outcomes, and no unnecessary inputs.</step>
+      <step>Establish final beta release build for dream-core branch only after vertical-slice and verification gates pass.</step>
+      <gate>TERMINATION: Mission complete only after final build, audit summary, residual-risk list, and beta readiness verdict are delivered.</gate>
+    </phase>
+  </operational_phases>
+
+  <escalation_rules>
+    <rule trigger="PERF_VIOLATION">Immediately reduce particle counts, shader complexity, post-processing, or entity update frequency if main-thread tasks exceed 50ms.</rule>
+    <rule trigger="DSP_LATENCY_DETECTION">Offload additional composition logic to audio workers or worklets if frame-time jitter or DSP latency appears.</rule>
+    <rule trigger="MISSING_REQUIRED_PATH">Invoke the Uncertainty Protocol instead of fabricating paths, scripts, modules, or dependencies.</rule>
+    <rule trigger="RTP_DEVIANCE">Nerf, move to experience-only, or reject payout-affecting mechanics that exceed the 2% RTP tolerance.</rule>
+    <rule trigger="UNINTENDED_SOLUTION">Patch shortcuts, softlocks, gotchas, or unnecessary inputs before adding more content.</rule>
+  </escalation_rules>
+
+  <required_responses>
+    <response id="AUDIT_FINDINGS">
+      Include verified branch hash, source-truth files read, path map, missing dependencies or scripts, gate status, protected paths, and implementation plan reconstructed from evidence.
+    </response>
+    <response id="UNCERTAINTY_MATRIX">
+      When required, output exactly four options labeled a, b, c, d. Each option must state impact, risk, and the evidence needed to proceed.
+    </response>
+    <response id="PHASE_GATE">
+      At each gate, report what changed, what was verified, what remains blocked by human review, and whether the next phase is allowed.
+    </response>
+    <response id="COMPLETION_REPORT">
+      Include changed-file summary, commands run, test/build results, RTP/performance evidence, beta readiness verdict, residual risks, and the next three highest-leverage follow-ups.
+    </response>
+  </required_responses>
+</mission_contract>
