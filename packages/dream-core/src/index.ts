@@ -9,3 +9,4 @@ export * from './genres/index';
 export * from './audio/DreamAudioEngine';
 export * from './state/dreamStore';
 export * from './conflictResolution';
+export * from './ThemeRegistry';

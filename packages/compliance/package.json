@@ -1,0 +1,8 @@
+{
+  "name": "@adabt/compliance",
+  "version": "0.1.0",
+  "private": true,
+  "description": "US sweepstakes compliance: age gate, state restrictions, terms.",
+  "main": "src/index.ts",
+  "types": "src/index.ts"
+}

@@ -1,0 +1,8 @@
+{
+  "name": "@adabt/analytics",
+  "version": "0.1.0",
+  "private": true,
+  "description": "LiveOps analytics client, A/B testing, cohort tracking.",
+  "main": "src/index.ts",
+  "types": "src/index.ts"
+}

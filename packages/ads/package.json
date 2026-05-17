@@ -1,0 +1,8 @@
+{
+  "name": "@adabt/ads",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AppLovin MAX ad integration layer (rewarded + interstitial).",
+  "main": "src/index.ts",
+  "types": "src/index.ts"
+}
