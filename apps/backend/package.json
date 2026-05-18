@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "node --env-file=.env node_modules/.bin/tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "tsc -b",
     "start": "node dist/index.js",
     "worker": "tsx src/workers/index.ts",
     "test": "vitest run"

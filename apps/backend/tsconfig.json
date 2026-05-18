@@ -5,11 +5,6 @@
     "lib": ["ES2022"],
     "outDir": "./dist",
     "rootDir": "./src",
-    "baseUrl": ".",
-    "paths": {
-      "@match3d/farkle-shared": ["../../packages/farkle-shared/src/index.ts"],
-      "@match3d/farkle-engine": ["../../packages/farkle-engine/src/index.ts"]
-    },
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -17,8 +12,13 @@
     "resolveJsonModule": true,
     "declaration": true,
     "declarationMap": true,
-    "sourceMap": true
+    "sourceMap": true,
+    "noEmitOnError": false
   },
+  "references": [
+    { "path": "../../packages/farkle-shared" },
+    { "path": "../../packages/farkle-engine" }
+  ],
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "tests"]
 }

@@ -1,10 +1,10 @@
 {
-  "name": "@adabt/farkle-engine",
+  "name": "@match3d/farkle-engine",
   "version": "0.1.0",
   "private": true,
   "description": "Sacred Core: Farkle scoring engine, CSPRNG, RTP, and Monte Carlo simulation.",
-  "main": "src/index.ts",
-  "types": "src/index.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
     "test": "npx tsx --test src/farkleScorer.test.ts"
   }

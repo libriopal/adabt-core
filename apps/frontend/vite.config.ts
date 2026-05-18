@@ -12,8 +12,11 @@ export default defineConfig({
       { find: /^zustand$/, replacement: fileURLToPath(new URL('./node_modules/zustand/esm/index.mjs', import.meta.url)) },
 
       // Local workspace package aliases
-      { find: '@match3d/farkle-engine', replacement: fileURLToPath(new URL('../../packages/farkle-engine/src/index.ts', import.meta.url)) },
-      { find: '@match3d/farkle-shared', replacement: fileURLToPath(new URL('../../packages/farkle-shared/src/index.ts', import.meta.url)) },
+      // Bypass index.ts (.js CJS re-exports incompatible with Rollup static analysis).
+      { find: '@match3d/farkle-engine', replacement: fileURLToPath(new URL('../../packages/farkle-engine/vite-entry.ts', import.meta.url)) },
+      // Bypass index.ts (which re-exports ./types.js — CJS — causing Rollup static-analysis failure).
+      // types.ts is the canonical source; index.ts is purely a re-export barrel.
+      { find: '@match3d/farkle-shared', replacement: fileURLToPath(new URL('../../packages/farkle-shared/src/types.ts', import.meta.url)) },
       { find: '@match3d/game-core', replacement: fileURLToPath(new URL('../../packages/game-core/src/index.ts', import.meta.url)) },
 
       // Transitive deps of game-core — resolved from frontend node_modules
