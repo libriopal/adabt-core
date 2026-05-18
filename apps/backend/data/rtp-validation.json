@@ -1,0 +1,104 @@
+{
+  "generatedAt": "2026-05-18T15:52:25.302Z",
+  "sessions": 10000,
+  "stabilityThreshold": 0.02,
+  "overallPass": true,
+  "results": [
+    {
+      "mode": "SOLO_FREE",
+      "targetRTP": 0.92,
+      "normalizer_h1": 149.6087,
+      "normalizer_h2": 149.6087,
+      "stabDeviance": 0,
+      "averageScore_h1": 138,
+      "averageScore_h2": 138,
+      "farkleRate": 1,
+      "sessionsRun": 10000,
+      "pass": true
+    },
+    {
+      "mode": "SOLO_CASINO",
+      "targetRTP": 0.92,
+      "normalizer_h1": 149.6087,
+      "normalizer_h2": 149.6087,
+      "stabDeviance": 0,
+      "averageScore_h1": 138,
+      "averageScore_h2": 138,
+      "farkleRate": 1,
+      "sessionsRun": 10000,
+      "pass": true
+    },
+    {
+      "mode": "VS_FREE",
+      "targetRTP": 1,
+      "normalizer_h1": 137.64,
+      "normalizer_h2": 137.64,
+      "stabDeviance": 0,
+      "averageScore_h1": 138,
+      "averageScore_h2": 138,
+      "farkleRate": 1,
+      "sessionsRun": 10000,
+      "pass": true
+    },
+    {
+      "mode": "VS_CASINO",
+      "targetRTP": 1,
+      "normalizer_h1": 137.64,
+      "normalizer_h2": 137.64,
+      "stabDeviance": 0,
+      "averageScore_h1": 138,
+      "averageScore_h2": 138,
+      "farkleRate": 1,
+      "sessionsRun": 10000,
+      "pass": true
+    },
+    {
+      "mode": "RALLY_FREE",
+      "targetRTP": 0.92,
+      "normalizer_h1": 149.6087,
+      "normalizer_h2": 149.6087,
+      "stabDeviance": 0,
+      "averageScore_h1": 138,
+      "averageScore_h2": 138,
+      "farkleRate": 1,
+      "sessionsRun": 10000,
+      "pass": true
+    },
+    {
+      "mode": "RALLY_CASINO",
+      "targetRTP": 0.92,
+      "normalizer_h1": 149.6087,
+      "normalizer_h2": 149.6087,
+      "stabDeviance": 0,
+      "averageScore_h1": 138,
+      "averageScore_h2": 138,
+      "farkleRate": 1,
+      "sessionsRun": 10000,
+      "pass": true
+    },
+    {
+      "mode": "HEIST_FREE",
+      "targetRTP": 0.92,
+      "normalizer_h1": 149.6087,
+      "normalizer_h2": 149.6087,
+      "stabDeviance": 0,
+      "averageScore_h1": 138,
+      "averageScore_h2": 138,
+      "farkleRate": 1,
+      "sessionsRun": 10000,
+      "pass": true
+    },
+    {
+      "mode": "HEIST_CASINO",
+      "targetRTP": 0.92,
+      "normalizer_h1": 149.6087,
+      "normalizer_h2": 149.6087,
+      "stabDeviance": 0,
+      "averageScore_h1": 138,
+      "averageScore_h2": 138,
+      "farkleRate": 1,
+      "sessionsRun": 10000,
+      "pass": true
+    }
+  ]
+}

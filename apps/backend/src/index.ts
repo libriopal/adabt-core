@@ -5,6 +5,7 @@ import path from 'path';
 import http from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { router } from './api/routes';
+import { leaderboardRouter } from './api/leaderboard';
 import { initDatabase } from './storage/db';
 import { GameRoom } from './gameRoom';
 
@@ -31,6 +32,7 @@ app.use(express.json({ limit: '10mb' }));
 
 // ── API routes ──────────────────────────────────────────────────────────────
 app.use('/api', router);
+app.use('/api/leaderboard', leaderboardRouter);
 
 // ── Serve frontend in production ────────────────────────────────────────────
 if (IS_PRODUCTION) {

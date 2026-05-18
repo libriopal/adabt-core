@@ -13,12 +13,17 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "noEmitOnError": false
+    "noEmitOnError": false,
+    "baseUrl": ".",
+    "paths": {
+      "@match3d/farkle-shared": ["../../packages/farkle-shared/src/types-bridge.ts"],
+      "@match3d/farkle-engine": ["../../packages/farkle-engine/src/index.ts"]
+    }
   },
   "references": [
     { "path": "../../packages/farkle-shared" },
     { "path": "../../packages/farkle-engine" }
   ],
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "tests"]
+  "exclude": ["node_modules", "dist", "tests", "src/scripts"]
 }

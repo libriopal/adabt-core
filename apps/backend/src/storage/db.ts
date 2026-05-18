@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import { DBDesign, DBEvolutionRun, DemandResult, Design, EvolutionState } from '../types';
+type GameMode = 'SOLO_FREE' | 'SOLO_CASINO' | 'VS_FREE' | 'VS_CASINO' | 'RALLY_FREE' | 'RALLY_CASINO' | 'HEIST_FREE' | 'HEIST_CASINO';
 
 let db: Database.Database | null = null;
 
@@ -83,6 +84,23 @@ function createTables(): void {
       timestamp INTEGER NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+  `);
+
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS leaderboard_entries (
+      id TEXT PRIMARY KEY,
+      player_id TEXT NOT NULL,
+      display_name TEXT NOT NULL,
+      mode TEXT NOT NULL,
+      score INTEGER NOT NULL,
+      session_seed TEXT NOT NULL,
+      game_duration_ms INTEGER NOT NULL DEFAULT 0,
+      verified INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_lb_mode_score ON leaderboard_entries(mode, score DESC);
+    CREATE INDEX IF NOT EXISTS idx_lb_player ON leaderboard_entries(player_id, score DESC);
   `);
 }
 
@@ -306,3 +324,80 @@ export const DemandDB = {
     };
   },
 };
+
+// ─── LeaderboardDB ───────────────────────────────────────────────────────────
+
+export interface LeaderboardEntry {
+  id: string;
+  playerId: string;
+  displayName: string;
+  mode: GameMode;
+  score: number;
+  sessionSeed: string;
+  gameDurationMs: number;
+  verified: boolean;
+  createdAt: string;
+}
+
+export const LeaderboardDB = {
+  submit(entry: Omit<LeaderboardEntry, 'createdAt'>): void {
+    getDB().prepare(`
+      INSERT OR REPLACE INTO leaderboard_entries
+        (id, player_id, display_name, mode, score, session_seed, game_duration_ms, verified)
+      VALUES
+        (@id, @player_id, @display_name, @mode, @score, @session_seed, @game_duration_ms, @verified)
+    `).run({
+      id: entry.id,
+      player_id: entry.playerId,
+      display_name: entry.displayName,
+      mode: entry.mode,
+      score: entry.score,
+      session_seed: entry.sessionSeed,
+      game_duration_ms: entry.gameDurationMs,
+      verified: entry.verified ? 1 : 0,
+    });
+  },
+
+  getTopByMode(mode: GameMode, limit = 20, offset = 0): LeaderboardEntry[] {
+    const rows = getDB().prepare(`
+      SELECT * FROM leaderboard_entries
+      WHERE mode = ?
+      ORDER BY score DESC
+      LIMIT ? OFFSET ?
+    `).all(mode, limit, offset) as any[];
+    return rows.map(rowToLeaderboardEntry);
+  },
+
+  getPlayerBest(playerId: string): LeaderboardEntry[] {
+    const rows = getDB().prepare(`
+      SELECT * FROM (
+        SELECT *, ROW_NUMBER() OVER (PARTITION BY mode ORDER BY score DESC) AS rn
+        FROM leaderboard_entries
+        WHERE player_id = ?
+      ) WHERE rn = 1
+      ORDER BY score DESC
+    `).all(playerId) as any[];
+    return rows.map(rowToLeaderboardEntry);
+  },
+
+  getRankForScore(mode: GameMode, score: number): number {
+    const row = getDB().prepare(
+      'SELECT COUNT(*) as cnt FROM leaderboard_entries WHERE mode = ? AND score > ?'
+    ).get(mode, score) as any;
+    return (row?.cnt ?? 0) + 1;
+  },
+};
+
+function rowToLeaderboardEntry(row: any): LeaderboardEntry {
+  return {
+    id: row.id,
+    playerId: row.player_id,
+    displayName: row.display_name,
+    mode: row.mode as GameMode,
+    score: row.score,
+    sessionSeed: row.session_seed,
+    gameDurationMs: row.game_duration_ms,
+    verified: !!row.verified,
+    createdAt: row.created_at,
+  };
+}
