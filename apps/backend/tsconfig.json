@@ -6,6 +6,10 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "baseUrl": ".",
+    "paths": {
+      "@match3d/farkle-shared": ["../../packages/farkle-shared/src/index.ts"],
+      "@match3d/farkle-engine": ["../../packages/farkle-engine/src/index.ts"]
+    },
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,

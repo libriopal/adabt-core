@@ -28,10 +28,17 @@ export class GameSessionManager {
   private state: GameState;
   private timerHandle: ReturnType<typeof setInterval> | null = null;
 
-  constructor() {
+  // seed: authoritative session seed for deterministic item spawn.
+  constructor(seed: number = Date.now()) {
     this.bus = createGameEventBus();
     this.physics = new PhysicsPileSystem(this.bus);
-    this.itemSystem = new ItemSystem(this.bus);
+    // xorshift32 seeded RNG — same algorithm as farkle-engine seededRng.
+    let s = ((seed ^ 0xdeadbeef) >>> 0) || 1;
+    const rng = () => {
+      s ^= s << 13; s ^= s >>> 17; s ^= s << 5;
+      return (s >>> 0) / 4294967296;
+    };
+    this.itemSystem = new ItemSystem(this.bus, rng);
     this.tray = new TraySystem(this.bus);
     this.matchSystem = new MatchSystem(this.bus, this.tray, this.itemSystem);
     this.objectiveSystem = new ObjectiveSystem(this.bus);

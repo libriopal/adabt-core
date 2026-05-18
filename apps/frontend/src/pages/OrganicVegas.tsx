@@ -1,9 +1,15 @@
 // ─────────────────────────────────────────────────────
-// Organic Vegas — 3D Bio-Architectural Farkle Game Page
-// Three.js canvas with Rapier3D physics (VoxelPhysicsSystem).
-// CSPRNG → Sacred Core scorer → 20-genre Dream Core wrappers.
+// Organic Vegas — Grid-Chain Farkle Game Page
+//
+// Game loop: draw connected chains on the die grid → scoreFarkle(chain faces)
+//   → submit via SUBMIT_CHAIN to authoritative backend → CHAIN_RESULT feedback.
+//
+// Solo mode: local CSPRNG grid + local scoring (no backend required).
+// Multi mode: backend grid + WebSocket SUBMIT_CHAIN protocol.
+//
+// 3D OrganicVegasScene renders as atmospheric background only.
+// CSPRNG → Sacred Core scorer → 20-genre Dream Core wrappers (all rtpGated=true in beta).
 // LITE/ELITE quality auto-selected from hardwareTier.
-// Collision impulse events feed DreamAudioEngine ERK states.
 // ─────────────────────────────────────────────────────
 
 import React, {
@@ -15,10 +21,11 @@ import React, {
 } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 
+import type { Cell, DieFace, GridPos } from '@match3d/farkle-shared';
+import { GAME_CONSTANTS, FACE_TO_COLOR, MULTIPLIER_LADDER } from '@match3d/farkle-shared';
+import { seededRng, scoreFarkle } from '@match3d/farkle-engine';
 import { VoxelPhysicsSystem } from '@match3d/game-core';
 import type { VoxelTransform } from '@match3d/game-core';
-import { seededRng, scoreFarkle } from '@match3d/farkle-engine';
-import type { DieFace } from '@match3d/farkle-shared';
 
 import { useDreamStore } from '../../../../packages/dream-core/src/state/dreamStore';
 import { dreamAudio } from '../../../../packages/dream-core/src/audio/DreamAudioEngine';
@@ -26,14 +33,15 @@ import { resolveModifiers } from '../../../../packages/dream-core/src/conflictRe
 
 import { OrganicVegasScene } from '../components/game/OrganicVegasScene';
 import type { OrganicVegasSceneHandle, CollisionImpulseEvent } from '../components/game/OrganicVegasScene';
+import { ChainBoard } from '../components/game/ChainBoard';
+import type { ChainCommitPayload } from '../components/game/ChainBoard';
 
 import { useOrganicMultiplayer } from '../hooks/useOrganicMultiplayer';
 import { HARDWARE } from '../utils/hardwareTier';
 import '../styles/organic-vegas.css';
 
-// ── Life-Force (FAR_NZY energy adapted for Dream Core turn-based) ─────────────
-// Energy accrues each turn from roll events. Spending energy enables
-// special actions. This is a wrapper; it does NOT modify Sacred Core scorer.
+// ── Life-Force (FAR_NZY energy adapted as wrapper — does NOT touch Sacred Core) ──
+
 const MAX_LIFE_FORCE = 300;
 const LIFE_FORCE_PER_BANK = 20;
 const LIFE_FORCE_PER_FARKLE = -30;
@@ -49,25 +57,63 @@ function useLifeForce() {
   return { lifeForce, spend, gain };
 }
 
+// ── Local grid factory (solo mode — no backend required) ─────────────────────
+// Uses seededRng (deterministic xorshift). NOT a Sacred Core function.
+
+function createLocalGrid(seed: number, dim: number): Cell[][] {
+  const rng = seededRng(seed);
+  const faces: DieFace[] = [1, 2, 3, 4, 5, 6];
+  return Array.from({ length: dim }, (_r, r) =>
+    Array.from({ length: dim }, (_c, c) => {
+      const face = faces[Math.floor(rng() * 6)] as DieFace;
+      return {
+        id: `${r}-${c}`,
+        face,
+        type: FACE_TO_COLOR[face],
+        state: 'NORMAL' as const,
+      };
+    }),
+  );
+}
+
+// After a chain is committed, replace only those cells with fresh faces
+function replaceChainCells(grid: Cell[][], chain: GridPos[], rng: () => number): Cell[][] {
+  const faces: DieFace[] = [1, 2, 3, 4, 5, 6];
+  const next = grid.map(row => row.slice());
+  for (const { row, col } of chain) {
+    const face = faces[Math.floor(rng() * 6)] as DieFace;
+    next[row]![col] = { id: `${row}-${col}-${Date.now()}`, face, type: FACE_TO_COLOR[face], state: 'NORMAL' };
+  }
+  return next;
+}
+
+// ── Multiplier ladder ─────────────────────────────────────────────────────────
+
+function getMultiplier(step: number): number {
+  return MULTIPLIER_LADDER[Math.min(step, MULTIPLIER_LADDER.length - 1)] ?? 1;
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function OrganicVegas() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const gameMode = searchParams.get('mode') ?? 'solo';
+  const isSolo = gameMode === 'solo';
 
+  // 3D scene refs (atmospheric background only)
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<OrganicVegasSceneHandle>(null);
   const physicsRef = useRef<VoxelPhysicsSystem | null>(null);
   const transformsRef = useRef<VoxelTransform[]>([]);
+
+  // CSPRNG for local grid operations
   const rngRef = useRef<(() => number) | null>(null);
 
-  // Dream store
-  const initMatch = useDreamStore(s => s.initMatch);
+  // Dream Core store
   const processRoll = useDreamStore(s => s.processRoll);
   const bankSuccess = useDreamStore(s => s.bankSuccess);
   const bankFarkle = useDreamStore(s => s.bankFarkle);
-  const nextTurn = useDreamStore(s => s.nextTurn);
   const wrapScore = useDreamStore(s => s.wrapScore);
   const heartbeat = useDreamStore(s => s.heartbeat);
   const trickMeter = useDreamStore(s => s.trickMeter);
@@ -75,47 +121,49 @@ export default function OrganicVegas() {
 
   const { lifeForce, spend: spendLifeForce, gain: gainLifeForce } = useLifeForce();
 
-  // Game state
-  const [faces, setFaces] = useState<DieFace[]>([]);
+  // ── Local game state ─────────────────────────────────────────────────────
+  const [localGrid, setLocalGrid] = useState<Cell[][] | null>(null);
   const [unbanked, setUnbanked] = useState(0);
   const [banked, setBanked] = useState(0);
-  const [isFarkle, setIsFarkle] = useState(false);
-  const [physicsReady, setPhysicsReady] = useState(false);
+  const [multiplierStep, setMultiplierStep] = useState(0);
+  const [lastFarkle, setLastFarkle] = useState(false);
   const [lastCombo, setLastCombo] = useState('');
-  const [rollCount, setRollCount] = useState(0);
+  const [physicsReady, setPhysicsReady] = useState(false);
+  const [chainCount, setChainCount] = useState(0);
 
-  // Multiplayer
-  const { state: mpState, isMyTurn } = useOrganicMultiplayer({
-    playerName: 'PLAYER',
-    wsUrl: `ws://${window.location.hostname}:3001`,
+  // Multiplayer hook (also used for solo if backend is reachable — falls back gracefully)
+  const { state: mpState, isMyTurn, sendChain, sendBank } = useOrganicMultiplayer({
+    playerName: 'WRAITH',
   });
-  const isMulti = gameMode === 'multi';
-  const canAct = !isMulti || isMyTurn;
 
-  // ── Initialize session ────────────────────────────────────────────────────
+  const isMulti = !isSolo;
+  const canAct = isSolo ? true : isMyTurn;
+
+  // Active grid: backend grid for multi, local grid for solo
+  const activeGrid: Cell[][] | null = isSolo ? localGrid : mpState.grid;
+
+  // ── Initialize ───────────────────────────────────────────────────────────
   useEffect(() => {
+    // CSPRNG seed from crypto entropy — deterministic xorshift, never Math.random
     const seed = crypto.getRandomValues(new Uint32Array(1))[0] ?? 0xdeadbeef;
     rngRef.current = seededRng(seed);
-    initMatch(120);
+
+    // Create local grid for solo (or as fallback when backend grid not yet received)
+    setLocalGrid(createLocalGrid(seed, GAME_CONSTANTS.gridRows));
+
     dreamAudio.init();
 
+    // Boot physics for atmospheric background (not game-state authority)
     let mounted = true;
     VoxelPhysicsSystem.create(seed).then(sys => {
       if (!mounted) { sys.destroy(); return; }
       physicsRef.current = sys;
-
-      // Listen for physics steps → push transforms to Three.js scene
       sys['onStep'] = (transforms: VoxelTransform[]) => {
         transformsRef.current = transforms;
         sceneRef.current?.updateTransforms(transforms);
       };
-
       setPhysicsReady(true);
-    }).catch(err => {
-      console.error('[OrganicVegas] Rapier3D init failed:', err);
-      // Fallback: physics-less mode still allows dice roll + score
-      setPhysicsReady(true);
-    });
+    }).catch(() => setPhysicsReady(true));
 
     return () => {
       mounted = false;
@@ -127,14 +175,8 @@ export default function OrganicVegas() {
 
   // ── Collision impulse → DreamAudioEngine ─────────────────────────────────
   const onImpulse = useCallback((ev: CollisionImpulseEvent) => {
-    // Map collision impulse to ERK emotional state modulation
-    if (ev.impulse > 0.7 && heartbeat.active) {
-      // Heartbeat already managed by useDreamCore subscription;
-      // just ensure audio is resumed on high-impulse collision
-      dreamAudio.resume();
-    }
-    // High-impulse collisions bump trick meter filter cutoff
     if (ev.impulse > 0.5) {
+      dreamAudio.resume();
       dreamAudio.applyTrickMeter({
         percussionLayer: 0.8 + ev.impulse * 0.2,
         bassLayer: 0.7,
@@ -143,67 +185,109 @@ export default function OrganicVegas() {
         reverbMix: 0.2,
       });
     }
-  }, [heartbeat.active]);
+  }, []);
 
-  // ── Roll ─────────────────────────────────────────────────────────────────
-  const handleRoll = useCallback(() => {
-    if (!canAct || !physicsReady) return;
-    const rng = rngRef.current!;
+  // ── Chain commit handler ─────────────────────────────────────────────────
+  const handleChainCommit = useCallback((payload: ChainCommitPayload) => {
+    if (!canAct) return;
     dreamAudio.resume();
-    processRoll(Date.now()); // advances rhythm/beat state
+    processRoll(Date.now());
+    setChainCount(n => n + 1);
+    setLastFarkle(false);
 
-    // CSPRNG dice — deterministic xorshift, no Math.random
-    const newFaces: DieFace[] = Array.from({ length: 6 }, () =>
-      (Math.floor(rng() * 6) + 1) as DieFace,
-    );
+    if (isMulti) {
+      // Authoritative: send to backend, wait for CHAIN_RESULT
+      sendChain(payload.chain);
+      return;
+    }
 
-    const result = scoreFarkle(newFaces, 1);
-    setFaces(newFaces);
-    setRollCount(r => r + 1);
+    // Solo: score locally via Sacred Core scoreFarkle (already computed in ChainBoard preview)
+    const result = scoreFarkle(payload.faces, 1);
 
     if (result.isFarkle) {
-      setIsFarkle(true);
+      setLastFarkle(true);
       setUnbanked(0);
+      setMultiplierStep(0);
       setLastCombo('FARKLE');
-      gainLifeForce(LIFE_FORCE_PER_FARKLE);  // life-force drain on farkle
+      gainLifeForce(LIFE_FORCE_PER_FARKLE);
       bankFarkle();
       dreamAudio.playFarkle();
-    } else {
-      // Conflict Resolution Layer — apply non-RTP-gated modifiers
-      const resolved = resolveModifiers(dreamState);
-      // payoutMultiplier is 1.0 until MC-validated; apply only experience effects
-      const baseScore = result.score;
-      // scoreMultiplier only applied when payoutMultiplier != 1 AND MC-validated
-      // (currently all rtpGated, so effective multiplier stays 1.0 in beta)
-      const effectiveScore = Math.round(baseScore * resolved.payoutMultiplier);
+      // Replace chain cells with fresh dice
+      setLocalGrid(prev => prev ? replaceChainCells(prev, payload.chain, rngRef.current!) : prev);
+      return;
+    }
 
-      setIsFarkle(false);
+    // Conflict Resolution Layer (all modifiers rtpGated=true in beta → multiplier stays 1.0)
+    const resolved = resolveModifiers(dreamState);
+    const baseScore = result.score;
+    const multiplier = getMultiplier(multiplierStep) * resolved.payoutMultiplier;
+    const effectiveScore = Math.round(baseScore * multiplier);
+    const newStep = payload.chain.length === GAME_CONSTANTS.maxChainLength
+      ? Math.min(multiplierStep + 1, MULTIPLIER_LADDER.length - 1)
+      : 0;
+
+    // Auto-bank if chain < 6 (mirrors backend processChain behavior)
+    if (payload.chain.length < GAME_CONSTANTS.maxChainLength) {
+      const newBanked = banked + unbanked + effectiveScore;
+      setBanked(newBanked);
+      setUnbanked(0);
+      setMultiplierStep(0);
+      setLastCombo(`${result.combo} · BANKED`);
+      gainLifeForce(LIFE_FORCE_PER_BANK);
+      bankSuccess();
+      dreamAudio.playBank(effectiveScore);
+    } else {
       setUnbanked(prev => prev + effectiveScore);
-      setLastCombo(`${result.combo} (+${effectiveScore})`);
+      setMultiplierStep(newStep);
+      setLastCombo(`${result.combo} ×${getMultiplier(newStep).toFixed(2)}`);
       dreamAudio.playBank(effectiveScore);
     }
-  }, [canAct, physicsReady, processRoll, bankFarkle, gainLifeForce, dreamState]);
 
-  // ── Bank ─────────────────────────────────────────────────────────────────
+    // Replace chain cells
+    setLocalGrid(prev => prev ? replaceChainCells(prev, payload.chain, rngRef.current!) : prev);
+  }, [
+    canAct, isMulti, sendChain, processRoll, bankFarkle, bankSuccess,
+    gainLifeForce, dreamState, multiplierStep, unbanked, banked,
+  ]);
+
+  // ── Bank unbanked score (6-chain accumulation) ───────────────────────────
   const handleBank = useCallback(() => {
-    if (!canAct || unbanked <= 0 || isFarkle) return;
-    const wrapped = wrapScore(unbanked, faces.map(Number), banked, trickMeter.level === 'FRENZY');
+    if (!canAct || unbanked <= 0) return;
+    if (isMulti) { sendBank(); return; }
+    const wrapped = wrapScore(unbanked, [], banked, trickMeter.level === 'FRENZY');
     setBanked(prev => prev + wrapped);
     setUnbanked(0);
-    setFaces([]);
-    setIsFarkle(false);
+    setMultiplierStep(0);
     setLastCombo('');
     gainLifeForce(LIFE_FORCE_PER_BANK);
     bankSuccess();
-    nextTurn();
     dreamAudio.playBank(wrapped);
-  }, [canAct, unbanked, isFarkle, wrapScore, faces, banked, trickMeter.level, gainLifeForce, bankSuccess, nextTurn]);
+  }, [canAct, unbanked, isMulti, sendBank, wrapScore, banked, trickMeter.level, gainLifeForce, bankSuccess]);
 
-  // ── Life-force meter bar style ────────────────────────────────────────────
+  // ── Mirror multiplayer CHAIN_RESULT into local display ──────────────────
+  useEffect(() => {
+    if (!isMulti || !mpState.lastChainResult) return;
+    const r = mpState.lastChainResult;
+    if (r.result === 'FARKLE') {
+      setLastFarkle(true);
+      setUnbanked(0);
+      setLastCombo('FARKLE');
+    } else {
+      setLastFarkle(false);
+      setUnbanked(r.unbanked);
+      setBanked(r.banked);
+      setLastCombo('');
+    }
+  }, [isMulti, mpState.lastChainResult]);
+
+  // ── Life-force bar ───────────────────────────────────────────────────────
   const lfPct = (lifeForce / MAX_LIFE_FORCE) * 100;
   const lfColor = lfPct > 60 ? 'var(--ov-ichor-green)' : lfPct > 30 ? 'var(--ov-gold)' : 'var(--ov-blood-red)';
 
-  // ── Canvas resize observer ────────────────────────────────────────────────
+  // ── Multiplier display ───────────────────────────────────────────────────
+  const currentMultiplier = useMemo(() => getMultiplier(multiplierStep), [multiplierStep]);
+
+  // ── Container resize → Three.js canvas ──────────────────────────────────
   const containerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!containerRef.current || !canvasRef.current) return;
@@ -211,8 +295,9 @@ export default function OrganicVegas() {
       const entry = entries[0];
       if (!entry || !canvasRef.current) return;
       const { width, height } = entry.contentRect;
-      canvasRef.current.width = Math.round(width * (HARDWARE.quality === 'ELITE' ? Math.min(window.devicePixelRatio, 2) : 1));
-      canvasRef.current.height = Math.round(height * (HARDWARE.quality === 'ELITE' ? Math.min(window.devicePixelRatio, 2) : 1));
+      const dpr = HARDWARE.quality === 'ELITE' ? Math.min(window.devicePixelRatio, 2) : 1;
+      canvasRef.current.width = Math.round(width * dpr);
+      canvasRef.current.height = Math.round(height * dpr);
       canvasRef.current.style.width = `${width}px`;
       canvasRef.current.style.height = `${height}px`;
     });
@@ -220,176 +305,142 @@ export default function OrganicVegas() {
     return () => obs.disconnect();
   }, []);
 
-  // ── Opponent panel (multiplayer) ──────────────────────────────────────────
-  const opponents = useMemo(() =>
-    mpState.players.filter(p => p.id !== mpState.localPlayerId),
-    [mpState.players, mpState.localPlayerId],
-  );
+  // ── Render ───────────────────────────────────────────────────────────────
+
+  const displayUnbanked = isMulti ? mpState.lastChainResult?.unbanked ?? 0 : unbanked;
+  const displayBanked = isMulti
+    ? mpState.players.find(p => p.id === mpState.localPlayerId)?.banked ?? 0
+    : banked;
 
   return (
-    <div className={`ov-root${HARDWARE.isMobile ? ' ov-root--mobile' : ''}`}>
-      {/* ── Header ── */}
-      <header className="ov-header">
-        <div className="ov-title" style={{ fontSize: 16 }}>ORGANIC VEGAS</div>
+    <div className="ov-game" ref={containerRef} style={{ position: 'relative', width: '100%', height: '100vh', overflow: 'hidden', background: '#050008' }}>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          {/* Life-Force bar */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
-            <div className="ov-label">LIFE-FORCE</div>
-            <div style={{ width: 120, height: 6, background: 'rgba(255,255,255,0.08)', borderRadius: 3 }}>
-              <div style={{
-                width: `${lfPct}%`,
-                height: '100%',
-                background: lfColor,
-                borderRadius: 3,
-                transition: 'width 0.3s ease',
-                boxShadow: `0 0 6px ${lfColor}`,
-              }} />
-            </div>
-          </div>
-
-          {/* Turn indicator */}
-          {isMulti && (
-            <div className="ov-label" style={{ color: isMyTurn ? 'var(--ov-ichor-green)' : 'var(--ov-bone-shadow)' }}>
-              {isMyTurn ? 'YOUR TURN' : "OPPONENT'S TURN"}
-            </div>
-          )}
-
-          <div className={`ov-tier-badge${HARDWARE.quality === 'ELITE' ? ' ov-tier-badge--elite' : ''}`}>
-            {HARDWARE.quality}
-          </div>
-
-          <button
-            className="ov-btn ov-btn--danger"
-            onClick={() => navigate('/organic-vegas')}
-            style={{ padding: '6px 14px', fontSize: '9px' }}
-          >
-            EXIT
-          </button>
-        </div>
-      </header>
-
-      {/* ── 3D Scene ── */}
-      <div className="ov-scene-wrap" ref={containerRef}>
-        <canvas ref={canvasRef} className="ov-scene-canvas" />
-
-        {/* OrganicVegasScene mounts into the canvas imperatively */}
+      {/* ── 3D atmospheric background ── */}
+      <canvas
+        ref={canvasRef}
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0.35, pointerEvents: 'none' }}
+      />
+      {physicsReady && canvasRef.current && (
         <OrganicVegasScene
           ref={sceneRef}
-          onImpulse={onImpulse}
-          heartbeatIntensity={heartbeat.vignetteIntensity}
           canvasRef={canvasRef}
+          heartbeatIntensity={lifeForce / 150}
+          onImpulse={onImpulse}
         />
+      )}
 
-        {/* Heartbeat vignette overlay */}
-        <div
-          className="ov-vignette"
-          style={{ opacity: heartbeat.vignetteIntensity }}
-        />
+      {/* ── Main game layout ── */}
+      <div style={{
+        position: 'relative', zIndex: 10,
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        height: '100%', padding: HARDWARE.isMobile ? '8px 4px' : '12px 16px',
+        gap: 8,
+        overflowY: 'auto',
+      }}>
 
-        {/* HUD overlay — right panel */}
-        <div className="ov-hud-overlay">
-          <div className="ov-hud-panel">
-            <div className="ov-label">BANKED</div>
-            <div className="ov-value">{banked.toLocaleString()}</div>
-            <hr className="ov-divider" />
-            <div className="ov-label">UNBANKED</div>
-            <div className="ov-value--cyan" style={{ fontSize: 16 }}>{unbanked.toLocaleString()}</div>
-            <hr className="ov-divider" />
-            <div className="ov-label">ROLL #{rollCount}</div>
-            <div style={{ fontSize: 10, color: 'var(--ov-bone-shadow)', marginTop: 2 }}>
-              {lastCombo || '—'}
-            </div>
-            {isFarkle && (
-              <div style={{
-                marginTop: 8,
-                color: 'var(--ov-blood-red)',
-                fontSize: 16,
-                fontWeight: 900,
-                textShadow: '0 0 12px var(--ov-blood-red)',
-                letterSpacing: '0.2em',
-              }}>
-                FARKLE
-              </div>
+        {/* ── HUD strip ── */}
+        <div style={{
+          display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap',
+          justifyContent: 'space-between', width: '100%', maxWidth: 600,
+          padding: '6px 12px',
+          background: 'rgba(5,0,8,0.86)',
+          border: '1px solid rgba(201,168,76,0.28)',
+          borderRadius: 6,
+        }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <HudBadge label="BANKED" value={displayBanked.toLocaleString()} color="var(--ov-gold)" />
+            <HudBadge label="UNBANKED" value={displayUnbanked.toLocaleString()} color="#3388ff" />
+            {multiplierStep > 0 && (
+              <HudBadge label="MULT" value={`×${currentMultiplier.toFixed(2)}`} color="#c8d400" />
             )}
+            <HudBadge label="CHAINS" value={chainCount.toString()} color="#c9a84c88" />
           </div>
 
-          {/* Left panel: dice faces */}
-          <div className="ov-hud-panel ov-hud-panel--left">
-            <div className="ov-label">DICE</div>
-            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
-              {(faces.length > 0 ? faces : [1, 2, 3, 4, 5, 6]).map((f, i) => (
-                <div key={i} style={{
-                  width: 28, height: 28,
-                  border: '1px solid var(--ov-border)',
-                  borderRadius: 4,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 14, fontWeight: 700,
-                  color: f === 1 || f === 5 ? 'var(--ov-gold-glow)' : 'var(--ov-bone-light)',
-                  background: 'rgba(5,3,10,0.7)',
-                  boxShadow: (f === 1 || f === 5) ? '0 0 6px var(--ov-gold)' : 'none',
-                }}>
-                  {f}
-                </div>
-              ))}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {/* Life-Force bar */}
+            <div title="Life Force" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+              <div style={{ fontSize: 9, color: 'var(--ov-bone-shadow)', letterSpacing: '0.1em', fontFamily: 'monospace' }}>VITALITY</div>
+              <div style={{ width: 60, height: 6, background: 'rgba(255,255,255,0.08)', borderRadius: 3, overflow: 'hidden' }}>
+                <div style={{ width: `${lfPct}%`, height: '100%', background: lfColor, transition: 'width 220ms, background 220ms', borderRadius: 3 }} />
+              </div>
             </div>
 
-            {/* Trick meter */}
-            <hr className="ov-divider" />
-            <div className="ov-label">TRICK METER</div>
-            <div style={{ fontSize: 12, color: 'var(--ov-neural-cyan)', fontWeight: 700 }}>
-              {trickMeter.level}
-            </div>
-
-            {/* Multiplayer opponents */}
-            {opponents.length > 0 && (
-              <>
-                <hr className="ov-divider" />
-                <div className="ov-label">OPPONENT</div>
-                {opponents.map(op => (
-                  <div key={op.id} style={{ fontSize: 11, color: 'var(--ov-bone-shadow)' }}>
-                    {op.name}: {op.banked.toLocaleString()}
-                  </div>
-                ))}
-              </>
-            )}
+            <button className="ov-btn" style={{ padding: '6px 12px', fontSize: 11 }} onClick={() => navigate('/organic-vegas')}>
+              ← EXIT
+            </button>
           </div>
         </div>
-      </div>
 
-      {/* ── Footer actions ── */}
-      <footer className="ov-footer">
-        <button
-          className="ov-btn ov-btn--cyan"
-          onClick={handleRoll}
-          disabled={!physicsReady || !canAct}
-        >
-          {!physicsReady ? 'LOADING PHYSICS…' : 'ROLL DICE'}
-        </button>
-        <button
-          className="ov-btn"
-          onClick={handleBank}
-          disabled={unbanked <= 0 || isFarkle || !canAct}
-        >
-          BANK {unbanked > 0 ? `+${unbanked.toLocaleString()}` : ''}
-        </button>
-        <button
-          className="ov-btn ov-btn--danger"
-          onClick={() => {
-            // Combo Breaker: spend 30 life-force to attempt a farkle reversal
-            if (isFarkle && lifeForce >= 30) {
-              spendLifeForce(30);
-              setIsFarkle(false);
-              setUnbanked(50); // emergency salvage score
-              setLastCombo('COMBO BREAK (+50)');
-            }
-          }}
-          disabled={!isFarkle || lifeForce < 30}
-          style={{ fontSize: '9px' }}
-        >
-          COMBO BREAK (−30 LF)
-        </button>
-      </footer>
+        {/* ── Multiplayer status ── */}
+        {isMulti && (
+          <div style={{ fontSize: 11, color: isMyTurn ? '#c8d400' : '#3388ff', letterSpacing: '0.1em', fontFamily: 'monospace' }}>
+            {isMyTurn ? '▶ YOUR TURN' : "⟳ OPPONENT'S TURN"}
+            {mpState.players.map(p => (
+              <span key={p.id} style={{ marginLeft: 12, color: '#c9a84c' }}>
+                {p.name}: {p.banked.toLocaleString()}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* ── Last combo / result ── */}
+        {lastCombo && (
+          <div style={{
+            fontSize: 12, fontWeight: 700,
+            color: lastFarkle ? '#ff2b55' : '#c8d400',
+            fontFamily: 'monospace', letterSpacing: '0.15em',
+            textShadow: `0 0 8px ${lastFarkle ? '#ff2b55' : '#c8d400'}`,
+          }}>
+            {lastCombo}
+          </div>
+        )}
+
+        {/* ── Chain Board ── */}
+        {activeGrid ? (
+          <ChainBoard
+            grid={activeGrid}
+            canAct={canAct}
+            lastFarkle={lastFarkle}
+            onChainCommit={handleChainCommit}
+            className="ov-chain-board"
+          />
+        ) : (
+          <div style={{ color: '#c9a84c', fontFamily: 'monospace', fontSize: 13, marginTop: 40 }}>
+            {isMulti ? 'AWAITING BOARD FROM SERVER…' : 'INITIALIZING GRID…'}
+          </div>
+        )}
+
+        {/* ── Bank button (for 6-chain accumulated unbanked) ── */}
+        {unbanked > 0 && !isMulti && (
+          <button
+            className="ov-btn"
+            onClick={handleBank}
+            disabled={!canAct}
+            style={{ padding: '10px 28px', fontSize: 14 }}
+          >
+            BANK {unbanked.toLocaleString()} PTS
+          </button>
+        )}
+
+        {/* ── Mode / tier label ── */}
+        <div style={{ fontSize: 9, color: 'rgba(201,168,76,0.35)', letterSpacing: '0.12em', fontFamily: 'monospace', marginTop: 'auto' }}>
+          {isSolo ? 'SOLO · ' : 'VS · '}{HARDWARE.quality} · TIER {HARDWARE.dspTier} · {GAME_CONSTANTS.gridRows}×{GAME_CONSTANTS.gridCols} GRID
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+// ── Small HUD badge component ─────────────────────────────────────────────────
+
+interface HudBadgeProps { label: string; value: string; color: string; }
+
+function HudBadge({ label, value, color }: HudBadgeProps) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+      <span style={{ fontSize: 9, color: 'rgba(201,168,76,0.55)', letterSpacing: '0.1em', fontFamily: 'monospace' }}>{label}</span>
+      <span style={{ fontSize: 16, fontWeight: 900, color, fontFamily: 'monospace', lineHeight: 1 }}>{value}</span>
     </div>
   );
 }

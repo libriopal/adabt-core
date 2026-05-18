@@ -4,5 +4,8 @@
   "private": true,
   "description": "Sacred Core: Farkle scoring engine, CSPRNG, RTP, and Monte Carlo simulation.",
   "main": "src/index.ts",
-  "types": "src/index.ts"
+  "types": "src/index.ts",
+  "scripts": {
+    "test": "npx tsx --test src/farkleScorer.test.ts"
+  }
 }

@@ -11,7 +11,7 @@
 // ─────────────────────────────────────────────────────
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { Cell } from '@match3d/farkle-shared';
+import type { Cell, GridPos } from '@match3d/farkle-shared';
 
 export type LobbyPhase =
   | 'IDLE'
@@ -288,8 +288,9 @@ export function useOrganicMultiplayer({
     send({ type: 'START_GAME' });
   }, [send]);
 
-  const sendChain = useCallback((chain: string[]) => {
-    send({ type: 'COMMIT_CHAIN', chain });
+  // chain: array of {row, col} positions matching gameRoom.ts SUBMIT_CHAIN protocol
+  const sendChain = useCallback((chain: GridPos[]) => {
+    send({ type: 'SUBMIT_CHAIN', chain });
   }, [send]);
 
   const sendBank = useCallback(() => {

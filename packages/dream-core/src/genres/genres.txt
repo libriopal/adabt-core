@@ -1,0 +1,3672 @@
+// ─────────────────────────────────────────────────────
+// DREAM-CORE — Genre #20: ABSTRACT (Rules Are Fluid)
+// Rule Shards temporarily modify scoring perception.
+// Post-score wrapper — Sacred Core UNTOUCHED.
+// ─────────────────────────────────────────────────────
+
+import type { RuleShardState, RuleShardEffect } from '../types';
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+const DEFAULT_SHARD_DURATION_MS = 30000; // 30 seconds
+
+// ── Rule Shard Registry ───────────────────────────────────────────────────────
+
+export const RULE_SHARD_EFFECTS: RuleShardEffect[] = [
+  { type: 'EVENS_ARE_ODDS', bonusPerEven: 50 },
+  { type: 'PAIRS_PAY', pairBonus: 200 },
+  { type: 'INVERSE_FARKLE' },
+];
+
+// ── Factory ───────────────────────────────────────────────────────────────────
+export function createRuleShardState(): RuleShardState {
+  return {
+    activeRule: null,
+    expiresAt: 0,
+    durationMs: DEFAULT_SHARD_DURATION_MS,
+  };
+}
+
+// ── Core Logic ────────────────────────────────────────────────────────────────
+
+/**
+ * Activate a Rule Shard. Replaces any currently active rule.
+ */
+export function activateRuleShard(
+  state: RuleShardState,
+  effect: RuleShardEffect,
+  now: number = Date.now(),
+): RuleShardState {
+  return {
+    activeRule: effect,
+    expiresAt: now + state.durationMs,
+    durationMs: state.durationMs,
+  };
+}
+
+/**
+ * Tick the rule shard — deactivate when expired.
+ */
+export function tickRuleShard(
+  state: RuleShardState,
+  now: number = Date.now(),
+): RuleShardState {
+  if (state.activeRule && now >= state.expiresAt) {
+    return {
+      ...state,
+      activeRule: null,
+    };
+  }
+  return state;
+}
+
+/**
+ * Apply the active Rule Shard to a scored result.
+ * This is a POST-SCORE wrapper — the Sacred Core lookupScore runs first,
+ * then this function adds bonus points based on the active rule.
+ *
+ * IMPORTANT: This never reduces the Sacred Core score. It only adds bonus.
+ * lookupScore(faces) is called normally. This wraps the result.
+ */
+export function applyRuleShard(
+  baseScore: number,
+  faces: number[],
+  state: RuleShardState,
+): { modifiedScore: number; bonusApplied: number; ruleLabel: string | null } {
+  if (!state.activeRule) {
+    return { modifiedScore: baseScore, bonusApplied: 0, ruleLabel: null };
+  }
+
+  const rule = state.activeRule;
+  let bonus = 0;
+  let ruleLabel: string | null = null;
+
+  switch (rule.type) {
+    case 'EVENS_ARE_ODDS': {
+      // Even dice (2, 4, 6) earn bonus points each
+      const evenCount = faces.filter(f => f % 2 === 0).length;
+      bonus = evenCount * rule.bonusPerEven;
+      ruleLabel = `EVENS ARE ODDS: +${bonus}`;
+      break;
+    }
+    case 'PAIRS_PAY': {
+      // Any pair of matching dice earns a bonus
+      const counts = new Map<number, number>();
+      for (const f of faces) counts.set(f, (counts.get(f) ?? 0) + 1);
+      const pairCount = [...counts.values()].filter(c => c >= 2).length;
+      bonus = pairCount * rule.pairBonus;
+      ruleLabel = pairCount > 0 ? `PAIRS PAY: +${bonus}` : null;
+      break;
+    }
+    case 'INVERSE_FARKLE': {
+      // If the base score is 0 (Farkle), grant 500 points instead
+      // If the base score is > 0, it stays (no penalty)
+      if (baseScore === 0) {
+        bonus = 500;
+        ruleLabel = 'INVERSE FARKLE: +500';
+      }
+      break;
+    }
+  }
+
+  return {
+    modifiedScore: baseScore + bonus,
+    bonusApplied: bonus,
+    ruleLabel,
+  };
+}
+
+/**
+ * Generate a random Rule Shard effect (for unsealing tiles, etc.)
+ */
+export function generateRandomShard(rngFn: () => number): RuleShardEffect {
+  const index = Math.floor(rngFn() * RULE_SHARD_EFFECTS.length);
+  return RULE_SHARD_EFFECTS[index]!;
+}
+
+/**
+ * Get visual state for the active Rule Shard.
+ */
+export function getRuleShardVisuals(state: RuleShardState, now: number): RuleShardVisuals | null {
+  if (!state.activeRule) return null;
+
+  const remaining = Math.max(0, state.expiresAt - now);
+  const progress = 1.0 - remaining / state.durationMs;
+
+  return {
+    ruleName: getRuleName(state.activeRule),
+    ruleDescription: getRuleDescription(state.activeRule),
+    timeRemainingMs: remaining,
+    progress,
+    color: getRuleColor(state.activeRule),
+    icon: getRuleIcon(state.activeRule),
+    pulsing: remaining < 5000, // pulse when about to expire
+  };
+}
+
+function getRuleName(effect: RuleShardEffect): string {
+  switch (effect.type) {
+    case 'EVENS_ARE_ODDS': return 'Evens Are Odds';
+    case 'PAIRS_PAY': return 'Pairs Pay';
+    case 'INVERSE_FARKLE': return 'Inverse Farkle';
+  }
+}
+
+function getRuleDescription(effect: RuleShardEffect): string {
+  switch (effect.type) {
+    case 'EVENS_ARE_ODDS': return `Even dice earn +${effect.bonusPerEven} each`;
+    case 'PAIRS_PAY': return `Pairs earn +${effect.pairBonus} bonus`;
+    case 'INVERSE_FARKLE': return 'Farkles grant 500 points!';
+  }
+}
+
+function getRuleColor(effect: RuleShardEffect): string {
+  switch (effect.type) {
+    case 'EVENS_ARE_ODDS': return '#00ffcc';
+    case 'PAIRS_PAY': return '#ffcc00';
+    case 'INVERSE_FARKLE': return '#ff00ff';
+  }
+}
+
+function getRuleIcon(effect: RuleShardEffect): string {
+  switch (effect.type) {
+    case 'EVENS_ARE_ODDS': return '⚗️';
+    case 'PAIRS_PAY': return '🃏';
+    case 'INVERSE_FARKLE': return '🔄';
+  }
+}
+
+export interface RuleShardVisuals {
+  ruleName: string;
+  ruleDescription: string;
+  timeRemainingMs: number;
+  progress: number;
+  color: string;
+  icon: string;
+  pulsing: boolean;
+}
+// ─────────────────────────────────────────────────────
+// DREAM-CORE — Genre #17: ADVENTURE (Hero's Journey Keys)
+// 3 chapters per match with musical key changes.
+// ─────────────────────────────────────────────────────
+
+import type { HeroJourneyState, ChapterPhase } from '../types';
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+const CHAPTER_THRESHOLDS = {
+  THE_CALL: 0,              // turns 0–9
+  THE_ORDEAL: 10,           // turns 10–19
+  THE_RETURN: 20,           // turns 20+
+};
+
+const MUSICAL_KEYS: Record<ChapterPhase, string> = {
+  THE_CALL: 'C_MAJOR',     // bright, innocent
+  THE_ORDEAL: 'D_MINOR',   // tense, dark
+  THE_RETURN: 'Eb_MAJOR',  // triumphant, elevated
+};
+
+const KEY_TRANSITION_DURATION_MS = 2000; // 2 second glide between keys
+
+// ── Factory ───────────────────────────────────────────────────────────────────
+export function createHeroJourneyState(): HeroJourneyState {
+  return {
+    chapter: 'THE_CALL',
+    turnNumber: 0,
+    musicalKey: MUSICAL_KEYS.THE_CALL,
+    chapterTransitioning: false,
+    transitionProgress: 0,
+  };
+}
+
+// ── Core Logic ────────────────────────────────────────────────────────────────
+
+/**
+ * Advance the turn counter and check for chapter transitions.
+ */
+export function advanceTurn(state: HeroJourneyState): {
+  state: HeroJourneyState;
+  chapterChanged: boolean;
+  newChapter: ChapterPhase | null;
+} {
+  const turnNumber = state.turnNumber + 1;
+  const newChapter = determineChapter(turnNumber);
+
+  if (newChapter !== state.chapter) {
+    return {
+      state: {
+        ...state,
+        turnNumber,
+        chapter: newChapter,
+        musicalKey: MUSICAL_KEYS[newChapter],
+        chapterTransitioning: true,
+        transitionProgress: 0,
+      },
+      chapterChanged: true,
+      newChapter,
+    };
+  }
+
+  return {
+    state: { ...state, turnNumber },
+    chapterChanged: false,
+    newChapter: null,
+  };
+}
+
+function determineChapter(turn: number): ChapterPhase {
+  if (turn >= CHAPTER_THRESHOLDS.THE_RETURN) return 'THE_RETURN';
+  if (turn >= CHAPTER_THRESHOLDS.THE_ORDEAL) return 'THE_ORDEAL';
+  return 'THE_CALL';
+}
+
+/**
+ * Tick the chapter transition animation.
+ */
+export function tickTransition(
+  state: HeroJourneyState,
+  deltaMs: number,
+): HeroJourneyState {
+  if (!state.chapterTransitioning) return state;
+
+  const progress = Math.min(1.0, state.transitionProgress + deltaMs / KEY_TRANSITION_DURATION_MS);
+  const done = progress >= 1.0;
+
+  return {
+    ...state,
+    transitionProgress: progress,
+    chapterTransitioning: !done,
+  };
+}
+
+/**
+ * Get audio parameters for the current chapter.
+ * Includes key signature, stem volumes, and mood.
+ */
+export function getChapterAudioParams(state: HeroJourneyState): ChapterAudioParams {
+  const baseParams = CHAPTER_AUDIO_PROFILES[state.chapter];
+
+  if (state.chapterTransitioning) {
+    // During transition, interpolate between old and new
+    return {
+      ...baseParams,
+      crossfade: state.transitionProgress,
+      keyGlide: true,
+    };
+  }
+
+  return { ...baseParams, crossfade: 1.0, keyGlide: false };
+}
+
+const CHAPTER_AUDIO_PROFILES: Record<ChapterPhase, ChapterAudioProfile> = {
+  THE_CALL: {
+    key: 'C_MAJOR',
+    rootNote: 261.63,  // C4
+    mode: 'major',
+    tempo: 120,
+    stemVolumes: {
+      percussion: 0.4,
+      bass: 0.5,
+      harmonic: 0.6,
+      melody: 0.3,
+      ambient: 0.7,
+    },
+    mood: 'hopeful',
+    filterCutoff: 6000,
+  },
+  THE_ORDEAL: {
+    key: 'D_MINOR',
+    rootNote: 293.66,  // D4
+    mode: 'minor',
+    tempo: 130,
+    stemVolumes: {
+      percussion: 0.8,
+      bass: 0.7,
+      harmonic: 0.4,
+      melody: 0.5,
+      ambient: 0.3,
+    },
+    mood: 'tense',
+    filterCutoff: 3000,
+  },
+  THE_RETURN: {
+    key: 'Eb_MAJOR',
+    rootNote: 311.13,  // Eb4
+    mode: 'major',
+    tempo: 140,
+    stemVolumes: {
+      percussion: 0.9,
+      bass: 0.8,
+      harmonic: 0.8,
+      melody: 0.9,
+      ambient: 0.5,
+    },
+    mood: 'triumphant',
+    filterCutoff: 12000,
+  },
+};
+
+/**
+ * Get visual parameters for chapter UI.
+ */
+export function getChapterVisuals(state: HeroJourneyState): ChapterVisuals {
+  const chapterNames: Record<ChapterPhase, string> = {
+    THE_CALL: 'I — The Call',
+    THE_ORDEAL: 'II — The Ordeal',
+    THE_RETURN: 'III — The Return',
+  };
+
+  const chapterColors: Record<ChapterPhase, string> = {
+    THE_CALL: '#4488ff',
+    THE_ORDEAL: '#ff4444',
+    THE_RETURN: '#ffcc00',
+  };
+
+  return {
+    chapterName: chapterNames[state.chapter],
+    chapterColor: chapterColors[state.chapter],
+    turnNumber: state.turnNumber,
+    musicalKey: state.musicalKey.replace('_', ' '),
+    transitioning: state.chapterTransitioning,
+    transitionProgress: state.transitionProgress,
+    backgroundGradient: getChapterGradient(state.chapter),
+  };
+}
+
+function getChapterGradient(chapter: ChapterPhase): string {
+  switch (chapter) {
+    case 'THE_CALL':
+      return 'linear-gradient(180deg, #0a0a1a 0%, #0d1a2a 100%)';
+    case 'THE_ORDEAL':
+      return 'linear-gradient(180deg, #1a0a0a 0%, #2a0d0d 100%)';
+    case 'THE_RETURN':
+      return 'linear-gradient(180deg, #1a1a0a 0%, #2a2a0d 100%)';
+  }
+}
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+export interface ChapterAudioProfile {
+  key: string;
+  rootNote: number;
+  mode: 'major' | 'minor';
+  tempo: number;
+  stemVolumes: {
+    percussion: number;
+    bass: number;
+    harmonic: number;
+    melody: number;
+    ambient: number;
+  };
+  mood: string;
+  filterCutoff: number;
+}
+
+export interface ChapterAudioParams extends ChapterAudioProfile {
+  crossfade: number;
+  keyGlide: boolean;
+}
+
+export interface ChapterVisuals {
+  chapterName: string;
+  chapterColor: string;
+  turnNumber: number;
+  musicalKey: string;
+  transitioning: boolean;
+  transitionProgress: number;
+  backgroundGradient: string;
+}
+// ─────────────────────────────────────────────────────
+// DREAM-CORE — Genre #6: BATTLE ROYALE (Closing Circle)
+// Grid contracts every 30s, scorched tiles lock dice values.
+// ─────────────────────────────────────────────────────
+
+import type { ClosingCircleState } from '../types';
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+const INITIAL_RADIUS = 10;               // full grid
+const MIN_RADIUS = 3;                    // minimum safe zone
+const DEFAULT_SHRINK_INTERVAL_MS = 30000; // 30 seconds
+const TILES_PER_SHRINK = 6;             // tiles scorched per contraction
+
+// ── Factory ───────────────────────────────────────────────────────────────────
+export function createClosingCircleState(): ClosingCircleState {
+  const scorchedSet = new Set<number>();
+  return {
+    radius: INITIAL_RADIUS,
+    tickIntervalMs: DEFAULT_SHRINK_INTERVAL_MS,
+    lastShrinkAt: Date.now(),
+    scorchedTiles: scorchedSet,
+    scorched: scorchedSet,
+    active: false,
+  };
+}
+
+// ── Core Logic ────────────────────────────────────────────────────────────────
+
+/**
+ * Tick the Closing Circle. Contracts the safe zone at fixed intervals.
+ */
+export function tickClosingCircle(
+  state: ClosingCircleState,
+  now: number,
+  totalTiles: number = 60,
+  rngFn: () => number = deterministicCircleRng,
+): ClosingCircleState {
+  if (now - state.lastShrinkAt < state.tickIntervalMs) return state;
+  if (state.radius <= MIN_RADIUS) return state;
+
+  const newRadius = Math.max(MIN_RADIUS, state.radius - 1);
+  const newScorched = new Set(state.scorchedTiles);
+
+  // Scorch tiles from the outer rim
+  const outerTiles = getOuterRimTiles(state.scorchedTiles, totalTiles, rngFn);
+  for (const tile of outerTiles.slice(0, TILES_PER_SHRINK)) {
+    newScorched.add(tile);
+  }
+
+  return {
+    radius: newRadius,
+    tickIntervalMs: state.tickIntervalMs,
+    lastShrinkAt: now,
+    scorchedTiles: newScorched,
+    scorched: newScorched,
+    active: newRadius > MIN_RADIUS,
+  };
+}
+
+let circleRngState = 0xC10C1E;
+function deterministicCircleRng(): number {
+  circleRngState = (circleRngState + 0x6D2B79F5) >>> 0;
+  let t = circleRngState;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+
+/**
+ * Get tiles on the outer rim that haven't been scorched yet.
+ * Prioritizes corners and edges.
+ */
+function getOuterRimTiles(
+  existing: Set<number>,
+  totalTiles: number,
+  rngFn: () => number,
+): number[] {
+  const cols = 10;
+  const rows = Math.ceil(totalTiles / cols);
+  const candidates: number[] = [];
+
+  // Priority: corners first, then edges, then inner
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const idx = r * cols + c;
+      if (idx >= totalTiles) continue;
+      if (existing.has(idx)) continue;
+
+      const isEdge = r === 0 || r === rows - 1 || c === 0 || c === cols - 1;
+      const isCorner = (r === 0 || r === rows - 1) && (c === 0 || c === cols - 1);
+
+      if (isCorner) candidates.unshift(idx); // highest priority
+      else if (isEdge) candidates.push(idx);
+    }
+  }
+
+  // If no edges left, take inner tiles adjacent to scorched
+  if (candidates.length === 0) {
+    for (let i = 0; i < totalTiles; i++) {
+      if (existing.has(i)) continue;
+      const neighbors = getCardinalNeighbors(i, cols, totalTiles);
+      if (neighbors.some(n => existing.has(n))) {
+        candidates.push(i);
+      }
+    }
+  }
+
+  // Shuffle candidates
+  for (let i = candidates.length - 1; i > 0; i--) {
+    const j = Math.floor(rngFn() * (i + 1));
+    [candidates[i], candidates[j]] = [candidates[j]!, candidates[i]!];
+  }
+
+  return candidates;
+}
+
+function getCardinalNeighbors(idx: number, cols: number, total: number): number[] {
+  const row = Math.floor(idx / cols);
+  const col = idx % cols;
+  const neighbors: number[] = [];
+
+  if (row > 0) neighbors.push((row - 1) * cols + col);
+  if (row < Math.ceil(total / cols) - 1) neighbors.push((row + 1) * cols + col);
+  if (col > 0) neighbors.push(row * cols + col - 1);
+  if (col < cols - 1) neighbors.push(row * cols + col + 1);
+
+  return neighbors.filter(n => n >= 0 && n < total);
+}
+
+/**
+ * Check if a tile is scorched (no actions allowed on scorched tiles).
+ */
+export function isTileScorched(state: ClosingCircleState, tileIndex: number): boolean {
+  return state.scorchedTiles.has(tileIndex);
+}
+
+/**
+ * Get visual parameters for the scorched overlay.
+ */
+export function getScorchedVisuals(state: ClosingCircleState): ScorchedVisuals {
+  const intensity = 1.0 - (state.radius - MIN_RADIUS) / (INITIAL_RADIUS - MIN_RADIUS);
+  return {
+    scorchedTileIndices: [...state.scorchedTiles],
+    overlayColor: `rgba(255, 60, 20, ${0.3 + intensity * 0.4})`,
+    borderColor: intensity > 0.7 ? '#ff1100' : '#ff6600',
+    borderGlow: intensity > 0.7 ? '#ff1100' : '#ff6600',
+    warningPulse: intensity > 0.5,
+    pulseSpeed: 1.0 + intensity * 2.0,
+  };
+}
+
+export interface ScorchedVisuals {
+  scorchedTileIndices: number[];
+  overlayColor: string;
+  borderColor: string;
+  borderGlow: string;
+  warningPulse: boolean;
+  pulseSpeed: number;
+}
+
+/**
+ * Serialize/deserialize for network state (Sets aren't JSON-safe).
+ */
+export function serializeCircleState(state: ClosingCircleState): object {
+  return {
+    ...state,
+    scorchedTiles: [...state.scorchedTiles],
+  };
+}
+
+export function deserializeCircleState(data: any): ClosingCircleState {
+  return {
+    ...data,
+    scorchedTiles: new Set(data.scorchedTiles),
+  };
+}
+// ─────────────────────────────────────────────────────
+// DREAM-CORE — Genre #9: CASINO (Volatility Surge)
+// PRIORITY: 3rd (Genre Hierarchy Position 3)
+// High-volatility math drives the Neon Oscilloscope.
+// ─────────────────────────────────────────────────────
+
+import type { VolatilityState } from '../types';
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+const HISTORY_SIZE = 5;
+const VARIANCE_THRESHOLD = 150000;   // variance value that triggers Surge
+const SURGE_DURATION_MS = 30000;     // 30 seconds of amplified juice
+const MIN_FARKLES_FOR_SURGE = 3;     // need 3+ Farkles in window
+const MIN_HIGH_SCORE = 2000;         // need at least 1 score > 2000
+
+// ── Factory ───────────────────────────────────────────────────────────────────
+export function createVolatilityState(): VolatilityState {
+  return {
+    recentScores: [],
+    variance: 0,
+    standardDeviation: 0,
+    surgeActive: false,
+    surgeExpiresAt: 0,
+    juiceAmplifier: 1.0,
+  };
+}
+
+// ── Core Logic ────────────────────────────────────────────────────────────────
+
+/**
+ * Record a roll result into the volatility tracker.
+ * Score of 0 = Farkle. Positive = scoring roll.
+ */
+export function recordRollResult(
+  state: VolatilityState,
+  score: number,
+  now: number = Date.now(),
+): VolatilityState {
+  // Ring buffer: keep last HISTORY_SIZE scores
+  const scores = [...state.recentScores, score];
+  if (scores.length > HISTORY_SIZE) scores.shift();
+
+  // Compute variance
+  const variance = computeVariance(scores);
+
+  // Check surge conditions
+  const farkleCount = scores.filter(s => s === 0).length;
+  const hasHighScore = scores.some(s => s >= MIN_HIGH_SCORE);
+  const shouldSurge = farkleCount >= MIN_FARKLES_FOR_SURGE &&
+                      hasHighScore &&
+                      variance >= VARIANCE_THRESHOLD;
+
+  // Activate or maintain surge
+  let surgeActive = state.surgeActive;
+  let surgeExpiresAt = state.surgeExpiresAt;
+
+  if (shouldSurge && !state.surgeActive) {
+    surgeActive = true;
+    surgeExpiresAt = now + SURGE_DURATION_MS;
+  }
+
+  // Check expiry
+  if (surgeActive && now >= surgeExpiresAt) {
+    surgeActive = false;
+    surgeExpiresAt = 0;
+  }
+
+  return {
+    recentScores: scores,
+    variance,
+    standardDeviation: Math.sqrt(variance),
+    surgeActive,
+    surgeExpiresAt,
+    juiceAmplifier: surgeActive ? 2.0 : 1.0,
+  };
+}
+
+/**
+ * Tick the volatility state (call per frame or per event).
+ */
+export function tickVolatility(
+  state: VolatilityState,
+  now: number = Date.now(),
+): VolatilityState {
+  if (state.surgeActive && now >= state.surgeExpiresAt) {
+    return {
+      ...state,
+      surgeActive: false,
+      surgeExpiresAt: 0,
+      juiceAmplifier: 1.0,
+    };
+  }
+  return state;
+}
+
+/**
+ * Get oscilloscope visual parameters based on volatility.
+ */
+export function getOscilloscopeParams(state: VolatilityState): OscilloscopeParams {
+  const normalizedVariance = Math.min(1.0, state.variance / (VARIANCE_THRESHOLD * 2));
+
+  if (state.surgeActive) {
+    return {
+      color: interpolateColor('#00ffff', '#ff00ff', normalizedVariance),
+      amplitude: 1.0 + normalizedVariance * 2.0,
+      frequency: 1.0 + normalizedVariance * 3.0,
+      waveformDistortion: normalizedVariance * 0.8,
+      glowIntensity: 0.8 + normalizedVariance * 0.2,
+      particleDensity: 2.0,
+    };
+  }
+
+  return {
+    color: interpolateColor('#0066cc', '#00ffff', normalizedVariance),
+    amplitude: 0.3 + normalizedVariance * 0.7,
+    frequency: 0.5 + normalizedVariance * 1.5,
+    waveformDistortion: normalizedVariance * 0.3,
+    glowIntensity: 0.2 + normalizedVariance * 0.4,
+    particleDensity: 0.5 + normalizedVariance * 0.5,
+  };
+}
+
+// ── Cascade System (Chain-Reaction Juice) ─────────────────────────────────────
+
+export interface CascadeEvent {
+  depth: number;
+  scorePerLevel: number[];
+  shakeIntensity: number;
+  particleMultiplier: number;
+  audioStemIntensity: number;
+}
+
+/**
+ * Compute cascade visual/audio parameters from a chain reaction.
+ * Each level doubles the intensity.
+ */
+export function computeCascade(
+  chainDepth: number,
+  baseScore: number,
+  volatilityAmplifier: number,
+): CascadeEvent {
+  const scorePerLevel: number[] = [];
+  for (let i = 0; i < chainDepth; i++) {
+    scorePerLevel.push(Math.round(baseScore * Math.pow(1.5, i)));
+  }
+
+  return {
+    depth: chainDepth,
+    scorePerLevel,
+    shakeIntensity: Math.min(1.0, chainDepth * 0.15 * volatilityAmplifier),
+    particleMultiplier: Math.pow(2, chainDepth - 1) * volatilityAmplifier,
+    audioStemIntensity: Math.min(1.0, chainDepth * 0.2 * volatilityAmplifier),
+  };
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function computeVariance(scores: number[]): number {
+  if (scores.length < 2) return 0;
+  const mean = scores.reduce((a, b) => a + b, 0) / scores.length;
+  const sumSquaredDiffs = scores.reduce((sum, s) => sum + (s - mean) ** 2, 0);
+  return sumSquaredDiffs / scores.length;
+}
+
+function interpolateColor(from: string, to: string, t: number): string {
+  const f = hexToRgb(from);
+  const tt = hexToRgb(to);
+  const r = Math.round(f.r + (tt.r - f.r) * t);
+  const g = Math.round(f.g + (tt.g - f.g) * t);
+  const b = Math.round(f.b + (tt.b - f.b) * t);
+  return `rgb(${r},${g},${b})`;
+}
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } {
+  const h = hex.replace('#', '');
+  return {
+    r: parseInt(h.substring(0, 2), 16),
+    g: parseInt(h.substring(2, 4), 16),
+    b: parseInt(h.substring(4, 6), 16),
+  };
+}
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+export interface OscilloscopeParams {
+  color: string;
+  amplitude: number;
+  frequency: number;
+  waveformDistortion: number;
+  glowIntensity: number;
+  particleDensity: number;
+}
+// ─────────────────────────────────────────────────────
+// DREAM-CORE — Genre #7: FIGHTING (Combo Breaker)
+// 250ms reversal window during Farkle animation.
+// Spend a Precision Strike token to reverse the Farkle.
+// ─────────────────────────────────────────────────────
+
+import type { ComboBreakerState, PrecisionStrikeState } from '../types';
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+const REVERSAL_WINDOW_MS = 250;    // window after Farkle animation starts
+const COOLDOWN_MS = 5000;          // cooldown between breakers
+
+// ── Factory ───────────────────────────────────────────────────────────────────
+export function createComboBreakerState(): ComboBreakerState {
+  return {
+    windowActive: false,
+    windowExpiresAt: 0,
+    tokenCost: 1,
+  };
+}
+
+// ── Core Logic ────────────────────────────────────────────────────────────────
+
+/**
+ * Called when a Farkle occurs. Opens the reversal window.
+ */
+export function openReversalWindow(
+  state: ComboBreakerState,
+  now: number = Date.now(),
+): ComboBreakerState {
+  return {
+    ...state,
+    windowActive: true,
+    windowExpiresAt: now + REVERSAL_WINDOW_MS,
+  };
+}
+
+/**
+ * Attempt to use the Combo Breaker.
+ * Requires an active window and a Precision Strike token.
+ */
+export function attemptComboBreaker(
+  breakerState: ComboBreakerState,
+  precisionState: PrecisionStrikeState,
+  now: number = Date.now(),
+): {
+  breakerState: ComboBreakerState;
+  precisionState: PrecisionStrikeState;
+  success: boolean;
+  commands: ComboBreakerCommand[];
+} {
+  // Check window
+  if (!breakerState.windowActive || now > breakerState.windowExpiresAt) {
+    return {
+      breakerState: { ...breakerState, windowActive: false },
+      precisionState,
+      success: false,
+      commands: [{ type: 'WINDOW_EXPIRED_FLASH' }],
+    };
+  }
+
+  // Check token
+  if (precisionState.tokens < breakerState.tokenCost) {
+    return {
+      breakerState,
+      precisionState,
+      success: false,
+      commands: [{ type: 'NO_TOKENS_SHAKE' }],
+    };
+  }
+
+  // SUCCESS: Reverse the Farkle
+  const commands: ComboBreakerCommand[] = [
+    { type: 'REVERSAL_EXPLOSION', color: '#ff3333', durationMs: 400 },
+    { type: 'SCREEN_FLASH', color: 'white', durationMs: 100 },
+    { type: 'AUDIO_STING', note: 'REVERSAL' },
+    { type: 'CAMERA_ZOOM', targetScale: 1.1, durationMs: 300 },
+  ];
+
+  return {
+    breakerState: {
+      ...breakerState,
+      windowActive: false,
+    },
+    precisionState: {
+      ...precisionState,
+      tokens: precisionState.tokens - breakerState.tokenCost,
+    },
+    success: true,
+    commands,
+  };
+}
+
+/**
+ * Tick the combo breaker window. Auto-closes when expired.
+ */
+export function tickComboBreaker(
+  state: ComboBreakerState,
+  now: number = Date.now(),
+): ComboBreakerState {
+  if (state.windowActive && now >= state.windowExpiresAt) {
+    return { ...state, windowActive: false };
+  }
+  return state;
+}
+
+/**
+ * Get the visual state for the reversal prompt UI.
+ */
+export function getReversalPromptVisuals(state: ComboBreakerState, now: number): ReversalVisuals | null {
+  if (!state.windowActive) return null;
+
+  const remaining = Math.max(0, state.windowExpiresAt - now);
+  const progress = 1.0 - remaining / REVERSAL_WINDOW_MS;
+
+  return {
+    visible: true,
+    timeRemainingMs: remaining,
+    progressBar: progress,
+    urgencyColor: progress > 0.7 ? '#ff0000' : progress > 0.4 ? '#ffaa00' : '#00ff00',
+    pulseSpeed: 1.0 + progress * 4.0,
+    text: 'BREAK IT!',
+  };
+}
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+export type ComboBreakerCommand =
+  | { type: 'REVERSAL_EXPLOSION'; color: string; durationMs: number }
+  | { type: 'SCREEN_FLASH'; color: string; durationMs: number }
+  | { type: 'AUDIO_STING'; note: string }
+  | { type: 'CAMERA_ZOOM'; targetScale: number; durationMs: number }
+  | { type: 'WINDOW_EXPIRED_FLASH' }
+  | { type: 'NO_TOKENS_SHAKE' };
+
+export interface ReversalVisuals {
+  visible: boolean;
+  timeRemainingMs: number;
+  progressBar: number;
+  urgencyColor: string;
+  pulseSpeed: number;
+  text: string;
+}
+// ─────────────────────────────────────────────────────
+// DREAM-CORE — Genre #1: FPS (Precision Strike)
+// Aggressive recovery tokens earned by continuing past 500 unbanked.
+// ─────────────────────────────────────────────────────
+
+import type { PrecisionStrikeState } from '../types';
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+const COURAGE_THRESHOLD = 500;       // unbanked threshold for token earn
+const MAX_TOKENS = 5;                // maximum stored tokens
+const TOKEN_EARN_COOLDOWN_MS = 5000; // prevent rapid farming
+
+// ── Factory ───────────────────────────────────────────────────────────────────
+export function createPrecisionStrikeState(): PrecisionStrikeState {
+  return {
+    tokens: 0,
+    lastBankWasCourageous: false,
+  };
+}
+
+// ── Core Logic ────────────────────────────────────────────────────────────────
+
+/**
+ * Evaluate when a player commits a chain while unbanked is above the courage threshold.
+ * Awards a Precision Strike token.
+ */
+export function evaluateCourage(
+  state: PrecisionStrikeState,
+  unbanked: number,
+  chainScore: number,
+): PrecisionStrikeState {
+  const courageous = unbanked >= COURAGE_THRESHOLD && chainScore > 0;
+
+  if (courageous && state.tokens < MAX_TOKENS) {
+    return {
+      tokens: state.tokens + 1,
+      lastBankWasCourageous: true,
+    };
+  }
+
+  return {
+    ...state,
+    lastBankWasCourageous: courageous,
+  };
+}
+
+/**
+ * Spend a Precision Strike token for a Combo Breaker reversal.
+ * Returns updated state and whether the spend was successful.
+ */
+export function spendToken(state: PrecisionStrikeState): {
+  state: PrecisionStrikeState;
+  spent: boolean;
+} {
+  if (state.tokens <= 0) {
+    return { state, spent: false };
+  }
+
+  return {
+    state: { ...state, tokens: state.tokens - 1 },
+    spent: true,
+  };
+}
+
+/**
+ * Get the visual state for the token display.
+ */
+export function getTokenVisuals(state: PrecisionStrikeState): TokenVisual[] {
+  const visuals: TokenVisual[] = [];
+  for (let i = 0; i < MAX_TOKENS; i++) {
+    visuals.push({
+      index: i,
+      filled: i < state.tokens,
+      glowing: state.lastBankWasCourageous && i === state.tokens - 1,
+      color: i < state.tokens ? '#ff3333' : '#331111',
+    });
+  }
+  return visuals;
+}
+
+export interface TokenVisual {
+  index: number;
+  filled: boolean;
+  glowing: boolean;
+  color: string;
+}
+// ─────────────────────────────────────────────────────
+// DREAM-CORE — Genre #14: HORROR (Heartbeat LFO)
+// PRIORITY: HIGHEST (Genre Hierarchy Position 1)
+// The emotional baseline of the entire system.
+// ─────────────────────────────────────────────────────
+
+import type { HeartbeatState } from '../types';
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+const HEARTBEAT_BPM = 140;
+const SUB_BASS_FREQ = 40;         // Hz — chest-tightening frequency
+const MAX_REVEAL_DELAY = 320;     // ms
+const NORMAL_REVEAL_DELAY = 80;   // ms
+const FLATLINE_DURATION = 600;    // ms
+const VIGNETTE_RAMP_SPEED = 0.15; // per frame (0–1 in ~7 frames)
+
+// ── Factory ───────────────────────────────────────────────────────────────────
+export function createHeartbeatState(): HeartbeatState {
+  return {
+    active: false,
+    nonScoringDice: 0,
+    lfoFrequency: SUB_BASS_FREQ,
+    lfoBpm: HEARTBEAT_BPM,
+    bpm: HEARTBEAT_BPM,
+    stemsMuted: false,
+    vignetteIntensity: 0,
+    revealDelayMs: NORMAL_REVEAL_DELAY,
+    flatlineActive: false,
+    flatlined: false,
+  };
+}
+
+// ── Core Logic ────────────────────────────────────────────────────────────────
+
+/**
+ * Evaluate whether the Heartbeat Protocol should activate.
+ * Triggers when player is ONE die away from a Farkle (5 of 6 non-scoring).
+ */
+export function evaluateHeartbeat(
+  totalDice: number,
+  scoringDice: number,
+  state: HeartbeatState,
+): HeartbeatState {
+  const nonScoring = totalDice - scoringDice;
+  const shouldActivate = totalDice >= 2 && nonScoring >= totalDice - 1;
+
+  if (shouldActivate && !state.active) {
+    // ENTER HEARTBEAT
+    return {
+      ...state,
+      active: true,
+      nonScoringDice: nonScoring,
+      stemsMuted: true,
+      vignetteIntensity: 0.3,  // immediate partial vignette
+      revealDelayMs: MAX_REVEAL_DELAY,
+      flatlineActive: false,
+    };
+  }
+
+  if (!shouldActivate && state.active) {
+    // EXIT HEARTBEAT (survived)
+    return {
+      ...state,
+      active: false,
+      nonScoringDice: 0,
+      stemsMuted: false,
+      vignetteIntensity: 0,
+      revealDelayMs: NORMAL_REVEAL_DELAY,
+      flatlineActive: false,
+    };
+  }
+
+  return { ...state, nonScoringDice: nonScoring };
+}
+
+/**
+ * Called when final die is revealed during Heartbeat.
+ * Returns audio/visual commands for the resolution.
+ */
+export function resolveHeartbeat(
+  survived: boolean,
+  state: HeartbeatState,
+): { state: HeartbeatState; commands: HeartbeatCommand[] } {
+  const commands: HeartbeatCommand[] = [];
+
+  if (survived) {
+    // SURVIVAL: Explosion of relief
+    commands.push(
+      { type: 'RESTORE_STEMS', fadeInMs: 200 },
+      { type: 'PLAY_HARMONIC_FIFTH', frequency: SUB_BASS_FREQ * 1.5 },
+      { type: 'PARTICLE_BURST', color: 'gold', intensity: 1.0 },
+      { type: 'VIGNETTE_RELEASE', durationMs: 400 },
+      { type: 'SCREEN_SHAKE', intensity: 0.3, durationMs: 150 },
+    );
+    return {
+      state: createHeartbeatState(),
+      commands,
+    };
+  } else {
+    // FARKLE DURING HEARTBEAT: Maximum dread payoff
+    commands.push(
+      { type: 'FLATLINE_TONE', frequency: SUB_BASS_FREQ * 1.059 }, // minor second
+      { type: 'OSCILLOSCOPE_FLATLINE', durationMs: FLATLINE_DURATION },
+      { type: 'SCREEN_SHAKE', intensity: 0.8, durationMs: FLATLINE_DURATION },
+      { type: 'VIGNETTE_FLASH', color: 'red', durationMs: 300 },
+    );
+    return {
+      state: { ...createHeartbeatState(), flatlineActive: true },
+      commands,
+    };
+  }
+}
+
+/**
+ * Per-frame vignette intensity update during active Heartbeat.
+ */
+export function tickHeartbeatVignette(state: HeartbeatState, deltaMs: number): HeartbeatState {
+  if (!state.active) return state;
+
+  const targetIntensity = 0.85; // near-black edges
+  const step = VIGNETTE_RAMP_SPEED * (deltaMs / 16.67);
+  const newIntensity = Math.min(targetIntensity, state.vignetteIntensity + step);
+
+  return { ...state, vignetteIntensity: newIntensity };
+}
+
+// ── Audio Command Types ───────────────────────────────────────────────────────
+
+export type HeartbeatCommand =
+  | { type: 'RESTORE_STEMS'; fadeInMs: number }
+  | { type: 'PLAY_HARMONIC_FIFTH'; frequency: number }
+  | { type: 'PARTICLE_BURST'; color: string; intensity: number }
+  | { type: 'VIGNETTE_RELEASE'; durationMs: number }
+  | { type: 'VIGNETTE_FLASH'; color: string; durationMs: number }
+  | { type: 'SCREEN_SHAKE'; intensity: number; durationMs: number }
+  | { type: 'FLATLINE_TONE'; frequency: number }
+  | { type: 'OSCILLOSCOPE_FLATLINE'; durationMs: number };
+
+// ── Audio Engine Integration ──────────────────────────────────────────────────
+
+/**
+ * Generate Web Audio API parameters for the Heartbeat sub-bass pulse.
+ */
+export function getHeartbeatAudioParams(state: HeartbeatState): HeartbeatAudioParams | null {
+  if (!state.active) return null;
+
+  const beatIntervalMs = (60 / state.lfoBpm) * 1000;
+
+  return {
+    oscillatorFrequency: state.lfoFrequency,
+    oscillatorType: 'sine' as OscillatorType,
+    gainEnvelope: {
+      attack: 0.01,
+      sustain: beatIntervalMs * 0.3 / 1000,
+      release: beatIntervalMs * 0.5 / 1000,
+      peak: 0.6,
+    },
+    beatIntervalMs,
+    muteAllStems: state.stemsMuted,
+    filterCutoff: 120,   // Low-pass everything above 120Hz
+    filterQ: 8,          // Resonant peak for chest vibration
+  };
+}
+
+export interface HeartbeatAudioParams {
+  oscillatorFrequency: number;
+  oscillatorType: OscillatorType;
+  gainEnvelope: {
+    attack: number;
+    sustain: number;
+    release: number;
+    peak: number;
+  };
+  beatIntervalMs: number;
+  muteAllStems: boolean;
+  filterCutoff: number;
+  filterQ: number;
+}
+// ─────────────────────────────────────────────────────
+// DREAM-CORE — Genre Module Barrel Export
+// All 20 genre systems, ordered by hierarchy dominance.
+// ─────────────────────────────────────────────────────
+
+// Tier 1: HORROR (dominant)
+export * from './horror';
+
+// Tier 2: ROGUELIKE
+export * from './roguelike';
+
+// Tier 3: CASINO
+export * from './casino';
+
+// Tier 4: MATCH-3
+export * from './match3';
+
+// Tier 5: RHYTHM
+export * from './rhythm';
+
+// Tier 6–20: Supporting genres
+export * from './fps';
+export * from './metroidvania';
+export * from './battle-royale';
+export * from './fighting';
+export * from './rpg';
+export * from './platformer';
+export * from './stealth';
+export * from './racing';
+export * from './strategy';
+export * from './simulation';
+export * from './sports';
+export * from './adventure';
+export * from './sandbox';
+export * from './moba';
+export * from './abstract';
+// ─────────────────────────────────────────────────────
+// DREAM-CORE — Genre #5: MATCH-3 (Phantasmagoric Chain)
+// PRIORITY: 4th (Genre Hierarchy Position 4)
+// Grid neighbor-detection and chain-clears.
+// ─────────────────────────────────────────────────────
+
+import type { ChainReaction, SealedTile } from '../types';
+import type { DieFace } from '../../farkle-shared/src/types';
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+const GRID_COLS = 10;       // 10×6 = 60 tiles default
+const GRID_ROWS = 6;
+const MIN_MATCH_LENGTH = 3; // minimum chain for a match
+const CHAIN_SCORE_MULTIPLIER = 1.5; // each depth level multiplies
+
+// ── Grid Coordinate Utilities ─────────────────────────────────────────────────
+
+export function tileToGrid(tileIndex: number): { row: number; col: number } {
+  return {
+    row: Math.floor(tileIndex / GRID_COLS),
+    col: tileIndex % GRID_COLS,
+  };
+}
+
+export function gridToTile(row: number, col: number): number {
+  return row * GRID_COLS + col;
+}
+
+export function isValidTile(row: number, col: number): boolean {
+  return row >= 0 && row < GRID_ROWS && col >= 0 && col < GRID_COLS;
+}
+
+/**
+ * Get orthogonal neighbors (up, down, left, right) of a tile.
+ */
+export function getNeighbors(tileIndex: number): number[] {
+  const { row, col } = tileToGrid(tileIndex);
+  const neighbors: number[] = [];
+
+  const offsets = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+  for (const [dr, dc] of offsets) {
+    const nr = row + dr!;
+    const nc = col + dc!;
+    if (isValidTile(nr, nc)) {
+      neighbors.push(gridToTile(nr, nc));
+    }
+  }
+
+  return neighbors;
+}
+
+/**
+ * Get all 8 surrounding neighbors (including diagonals).
+ */
+export function getNeighbors8(tileIndex: number): number[] {
+  const { row, col } = tileToGrid(tileIndex);
+  const neighbors: number[] = [];
+
+  for (let dr = -1; dr <= 1; dr++) {
+    for (let dc = -1; dc <= 1; dc++) {
+      if (dr === 0 && dc === 0) continue;
+      const nr = row + dr;
+      const nc = col + dc;
+      if (isValidTile(nr, nc)) {
+        neighbors.push(gridToTile(nr, nc));
+      }
+    }
+  }
+
+  return neighbors;
+}
+
+// ── Match Detection ───────────────────────────────────────────────────────────
+
+export interface TileState {
+  index: number;
+  face: DieFace | null;
+  occupied: boolean;
+  scorched: boolean;    // from Closing Circle
+  sealed: boolean;      // from Metroidvania
+}
+
+/**
+ * Detect horizontal matches on the grid (3+ same face in a row).
+ */
+export function detectHorizontalMatches(tiles: TileState[]): number[][] {
+  const matches: number[][] = [];
+
+  for (let row = 0; row < GRID_ROWS; row++) {
+    let run: number[] = [];
+    let currentFace: DieFace | null = null;
+
+    for (let col = 0; col < GRID_COLS; col++) {
+      const tile = tiles[gridToTile(row, col)];
+      if (!tile || !tile.occupied || tile.face === null || tile.scorched) {
+        if (run.length >= MIN_MATCH_LENGTH) matches.push([...run]);
+        run = [];
+        currentFace = null;
+        continue;
+      }
+
+      if (tile.face === currentFace) {
+        run.push(tile.index);
+      } else {
+        if (run.length >= MIN_MATCH_LENGTH) matches.push([...run]);
+        run = [tile.index];
+        currentFace = tile.face;
+      }
+    }
+    if (run.length >= MIN_MATCH_LENGTH) matches.push([...run]);
+  }
+
+  return matches;
+}
+
+/**
+ * Detect vertical matches on the grid (3+ same face in a column).
+ */
+export function detectVerticalMatches(tiles: TileState[]): number[][] {
+  const matches: number[][] = [];
+
+  for (let col = 0; col < GRID_COLS; col++) {
+    let run: number[] = [];
+    let currentFace: DieFace | null = null;
+
+    for (let row = 0; row < GRID_ROWS; row++) {
+      const tile = tiles[gridToTile(row, col)];
+      if (!tile || !tile.occupied || tile.face === null || tile.scorched) {
+        if (run.length >= MIN_MATCH_LENGTH) matches.push([...run]);
+        run = [];
+        currentFace = null;
+        continue;
+      }
+
+      if (tile.face === currentFace) {
+        run.push(tile.index);
+      } else {
+        if (run.length >= MIN_MATCH_LENGTH) matches.push([...run]);
+        run = [tile.index];
+        currentFace = tile.face;
+      }
+    }
+    if (run.length >= MIN_MATCH_LENGTH) matches.push([...run]);
+  }
+
+  return matches;
+}
+
+/**
+ * Detect "Small Straight" patterns (1-2-3-4 or 2-3-4-5 or 3-4-5-6)
+ * in horizontal or vertical lines.
+ */
+export function detectStraightPatterns(tiles: TileState[]): number[][] {
+  const straights: number[][] = [];
+
+  // Check horizontal straights
+  for (let row = 0; row < GRID_ROWS; row++) {
+    for (let startCol = 0; startCol <= GRID_COLS - 4; startCol++) {
+      const indices: number[] = [];
+      const faces: DieFace[] = [];
+
+      for (let col = startCol; col < startCol + 4; col++) {
+        const tile = tiles[gridToTile(row, col)];
+        if (!tile || !tile.occupied || tile.face === null) break;
+        indices.push(tile.index);
+        faces.push(tile.face);
+      }
+
+      if (faces.length === 4 && isConsecutive(faces)) {
+        straights.push(indices);
+      }
+    }
+  }
+
+  // Check vertical straights
+  for (let col = 0; col < GRID_COLS; col++) {
+    for (let startRow = 0; startRow <= GRID_ROWS - 4; startRow++) {
+      const indices: number[] = [];
+      const faces: DieFace[] = [];
+
+      for (let row = startRow; row < startRow + 4; row++) {
+        const tile = tiles[gridToTile(row, col)];
+        if (!tile || !tile.occupied || tile.face === null) break;
+        indices.push(tile.index);
+        faces.push(tile.face);
+      }
+
+      if (faces.length === 4 && isConsecutive(faces)) {
+        straights.push(indices);
+      }
+    }
+  }
+
+  return straights;
+}
+
+function isConsecutive(faces: DieFace[]): boolean {
+  const sorted = [...faces].sort((a, b) => a - b);
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i]! - sorted[i - 1]! !== 1) return false;
+  }
+  return true;
+}
+
+// ── Chain Reaction (Phantasmagoric) ───────────────────────────────────────────
+
+/**
+ * BFS chain reaction from matched tiles.
+ * Each level: check neighbors for additional matches.
+ * Unseals any Metroidvania tiles caught in the blast.
+ */
+export function executeChainReaction(
+  matchedTiles: number[],
+  allTiles: TileState[],
+  sealedTiles: SealedTile[],
+  maxDepth: number = 5,
+): ChainReaction {
+  const affected = new Set<number>(matchedTiles);
+  const unsealed: number[] = [];
+  let depth = 0;
+  let frontier = [...matchedTiles];
+
+  while (frontier.length > 0 && depth < maxDepth) {
+    depth++;
+    const nextFrontier: number[] = [];
+
+    for (const tileIdx of frontier) {
+      const neighbors = getNeighbors(tileIdx);
+      for (const neighborIdx of neighbors) {
+        if (affected.has(neighborIdx)) continue;
+
+        const tile = allTiles[neighborIdx];
+        if (!tile || !tile.occupied) continue;
+
+        // Check if this neighbor would form a new match
+        const tileNeighbors = getNeighbors(neighborIdx)
+          .filter(n => affected.has(n))
+          .map(n => allTiles[n])
+          .filter((t): t is TileState => t !== undefined && t.face !== null);
+
+        if (tileNeighbors.some(t => t.face === tile.face)) {
+          affected.add(neighborIdx);
+          nextFrontier.push(neighborIdx);
+        }
+      }
+    }
+
+    // Check for sealed tiles caught in the blast
+    for (const sealedTile of sealedTiles) {
+      if (sealedTile.sealed && affected.has(sealedTile.tileIndex)) {
+        unsealed.push(sealedTile.tileIndex);
+      }
+    }
+
+    frontier = nextFrontier;
+  }
+
+  return {
+    chainDepth: depth,
+    tilesAffected: [...affected],
+    unsealsTriggered: unsealed,
+    visualIntensity: Math.min(5.0, depth * 1.0),
+  };
+}
+
+// ── Board Clear ───────────────────────────────────────────────────────────────
+
+/**
+ * Perform a board-clear triggered by a Straight pattern.
+ * Clears all tiles in the matched rows/columns.
+ */
+export function executeBoardClear(
+  straightTiles: number[],
+  allTiles: TileState[],
+): { clearedTiles: number[]; isFullClear: boolean } {
+  // Determine if the straight is horizontal or vertical
+  const positions = straightTiles.map(t => tileToGrid(t));
+  const isHorizontal = positions.every(p => p.row === positions[0]!.row);
+
+  const cleared = new Set<number>(straightTiles);
+
+  if (isHorizontal) {
+    // Clear entire row
+    const row = positions[0]!.row;
+    for (let col = 0; col < GRID_COLS; col++) {
+      cleared.add(gridToTile(row, col));
+    }
+  } else {
+    // Clear entire column
+    const col = positions[0]!.col;
+    for (let row = 0; row < GRID_ROWS; row++) {
+      cleared.add(gridToTile(row, col));
+    }
+  }
+
+  const clearedTiles = [...cleared].filter(idx => {
+    const tile = allTiles[idx];
+    return tile && tile.occupied && !tile.scorched;
+  });
+
+  return {
+    clearedTiles,
+    isFullClear: clearedTiles.length >= 55, // ~92% of tiles
+  };
+}
+// ─────────────────────────────────────────────────────
+// DREAM-CORE — Genre #2: METROIDVANIA (Ability-Gated Tiles)
+// Sealed tiles on the 60-tile grid unlocked by rhythmic achievements.
+// ─────────────────────────────────────────────────────
+
+import type { SealedTile, SealCondition, SealReward, BeatAccuracy } from '../types';
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+const TOTAL_TILES = 60;
+const SEALED_TILE_COUNT = 12;   // 20% of the grid is sealed
+const GLOW_PULSE_SPEED = 0.02;  // intensity per frame when near-unlock
+
+// ── Factory ───────────────────────────────────────────────────────────────────
+
+/**
+ * Generate sealed tiles for a match. Positions are distributed evenly.
+ */
+export function generateSealedTiles(
+  rngFn: () => number,
+  count: number = SEALED_TILE_COUNT,
+): SealedTile[] {
+  const conditions = generateConditions(rngFn, count);
+  const rewards = generateRewards(rngFn, count);
+
+  // Distribute positions evenly across the grid
+  const spacing = Math.floor(TOTAL_TILES / count);
+  const positions: number[] = [];
+  for (let i = 0; i < count; i++) {
+    const base = i * spacing;
+    const offset = Math.floor(rngFn() * spacing);
+    positions.push(Math.min(TOTAL_TILES - 1, base + offset));
+  }
+
+  return positions.map((pos, i) => ({
+    tileIndex: pos,
+    condition: conditions[i]!,
+    reward: rewards[i]!,
+    sealed: true,
+    glowIntensity: 0,
+  }));
+}
+
+function generateConditions(rngFn: () => number, count: number): SealCondition[] {
+  const templates: SealCondition[] = [
+    { type: 'consecutive_on_beat', count: 3 },
+    { type: 'consecutive_on_beat', count: 5 },
+    { type: 'straight_4plus' },
+    { type: 'exact_bank', target: 1000 },
+    { type: 'exact_bank', target: 2500 },
+    { type: 'exact_bank', target: 5000 },
+    { type: 'streak', count: 3 },
+    { type: 'streak', count: 5 },
+  ];
+
+  const conditions: SealCondition[] = [];
+  for (let i = 0; i < count; i++) {
+    conditions.push(templates[Math.floor(rngFn() * templates.length)]!);
+  }
+  return conditions;
+}
+
+function generateRewards(rngFn: () => number, count: number): SealReward[] {
+  const templates: SealReward[] = [
+    { type: 'multiplier', value: 1.5 },
+    { type: 'multiplier', value: 2.0 },
+    { type: 'free_reroll' },
+    { type: 'wildcard_die' },
+    { type: 'rule_shard', shardId: 'EVENS_ARE_ODDS' },
+    { type: 'die_shard' },
+    { type: 'acoustic_decoration', decorationId: 'CATHEDRAL_REVERB' },
+    { type: 'acoustic_decoration', decorationId: 'VINYL_CRACKLE' },
+  ];
+
+  const rewards: SealReward[] = [];
+  for (let i = 0; i < count; i++) {
+    rewards.push(templates[Math.floor(rngFn() * templates.length)]!);
+  }
+  return rewards;
+}
+
+// ── Core Logic ────────────────────────────────────────────────────────────────
+
+/**
+ * Check if a sealed tile's condition has been met.
+ */
+export function checkSealCondition(
+  condition: SealCondition,
+  context: SealCheckContext,
+): boolean {
+  switch (condition.type) {
+    case 'consecutive_on_beat':
+      return context.consecutiveOnBeat >= condition.count;
+
+    case 'straight_4plus':
+      return context.hasStraight;
+
+    case 'exact_bank':
+      // Allow ±10% tolerance
+      const tolerance = condition.target * 0.1;
+      return Math.abs(context.lastBankAmount - condition.target) <= tolerance;
+
+    case 'streak':
+      return context.bankStreak >= condition.count;
+
+    default:
+      return false;
+  }
+}
+
+/**
+ * Attempt to unseal tiles based on current game context.
+ * Returns updated sealed tiles and any granted rewards.
+ */
+export function attemptUnseal(
+  sealedTiles: SealedTile[],
+  context: SealCheckContext,
+): {
+  tiles: SealedTile[];
+  grantedRewards: SealReward[];
+  unsealed: number[];
+} {
+  const grantedRewards: SealReward[] = [];
+  const unsealed: number[] = [];
+
+  const updatedTiles = sealedTiles.map(tile => {
+    if (!tile.sealed) return tile;
+
+    if (checkSealCondition(tile.condition, context)) {
+      grantedRewards.push(tile.reward);
+      unsealed.push(tile.tileIndex);
+      return {
+        ...tile,
+        sealed: false,
+        glowIntensity: 1.0, // flash on unseal
+      };
+    }
+
+    // Update glow intensity (pulse when near-unlock)
+    const progress = estimateUnlockProgress(tile.condition, context);
+    return {
+      ...tile,
+      glowIntensity: progress * 0.8, // max 0.8 glow until full unseal
+    };
+  });
+
+  return { tiles: updatedTiles, grantedRewards, unsealed };
+}
+
+/**
+ * Estimate how close the player is to unlocking a seal (0.0–1.0).
+ */
+function estimateUnlockProgress(
+  condition: SealCondition,
+  context: SealCheckContext,
+): number {
+  switch (condition.type) {
+    case 'consecutive_on_beat':
+      return Math.min(1.0, context.consecutiveOnBeat / condition.count);
+    case 'straight_4plus':
+      return context.hasStraight ? 1.0 : context.longestRun / 4;
+    case 'exact_bank':
+      return Math.min(1.0, context.lastBankAmount / condition.target);
+    case 'streak':
+      return Math.min(1.0, context.bankStreak / condition.count);
+    default:
+      return 0;
+  }
+}
+
+/**
+ * Tick glow pulse animation for sealed tiles.
+ */
+export function tickSealGlow(
+  tiles: SealedTile[],
+  deltaMs: number,
+): SealedTile[] {
+  return tiles.map(tile => {
+    if (!tile.sealed) {
+      // Fade out glow after unseal
+      return {
+        ...tile,
+        glowIntensity: Math.max(0, tile.glowIntensity - GLOW_PULSE_SPEED * (deltaMs / 16.67)),
+      };
+    }
+    return tile;
+  });
+}
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+export interface SealCheckContext {
+  consecutiveOnBeat: number;
+  hasStraight: boolean;
+  longestRun: number;
+  lastBankAmount: number;
+  bankStreak: number;
+}
+// ─────────────────────────────────────────────────────
+// DREAM-CORE — Genre #19: MOBA (The Ultimate)
+// Shared team meter; at 100 charge, the next roll receives a cinematic
+// "ultimate" wrapper only. It must never force dice, reroll CSPRNG output,
+// or guarantee a non-Farkle outcome.
+// [CODERABBIT AUDIT]: The former reroll loop is intentionally disabled.
+// ─────────────────────────────────────────────────────
+
+import type { UltimateState } from '../types';
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+const MAX_CHARGE = 100;
+const CHARGE_PER_100_BANKED = 1;     // 1 charge per 100 points banked
+const FARKLE_CHARGE_LOSS = 15;        // lose 15 charge on Farkle
+const MAX_SERVER_REROLLS = 3;         // cap for server-side re-roll loop
+
+// ── Factory ───────────────────────────────────────────────────────────────────
+export function createUltimateState(): UltimateState {
+  return {
+    charge: 0,
+    chargePerBank: CHARGE_PER_100_BANKED,
+    chargeLossOnFarkle: FARKLE_CHARGE_LOSS,
+    ready: false,
+    fired: false,
+    maxRerolls: MAX_SERVER_REROLLS,
+  };
+}
+
+// ── Core Logic ────────────────────────────────────────────────────────────────
+
+/**
+ * Add charge based on banked score.
+ * 1 charge per 100 points banked.
+ */
+export function addCharge(
+  state: UltimateState,
+  bankedScore: number,
+  chargeMultiplier: number = 1.0,
+): UltimateState {
+  if (state.fired) return state; // can't charge after firing
+
+  const chargeGain = Math.floor((bankedScore / 100) * state.chargePerBank * chargeMultiplier);
+  const newCharge = Math.min(MAX_CHARGE, state.charge + chargeGain);
+
+  return {
+    ...state,
+    charge: newCharge,
+    ready: newCharge >= MAX_CHARGE,
+  };
+}
+
+/**
+ * Lose charge on Farkle.
+ */
+export function loseChargeOnFarkle(state: UltimateState): UltimateState {
+  const newCharge = Math.max(0, state.charge - state.chargeLossOnFarkle);
+
+  return {
+    ...state,
+    charge: newCharge,
+    ready: newCharge >= MAX_CHARGE,
+  };
+}
+
+/**
+ * Fire the Ultimate — arms the next roll's cinematic/audio wrapper.
+ *
+ * This does not modify the Sacred Core scorer and does not change the dice
+ * stream. The actual roll must still come from the authoritative CSPRNG path.
+ */
+export function fireUltimate(state: UltimateState): {
+  state: UltimateState;
+  fired: boolean;
+} {
+  if (!state.ready || state.fired) {
+    return { state, fired: false };
+  }
+
+  return {
+    state: {
+      ...state,
+      charge: 0,
+      ready: false,
+      fired: true,
+    },
+    fired: true,
+  };
+}
+
+export interface UltimateRerollAuditResult {
+  faces: number[];
+  attempts: number;
+  succeeded: boolean;
+  blocked: true;
+  score: number;
+  reason: 'RTP_WRAPPER_ONLY_NO_REROLL';
+}
+
+/**
+ * Audit-locked compatibility shim for the rejected Ultimate reroll mechanic.
+ *
+ * The old design repeatedly called rollFn until a non-Farkle appeared. That
+ * changes outcome distribution and violates RTP/CSPRNG integrity. Keep this
+ * export so integration code cannot accidentally reintroduce the loop: it
+ * consumes exactly one authoritative roll, reports the score, and marks the
+ * reroll path blocked.
+ */
+export function ultimateRerollLoop(
+  rollFn: () => number[],    // returns 6 dice faces
+  scoreFn: (faces: number[]) => number, // Sacred Core lookupScore
+  maxAttempts: number = MAX_SERVER_REROLLS,
+): UltimateRerollAuditResult {
+  void maxAttempts;
+  const faces = rollFn();
+  const score = scoreFn(faces);
+  return {
+    faces,
+    attempts: 1,
+    succeeded: false,
+    blocked: true,
+    score,
+    reason: 'RTP_WRAPPER_ONLY_NO_REROLL',
+  };
+}
+
+/**
+ * Get visual state for the Ultimate meter.
+ */
+export function getUltimateVisuals(state: UltimateState): UltimateVisuals {
+  const progress = state.charge / MAX_CHARGE;
+
+  return {
+    charge: state.charge,
+    maxCharge: MAX_CHARGE,
+    progress,
+    ready: state.ready,
+    fired: state.fired,
+    fillColor: state.ready
+      ? '#ff00ff'
+      : progress > 0.7
+        ? '#ffaa00'
+        : '#00aaff',
+    glowIntensity: state.ready ? 1.0 : progress * 0.5,
+    pulseActive: state.ready && !state.fired,
+    labelText: state.fired
+      ? 'ULTIMATE FIRED'
+      : state.ready
+        ? 'ULTIMATE READY!'
+        : `${state.charge}/${MAX_CHARGE}`,
+  };
+}
+
+export interface UltimateVisuals {
+  charge: number;
+  maxCharge: number;
+  progress: number;
+  ready: boolean;
+  fired: boolean;
+  fillColor: string;
+  glowIntensity: number;
+  pulseActive: boolean;
+  labelText: string;
+}
+// ─────────────────────────────────────────────────────
+// DREAM-CORE — Genre #10: PLATFORMER (Gravity Flip)
+// Grid rotates 90° every 5th turn with CSS physics settle.
+// ─────────────────────────────────────────────────────
+
+import type { GravityState, GravityDirection } from '../types';
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+const DEFAULT_FLIP_INTERVAL = 5;  // every 5 turns
+const SETTLE_DURATION_MS = 400;   // CSS animation duration
+
+const GRAVITY_SEQUENCE: GravityDirection[] = ['DOWN', 'RIGHT', 'UP', 'LEFT'];
+
+// ── Factory ───────────────────────────────────────────────────────────────────
+export function createGravityState(): GravityState {
+  return {
+    currentDirection: 'DOWN',
+    turnsSinceFlip: 0,
+    flipInterval: DEFAULT_FLIP_INTERVAL,
+    settling: false,
+  };
+}
+
+// ── Core Logic ────────────────────────────────────────────────────────────────
+
+/**
+ * Tick the gravity system at end of each turn.
+ * Returns whether a flip occurred.
+ */
+export function tickGravity(state: GravityState): {
+  state: GravityState;
+  flipped: boolean;
+  newDirection: GravityDirection;
+} {
+  const turnsSinceFlip = state.turnsSinceFlip + 1;
+
+  if (turnsSinceFlip >= state.flipInterval) {
+    const currentIdx = GRAVITY_SEQUENCE.indexOf(state.currentDirection);
+    const nextIdx = (currentIdx + 1) % GRAVITY_SEQUENCE.length;
+    const newDirection = GRAVITY_SEQUENCE[nextIdx]!;
+
+    return {
+      state: {
+        currentDirection: newDirection,
+        turnsSinceFlip: 0,
+        flipInterval: state.flipInterval,
+        settling: true,
+      },
+      flipped: true,
+      newDirection,
+    };
+  }
+
+  return {
+    state: { ...state, turnsSinceFlip },
+    flipped: false,
+    newDirection: state.currentDirection,
+  };
+}
+
+/**
+ * Mark settling as complete (called after CSS animation finishes).
+ */
+export function finishSettling(state: GravityState): GravityState {
+  return { ...state, settling: false };
+}
+
+/**
+ * Get the CSS transform for the current gravity direction.
+ */
+export function getGravityTransform(direction: GravityDirection): string {
+  switch (direction) {
+    case 'DOWN': return 'rotate(0deg)';
+    case 'RIGHT': return 'rotate(90deg)';
+    case 'UP': return 'rotate(180deg)';
+    case 'LEFT': return 'rotate(270deg)';
+  }
+}
+
+/**
+ * Get CSS transition properties for the settle animation.
+ */
+export function getSettleCSS(settling: boolean): Record<string, string> {
+  return {
+    transition: settling
+      ? `transform ${SETTLE_DURATION_MS}ms cubic-bezier(0.34, 1.56, 0.64, 1)`
+      : 'none',
+  };
+}
+
+/**
+ * Recompute tile positions after a gravity flip.
+ * Tiles "fall" in the new gravity direction.
+ */
+export function computeGravityPositions(
+  tileCount: number,
+  cols: number,
+  direction: GravityDirection,
+  occupiedTiles: Set<number>,
+): Map<number, number> {
+  const rows = Math.ceil(tileCount / cols);
+  const result = new Map<number, number>();
+
+  switch (direction) {
+    case 'DOWN':
+      // Normal: tiles fall down within each column
+      for (let col = 0; col < cols; col++) {
+        const colTiles: number[] = [];
+        for (let row = 0; row < rows; row++) {
+          const idx = row * cols + col;
+          if (idx < tileCount && occupiedTiles.has(idx)) {
+            colTiles.push(idx);
+          }
+        }
+        // Stack from bottom
+        for (let i = 0; i < colTiles.length; i++) {
+          const newRow = rows - 1 - i;
+          result.set(colTiles[colTiles.length - 1 - i]!, newRow * cols + col);
+        }
+      }
+      break;
+
+    case 'UP':
+      // Inverted: tiles "fall" up
+      for (let col = 0; col < cols; col++) {
+        const colTiles: number[] = [];
+        for (let row = rows - 1; row >= 0; row--) {
+          const idx = row * cols + col;
+          if (idx < tileCount && occupiedTiles.has(idx)) {
+            colTiles.push(idx);
+          }
+        }
+        for (let i = 0; i < colTiles.length; i++) {
+          result.set(colTiles[colTiles.length - 1 - i]!, i * cols + col);
+        }
+      }
+      break;
+
+    case 'RIGHT':
+      // Tiles fall rightward within each row
+      for (let row = 0; row < rows; row++) {
+        const rowTiles: number[] = [];
+        for (let col = 0; col < cols; col++) {
+          const idx = row * cols + col;
+          if (idx < tileCount && occupiedTiles.has(idx)) {
+            rowTiles.push(idx);
+          }
+        }
+        for (let i = 0; i < rowTiles.length; i++) {
+          const newCol = cols - 1 - i;
+          result.set(rowTiles[rowTiles.length - 1 - i]!, row * cols + newCol);
+        }
+      }
+      break;
+
+    case 'LEFT':
+      // Tiles fall leftward within each row
+      for (let row = 0; row < rows; row++) {
+        const rowTiles: number[] = [];
+        for (let col = cols - 1; col >= 0; col--) {
+          const idx = row * cols + col;
+          if (idx < tileCount && occupiedTiles.has(idx)) {
+            rowTiles.push(idx);
+          }
+        }
+        for (let i = 0; i < rowTiles.length; i++) {
+          result.set(rowTiles[rowTiles.length - 1 - i]!, row * cols + i);
+        }
+      }
+      break;
+  }
+
+  return result;
+}
+// ─────────────────────────────────────────────────────
+// DREAM-CORE — Genre #12: RACING (Slipstream)
+// Trailing players get wider beat window; leaders narrower.
+// ─────────────────────────────────────────────────────
+
+import type { SlipstreamState } from '../types';
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+const LEADER_WINDOW_MODIFIER = 0.75;   // 75ms effective (tighter)
+const MIDDLE_WINDOW_MODIFIER = 1.0;    // 100ms (normal)
+const TRAILING_WINDOW_MODIFIER = 1.5;  // 150ms (wider)
+const LEADER_FLOW_CAP = 1.6;
+const TRAILING_FLOW_CAP = 2.0;
+
+// ── Factory ───────────────────────────────────────────────────────────────────
+export function createSlipstreamState(totalPlayers: number = 2): SlipstreamState {
+  return {
+    playerPosition: 1,
+    totalPlayers: Math.max(2, totalPlayers),
+    beatWindowModifier: MIDDLE_WINDOW_MODIFIER,
+    flowCapModifier: 1.0,
+  };
+}
+
+// ── Core Logic ────────────────────────────────────────────────────────────────
+
+/**
+ * Update the slipstream state based on current standings.
+ * Called whenever scores change in multiplayer.
+ */
+export function updateSlipstream(
+  state: SlipstreamState,
+  playerScore: number,
+  allScores: number[],
+): SlipstreamState {
+  const sorted = [...allScores].sort((a, b) => b - a);
+  const position = sorted.indexOf(playerScore) + 1;
+  const totalPlayers = allScores.length;
+
+  // Determine position category
+  const positionRatio = (position - 1) / Math.max(1, totalPlayers - 1);
+
+  let beatWindowModifier: number;
+  let flowCapModifier: number;
+
+  if (positionRatio <= 0.25) {
+    // Leader pack: tighter window, lower flow cap
+    beatWindowModifier = LEADER_WINDOW_MODIFIER;
+    flowCapModifier = LEADER_FLOW_CAP / 2.0;
+  } else if (positionRatio >= 0.75) {
+    // Trailing pack: wider window, higher flow cap
+    beatWindowModifier = TRAILING_WINDOW_MODIFIER;
+    flowCapModifier = TRAILING_FLOW_CAP / 2.0;
+  } else {
+    // Middle pack: standard
+    beatWindowModifier = MIDDLE_WINDOW_MODIFIER;
+    flowCapModifier = 1.0;
+  }
+
+  return {
+    playerPosition: position,
+    totalPlayers,
+    beatWindowModifier,
+    flowCapModifier,
+  };
+}
+
+/**
+ * Get the effective beat window in ms, accounting for Slipstream.
+ */
+export function getEffectiveBeatWindow(
+  baseBeatWindowMs: number,
+  slipstream: SlipstreamState,
+  classBeatWindowBonus: number = 0,
+): number {
+  return Math.round(baseBeatWindowMs * slipstream.beatWindowModifier + classBeatWindowBonus);
+}
+
+/**
+ * Get the effective flow multiplier cap, accounting for Slipstream.
+ */
+export function getEffectiveFlowCap(
+  baseFlowCap: number,
+  slipstream: SlipstreamState,
+): number {
+  return baseFlowCap * slipstream.flowCapModifier;
+}
+
+/**
+ * Get visual indicators for slipstream effects.
+ */
+export function getSlipstreamVisuals(state: SlipstreamState): SlipstreamVisuals {
+  const isLeader = state.playerPosition === 1;
+  const isTrailing = state.playerPosition === state.totalPlayers;
+
+  return {
+    position: state.playerPosition,
+    totalPlayers: state.totalPlayers,
+    indicator: isLeader ? 'PRESSURE' : isTrailing ? 'SLIPSTREAM' : 'CRUISE',
+    color: isLeader ? '#ff4444' : isTrailing ? '#44ff44' : '#4444ff',
+    beatWindowLabel: `${Math.round(100 * state.beatWindowModifier)}ms`,
+    trailEffect: isTrailing,     // show speed lines
+    pressureEffect: isLeader,    // show heat distortion
+  };
+}
+
+export interface SlipstreamVisuals {
+  position: number;
+  totalPlayers: number;
+  indicator: 'PRESSURE' | 'SLIPSTREAM' | 'CRUISE';
+  color: string;
+  beatWindowLabel: string;
+  trailEffect: boolean;
+  pressureEffect: boolean;
+}
+// ─────────────────────────────────────────────────────
+// DREAM-CORE — Genre #4: RHYTHM (Perfect Beat Window)
+// PRIORITY: 5th (Genre Hierarchy Position 5)
+// The Pulse. All interactions quantized to BPM markers.
+// ─────────────────────────────────────────────────────
+
+import type { RhythmState, BeatAccuracy } from '../types';
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+const DEFAULT_BPM = 120;
+const DEFAULT_BEAT_WINDOW_MS = 100;     // ±50ms from beat center
+const PERFECT_WINDOW_MS = 40;           // ±20ms from beat center
+const COMBO_FRENZY_THRESHOLD = 5;       // 5 consecutive Perfects
+const FRENZY_DURATION_MS = 15000;       // 15 seconds
+const FLOW_MULTIPLIER_MAX = 2.0;
+const FLOW_MULTIPLIER_MIN = 1.0;
+const FLOW_GAIN_PER_PERFECT = 0.1;
+const FLOW_GAIN_PER_GOOD = 0.03;
+const FLOW_LOSS_PER_MISS = 0.15;
+
+// ── Factory ───────────────────────────────────────────────────────────────────
+export function createRhythmState(bpm: number = DEFAULT_BPM): RhythmState {
+  return {
+    bpm,
+    lastBeatTimestamp: 0,
+    beatWindowMs: DEFAULT_BEAT_WINDOW_MS,
+    comboStreak: 0,
+    flowMultiplier: FLOW_MULTIPLIER_MIN,
+    frenzyActive: false,
+    frenzyExpiresAt: 0,
+    beatPhase: 0,
+  };
+}
+
+// ── Core Logic ────────────────────────────────────────────────────────────────
+
+/**
+ * Get the timestamp of the nearest beat marker.
+ */
+export function getNearestBeatMs(
+  currentTimeMs: number,
+  bpm: number,
+  audioStartTimeMs: number,
+): number {
+  const beatIntervalMs = (60 / bpm) * 1000;
+  const elapsed = currentTimeMs - audioStartTimeMs;
+  const beatIndex = Math.round(elapsed / beatIntervalMs);
+  return audioStartTimeMs + beatIndex * beatIntervalMs;
+}
+
+/**
+ * Compute the beat phase (0.0–1.0) within the current beat.
+ * 0.0 = on the beat, 0.5 = furthest from any beat.
+ */
+export function computeBeatPhase(
+  currentTimeMs: number,
+  bpm: number,
+  audioStartTimeMs: number,
+): number {
+  const beatIntervalMs = (60 / bpm) * 1000;
+  const elapsed = currentTimeMs - audioStartTimeMs;
+  const phase = (elapsed % beatIntervalMs) / beatIntervalMs;
+  // Normalize so 0.0 = on beat, 0.5 = off-beat
+  return phase <= 0.5 ? phase : 1.0 - phase;
+}
+
+/**
+ * Evaluate the accuracy of a roll action relative to the beat.
+ * Returns PERFECT, GOOD, or MISS.
+ */
+export function evaluateBeatAccuracy(
+  actionTimeMs: number,
+  bpm: number,
+  audioStartTimeMs: number,
+  beatWindowMs: number = DEFAULT_BEAT_WINDOW_MS,
+): BeatAccuracy {
+  const nearestBeat = getNearestBeatMs(actionTimeMs, bpm, audioStartTimeMs);
+  const offset = Math.abs(actionTimeMs - nearestBeat);
+
+  if (offset <= PERFECT_WINDOW_MS / 2) return 'PERFECT';
+  if (offset <= beatWindowMs / 2) return 'GOOD';
+  return 'MISS';
+}
+
+/**
+ * Quantize a roll trigger to the nearest beat.
+ * Returns the delay in ms to wait before executing the roll.
+ */
+export function quantizeToNextBeat(
+  currentTimeMs: number,
+  bpm: number,
+  audioStartTimeMs: number,
+): { delayMs: number; targetBeatMs: number } {
+  const beatIntervalMs = (60 / bpm) * 1000;
+  const elapsed = currentTimeMs - audioStartTimeMs;
+  const currentBeatIndex = Math.floor(elapsed / beatIntervalMs);
+  const nextBeatMs = audioStartTimeMs + (currentBeatIndex + 1) * beatIntervalMs;
+  const delayMs = Math.max(0, nextBeatMs - currentTimeMs);
+
+  return { delayMs, targetBeatMs: nextBeatMs };
+}
+
+/**
+ * Link rollDice trigger to the Web Audio clock.
+ * Returns the AudioContext.currentTime for scheduling.
+ */
+export function getAudioClockRollTime(
+  audioCtxCurrentTime: number,
+  bpm: number,
+): number {
+  const beatIntervalSec = 60 / bpm;
+  const currentBeat = Math.floor(audioCtxCurrentTime / beatIntervalSec);
+  const nextBeat = (currentBeat + 1) * beatIntervalSec;
+  return nextBeat;
+}
+
+/**
+ * Update rhythm state after a roll with accuracy evaluation.
+ */
+export function processRollAccuracy(
+  state: RhythmState,
+  accuracy: BeatAccuracy,
+  now: number = Date.now(),
+): RhythmState {
+  let { comboStreak, flowMultiplier, frenzyActive, frenzyExpiresAt } = state;
+
+  switch (accuracy) {
+    case 'PERFECT':
+      comboStreak += 1;
+      flowMultiplier = Math.min(
+        FLOW_MULTIPLIER_MAX,
+        flowMultiplier + FLOW_GAIN_PER_PERFECT,
+      );
+      break;
+
+    case 'GOOD':
+      // GOOD doesn't break combo but doesn't count toward Frenzy
+      flowMultiplier = Math.min(
+        FLOW_MULTIPLIER_MAX,
+        flowMultiplier + FLOW_GAIN_PER_GOOD,
+      );
+      break;
+
+    case 'MISS':
+      comboStreak = 0;
+      flowMultiplier = Math.max(
+        FLOW_MULTIPLIER_MIN,
+        flowMultiplier - FLOW_LOSS_PER_MISS,
+      );
+      frenzyActive = false;
+      break;
+  }
+
+  // Check Frenzy activation
+  if (comboStreak >= COMBO_FRENZY_THRESHOLD && !frenzyActive) {
+    frenzyActive = true;
+    frenzyExpiresAt = now + FRENZY_DURATION_MS;
+  }
+
+  // Check Frenzy expiry
+  if (frenzyActive && now >= frenzyExpiresAt) {
+    frenzyActive = false;
+    frenzyExpiresAt = 0;
+  }
+
+  return {
+    ...state,
+    comboStreak,
+    flowMultiplier,
+    frenzyActive,
+    frenzyExpiresAt,
+  };
+}
+
+/**
+ * Tick the rhythm state per frame. Updates beat phase and checks Frenzy expiry.
+ */
+export function tickRhythm(
+  state: RhythmState,
+  currentTimeMs: number,
+  audioStartTimeMs: number,
+): RhythmState {
+  const beatPhase = computeBeatPhase(currentTimeMs, state.bpm, audioStartTimeMs);
+
+  let { frenzyActive, frenzyExpiresAt } = state;
+  if (frenzyActive && currentTimeMs >= frenzyExpiresAt) {
+    frenzyActive = false;
+    frenzyExpiresAt = 0;
+  }
+
+  return { ...state, beatPhase, frenzyActive, frenzyExpiresAt };
+}
+
+// ── Visual Beat Highway ───────────────────────────────────────────────────────
+
+export interface BeatMarker {
+  id: number;
+  timeMs: number;
+  position: number;    // 0.0 = far, 1.0 = hit zone
+  isCurrent: boolean;
+}
+
+/**
+ * Generate beat markers for the visual beat highway.
+ * Shows upcoming 4 beats traveling toward the hit zone.
+ */
+export function generateBeatMarkers(
+  currentTimeMs: number,
+  bpm: number,
+  audioStartTimeMs: number,
+  markerCount: number = 4,
+): BeatMarker[] {
+  const beatIntervalMs = (60 / bpm) * 1000;
+  const elapsed = currentTimeMs - audioStartTimeMs;
+  const currentBeatIndex = Math.floor(elapsed / beatIntervalMs);
+  const beatProgress = (elapsed % beatIntervalMs) / beatIntervalMs;
+
+  const markers: BeatMarker[] = [];
+  for (let i = 0; i < markerCount; i++) {
+    const timeMs = audioStartTimeMs + (currentBeatIndex + i) * beatIntervalMs;
+    const position = 1.0 - (beatProgress + i) / markerCount;
+    markers.push({
+      id: currentBeatIndex + i,
+      timeMs,
+      position: Math.max(0, Math.min(1, position)),
+      isCurrent: i === 0,
+    });
+  }
+
+  return markers;
+}
+// ─────────────────────────────────────────────────────
+// DREAM-CORE — Genre #3: ROGUELIKE (Facet Mutations)
+// PRIORITY: 2nd (Genre Hierarchy Position 2)
+// The strategic skeleton — every session is a "Run."
+// ─────────────────────────────────────────────────────
+
+import type { FacetDef, FacetId, FacetModifier, FacetState } from '../types';
+
+// ── Facet Definitions ─────────────────────────────────────────────────────────
+
+export const FACET_REGISTRY: Record<FacetId, FacetDef> = {
+  // Tier 0 (base) Facets
+  MISER: {
+    id: 'MISER',
+    name: 'The Miser',
+    description: 'Banking under 300 grants +10% bonus. Rewards small, safe plays.',
+    mutatesTo: 'HOARDER',
+    mutationThreshold: 3,
+    modifier: {
+      bankThresholdBonus: 300,
+      scoreMultiplier: 1.1,
+    },
+  },
+  GLUTTON: {
+    id: 'GLUTTON',
+    name: 'The Glutton',
+    description: 'Consecutive roll bonus caps at 1.5x. Rewards greedy play.',
+    mutatesTo: 'ABYSSAL',
+    mutationThreshold: 3,
+    modifier: {
+      scoreMultiplier: 1.0,
+      riskAmplifier: 1.5,
+    },
+  },
+  ALCHEMIST: {
+    id: 'ALCHEMIST',
+    name: 'The Alchemist',
+    description: 'Transmute one die face per turn. Convert a 3 to a 1, etc.',
+    mutatesTo: 'PHILOSOPHER',
+    mutationThreshold: 3,
+    modifier: {
+      scoreMultiplier: 1.0,
+    },
+  },
+  GAMBLER: {
+    id: 'GAMBLER',
+    name: 'The Gambler',
+    description: 'Farkle recovery: 15% of lost unbanked returns as ghost points.',
+    mutatesTo: 'CARDSHARP',
+    mutationThreshold: 3,
+    modifier: {
+      farkleRecoveryPct: 0.15,
+    },
+  },
+  SENTINEL: {
+    id: 'SENTINEL',
+    name: 'The Sentinel',
+    description: 'LFO rate reduced by 20%. Calmer audio = calmer decisions.',
+    mutatesTo: 'BULWARK',
+    mutationThreshold: 3,
+    modifier: {
+      lfoRateMultiplier: 0.8,
+    },
+  },
+
+  // Tier 1 (mutated) Facets
+  HOARDER: {
+    id: 'HOARDER',
+    name: 'The Hoarder',
+    description: 'Banking under 300 grants +25% bonus AND heals 1 Farkle count.',
+    mutatesTo: null,
+    mutationThreshold: Infinity,
+    modifier: {
+      bankThresholdBonus: 300,
+      scoreMultiplier: 1.25,
+      farkleRecoveryPct: 0.05,
+    },
+  },
+  ABYSSAL: {
+    id: 'ABYSSAL',
+    name: 'The Abyssal',
+    description: 'Consecutive roll bonus caps at 3x. But Farkle = instant round loss.',
+    mutatesTo: null,
+    mutationThreshold: Infinity,
+    modifier: {
+      scoreMultiplier: 1.0,
+      riskAmplifier: 3.0,
+      extraRollOnFarkle: false,
+    },
+  },
+  PHILOSOPHER: {
+    id: 'PHILOSOPHER',
+    name: 'The Philosopher',
+    description: 'Transmute TWO dice per turn. But only on prime-sum rolls.',
+    mutatesTo: null,
+    mutationThreshold: Infinity,
+    modifier: {
+      scoreMultiplier: 1.0,
+    },
+  },
+  CARDSHARP: {
+    id: 'CARDSHARP',
+    name: 'The Cardsharp',
+    description: 'Farkle recovery: 30% returns. No free-turn loops.',
+    mutatesTo: null,
+    mutationThreshold: Infinity,
+    modifier: {
+      farkleRecoveryPct: 0.30,
+      extraRollOnFarkle: false,
+    },
+  },
+  BULWARK: {
+    id: 'BULWARK',
+    name: 'The Bulwark',
+    description: 'LFO rate reduced by 40%. Scorched tiles take 2x longer to reach you.',
+    mutatesTo: null,
+    mutationThreshold: Infinity,
+    modifier: {
+      lfoRateMultiplier: 0.6,
+    },
+  },
+};
+
+// ── Factory ───────────────────────────────────────────────────────────────────
+
+export function createFacetState(): FacetState {
+  return {
+    equipped: null,
+    roundsEquipped: 0,
+    mutationTier: 0,
+    availableFacets: ['MISER', 'GLUTTON', 'ALCHEMIST', 'GAMBLER', 'SENTINEL'],
+  };
+}
+
+// ── Core Logic ────────────────────────────────────────────────────────────────
+
+/**
+ * Draft phase: player selects a Facet between rounds.
+ */
+export function equipFacet(state: FacetState, facetId: FacetId): FacetState {
+  if (!state.availableFacets.includes(facetId) && facetId !== state.equipped) {
+    return state; // Can't equip what you don't have
+  }
+
+  return {
+    ...state,
+    equipped: facetId,
+    roundsEquipped: facetId === state.equipped ? state.roundsEquipped : 0,
+    mutationTier: facetId === state.equipped ? state.mutationTier : 0,
+  };
+}
+
+/**
+ * Called at end of each round. Checks for mutation threshold.
+ */
+export function tickFacetRound(state: FacetState): {
+  state: FacetState;
+  mutated: boolean;
+  newFacetId: FacetId | null;
+} {
+  if (!state.equipped) {
+    return { state, mutated: false, newFacetId: null };
+  }
+
+  const def = FACET_REGISTRY[state.equipped];
+  if (!def) return { state, mutated: false, newFacetId: null };
+
+  const newRounds = state.roundsEquipped + 1;
+
+  // Check mutation
+  if (def.mutatesTo && newRounds >= def.mutationThreshold) {
+    const mutatedState: FacetState = {
+      ...state,
+      equipped: def.mutatesTo,
+      roundsEquipped: 0,
+      mutationTier: state.mutationTier + 1,
+      availableFacets: [
+        ...state.availableFacets.filter(f => f !== state.equipped),
+        def.mutatesTo,
+      ],
+    };
+    return { state: mutatedState, mutated: true, newFacetId: def.mutatesTo };
+  }
+
+  return {
+    state: { ...state, roundsEquipped: newRounds },
+    mutated: false,
+    newFacetId: null,
+  };
+}
+
+/**
+ * Get the active modifier for the currently equipped Facet.
+ */
+export function getActiveModifier(state: FacetState): FacetModifier | null {
+  if (!state.equipped) return null;
+  return FACET_REGISTRY[state.equipped]?.modifier ?? null;
+}
+
+/**
+ * Apply Facet modifier to a score (post-score wrapper).
+ * Sacred Core scoring is UNTOUCHED — this wraps the result.
+ */
+export function applyFacetToScore(
+  baseScore: number,
+  bankedBefore: number,
+  modifier: FacetModifier | null,
+  isFrenzy: boolean,
+): number {
+  if (!modifier) return baseScore;
+
+  let score = baseScore;
+
+  // Score multiplier
+  if (modifier.scoreMultiplier && modifier.scoreMultiplier !== 1.0) {
+    const mult = isFrenzy ? modifier.scoreMultiplier * 2 : modifier.scoreMultiplier;
+    score = Math.round(score * mult);
+  }
+
+  // Bank threshold bonus (Miser/Hoarder: bonus for banking under threshold)
+  if (modifier.bankThresholdBonus && bankedBefore < modifier.bankThresholdBonus) {
+    const bonusMult = modifier.scoreMultiplier ?? 1.1;
+    score = Math.round(score * bonusMult);
+  }
+
+  return score;
+}
+
+/**
+ * Compute Farkle recovery amount based on Facet.
+ * Returns points to add back to unbanked after a Farkle.
+ */
+export function computeFarkleRecovery(
+  lostUnbanked: number,
+  modifier: FacetModifier | null,
+): number {
+  if (!modifier?.farkleRecoveryPct) return 0;
+  return Math.round(lostUnbanked * modifier.farkleRecoveryPct);
+}
+
+/**
+ * Generate Facet draft options for between-round selection.
+ * Offers 3 random choices from available pool.
+ */
+export function generateDraftOptions(
+  state: FacetState,
+  rngFn: () => number,
+): FacetId[] {
+  const pool = state.availableFacets.filter(f => f !== state.equipped);
+  if (pool.length <= 3) return pool;
+
+  // Fisher-Yates partial shuffle for 3 picks
+  const shuffled = [...pool];
+  for (let i = shuffled.length - 1; i > shuffled.length - 4 && i > 0; i--) {
+    const j = Math.floor(rngFn() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j]!, shuffled[i]!];
+  }
+
+  return shuffled.slice(-3);
+}
+// ─────────────────────────────────────────────────────
+// DREAM-CORE — Genre #8: RPG (Dice Classes)
+// Paladin, Rogue, Bard, Artificer — unique experience modifiers.
+// ─────────────────────────────────────────────────────
+
+import type { DiceClass, DiceClassDef, DiceClassState } from '../types';
+
+// ── Class Registry ────────────────────────────────────────────────────────────
+
+export const DICE_CLASS_REGISTRY: Record<DiceClass, DiceClassDef> = {
+  PALADIN: {
+    id: 'PALADIN',
+    name: 'The Paladin',
+    passive: 'Shield: First Farkle each match is absorbed (no loss).',
+    ability: 'Consecrate: Next 3 rolls get +10% score bonus.',
+    audioStemLayer: 'choir_pad',
+    flowMultiplierCap: 1.6,  // conservative cap
+    hiddenPockets: 1,
+    shieldCharges: 1,
+  },
+  ROGUE: {
+    id: 'ROGUE',
+    name: 'The Rogue',
+    passive: 'Sleight: 2 Hidden Pockets instead of 1.',
+    ability: 'Backstab: Double the next chain\'s score (once per match).',
+    audioStemLayer: 'staccato_pluck',
+    flowMultiplierCap: 2.0,
+    hiddenPockets: 2,
+    shieldCharges: 0,
+  },
+  BARD: {
+    id: 'BARD',
+    name: 'The Bard',
+    passive: 'Harmony: Beat window expanded by 30ms.',
+    ability: 'Crescendo: Frenzy duration extended by 10s.',
+    audioStemLayer: 'arpeggio_lead',
+    flowMultiplierCap: 2.0,
+    hiddenPockets: 1,
+    shieldCharges: 0,
+  },
+  ARTIFICER: {
+    id: 'ARTIFICER',
+    name: 'The Artificer',
+    passive: 'Tinker: Start with 3 Build-a-Die shards.',
+    ability: 'Overcharge: Double Ultimate charge gain for 15s.',
+    audioStemLayer: 'synth_arp',
+    flowMultiplierCap: 1.8,
+    hiddenPockets: 1,
+    shieldCharges: 0,
+  },
+};
+
+// ── Factory ───────────────────────────────────────────────────────────────────
+
+export function createDiceClassState(): DiceClassState {
+  return {
+    selectedClass: null,
+    shieldUsed: false,
+    classAbilityCharges: 1,
+  };
+}
+
+// ── Core Logic ────────────────────────────────────────────────────────────────
+
+/**
+ * Select a Dice Class at match start. Immutable after selection.
+ */
+export function selectDiceClass(
+  state: DiceClassState,
+  diceClass: DiceClass,
+): DiceClassState {
+  if (state.selectedClass !== null) return state; // no re-selection
+
+  const def = DICE_CLASS_REGISTRY[diceClass];
+  return {
+    selectedClass: diceClass,
+    shieldUsed: false,
+    classAbilityCharges: 1,
+  };
+}
+
+/**
+ * Attempt to absorb a Farkle with Paladin's shield.
+ */
+export function attemptShieldAbsorb(state: DiceClassState): {
+  state: DiceClassState;
+  absorbed: boolean;
+} {
+  if (state.selectedClass !== 'PALADIN') return { state, absorbed: false };
+  if (state.shieldUsed) return { state, absorbed: false };
+
+  return {
+    state: { ...state, shieldUsed: true },
+    absorbed: true,
+  };
+}
+
+/**
+ * Use the class ability (once per match).
+ */
+export function useClassAbility(state: DiceClassState): {
+  state: DiceClassState;
+  effect: ClassAbilityEffect | null;
+} {
+  if (!state.selectedClass || state.classAbilityCharges <= 0) {
+    return { state, effect: null };
+  }
+
+  const def = DICE_CLASS_REGISTRY[state.selectedClass];
+  const newState = { ...state, classAbilityCharges: state.classAbilityCharges - 1 };
+
+  let effect: ClassAbilityEffect;
+  switch (state.selectedClass) {
+    case 'PALADIN':
+      effect = { type: 'CONSECRATE', scoreBonusPct: 0.10, durationRolls: 3 };
+      break;
+    case 'ROGUE':
+      effect = { type: 'BACKSTAB', nextChainDoubled: true };
+      break;
+    case 'BARD':
+      effect = { type: 'CRESCENDO', frenzyExtensionMs: 10000 };
+      break;
+    case 'ARTIFICER':
+      effect = { type: 'OVERCHARGE', ultimateChargeMultiplier: 2.0, durationMs: 15000 };
+      break;
+  }
+
+  return { state: newState, effect };
+}
+
+/**
+ * Get the beat window modifier for the selected class.
+ */
+export function getClassBeatWindowModifier(state: DiceClassState): number {
+  if (state.selectedClass === 'BARD') return 30; // +30ms window
+  return 0;
+}
+
+/**
+ * Get the hidden pocket count for the selected class.
+ */
+export function getClassHiddenPockets(state: DiceClassState): number {
+  if (!state.selectedClass) return 1;
+  return DICE_CLASS_REGISTRY[state.selectedClass].hiddenPockets;
+}
+
+/**
+ * Get class-specific audio stem layer to activate.
+ */
+export function getClassAudioStem(state: DiceClassState): string | null {
+  if (!state.selectedClass) return null;
+  return DICE_CLASS_REGISTRY[state.selectedClass].audioStemLayer;
+}
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+export type ClassAbilityEffect =
+  | { type: 'CONSECRATE'; scoreBonusPct: number; durationRolls: number }
+  | { type: 'BACKSTAB'; nextChainDoubled: boolean }
+  | { type: 'CRESCENDO'; frenzyExtensionMs: number }
+  | { type: 'OVERCHARGE'; ultimateChargeMultiplier: number; durationMs: number };
+// ─────────────────────────────────────────────────────
+// DREAM-CORE — Genre #18: SANDBOX (Build-a-Die)
+// Custom 7th die with player-assigned face values (1–6 only).
+// ─────────────────────────────────────────────────────
+
+import type { BuildADieState, CustomDie, AcousticDecorationId, DieFace } from '../types';
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+const SHARDS_PER_DIE = 6;
+const VALID_FACES: DieFace[] = [1, 2, 3, 4, 5, 6];
+
+// ── Factory ───────────────────────────────────────────────────────────────────
+export function createBuildADieState(startingShards: number = 0): BuildADieState {
+  return {
+    shards: startingShards,
+    customDie: null,
+    deployed: false,
+  };
+}
+
+// ── Core Logic ────────────────────────────────────────────────────────────────
+
+/**
+ * Award a shard to the player (from unsealing a Metroidvania tile,
+ * achieving milestones, etc.)
+ */
+export function awardShard(state: BuildADieState): BuildADieState {
+  return {
+    ...state,
+    shards: state.shards + 1,
+  };
+}
+
+/**
+ * Check if the player has enough shards to build a custom die.
+ */
+export function canBuildDie(state: BuildADieState): boolean {
+  return state.shards >= SHARDS_PER_DIE && state.customDie === null;
+}
+
+/**
+ * Build a custom die with player-assigned face values.
+ * All face values must be valid (1–6). This doesn't modify the Sacred Core —
+ * the custom die is treated as a 7th die that's scored through the
+ * standard lookupScore pathway.
+ */
+export function buildCustomDie(
+  state: BuildADieState,
+  faces: [DieFace, DieFace, DieFace, DieFace, DieFace, DieFace],
+  skin: CustomDie['skin'] = 'OBSIDIAN',
+  soundProfile: AcousticDecorationId = 'VOID_ECHO',
+  name: string = 'Custom Die',
+): { state: BuildADieState; success: boolean; error?: string } {
+  if (state.shards < SHARDS_PER_DIE) {
+    return { state, success: false, error: 'Not enough shards' };
+  }
+
+  if (state.customDie !== null) {
+    return { state, success: false, error: 'Already have a custom die' };
+  }
+
+  // Validate all faces are 1–6
+  for (const face of faces) {
+    if (!VALID_FACES.includes(face)) {
+      return { state, success: false, error: `Invalid face value: ${face}` };
+    }
+  }
+
+  return {
+    state: {
+      shards: state.shards - SHARDS_PER_DIE,
+      customDie: { faces, skin, soundProfile, name },
+      deployed: false,
+    },
+    success: true,
+  };
+}
+
+/**
+ * Deploy the custom die into the game (adds the 7th die to the roll pool).
+ */
+export function deployDie(state: BuildADieState): {
+  state: BuildADieState;
+  deployed: boolean;
+} {
+  if (!state.customDie || state.deployed) {
+    return { state, deployed: false };
+  }
+
+  return {
+    state: { ...state, deployed: true },
+    deployed: true,
+  };
+}
+
+/**
+ * Roll the custom die — returns a face based on the custom distribution.
+ * Uses the provided RNG function for Sacred Core compliance.
+ */
+export function rollCustomDie(
+  customDie: CustomDie,
+  rngFn: () => number,
+): DieFace {
+  const index = Math.floor(rngFn() * 6);
+  return customDie.faces[index]!;
+}
+
+/**
+ * Destroy the custom die (e.g., on match end or as a strategic sacrifice).
+ */
+export function destroyDie(state: BuildADieState): BuildADieState {
+  return {
+    ...state,
+    customDie: null,
+    deployed: false,
+  };
+}
+
+/**
+ * Get the face distribution for display.
+ */
+export function getFaceDistribution(customDie: CustomDie): Record<DieFace, number> {
+  const dist: Record<DieFace, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
+  for (const face of customDie.faces) {
+    dist[face]++;
+  }
+  return dist;
+}
+
+/**
+ * Get visual state for the Build-a-Die UI.
+ */
+export function getBuildADieVisuals(state: BuildADieState): BuildADieVisuals {
+  return {
+    shards: state.shards,
+    shardsRequired: SHARDS_PER_DIE,
+    canBuild: canBuildDie(state),
+    hasDie: state.customDie !== null,
+    deployed: state.deployed,
+    diePreview: state.customDie
+      ? {
+          faces: state.customDie.faces,
+          skin: state.customDie.skin,
+          name: state.customDie.name,
+          distribution: getFaceDistribution(state.customDie),
+        }
+      : null,
+    shardProgress: Math.min(1.0, state.shards / SHARDS_PER_DIE),
+  };
+}
+
+export interface BuildADieVisuals {
+  shards: number;
+  shardsRequired: number;
+  canBuild: boolean;
+  hasDie: boolean;
+  deployed: boolean;
+  diePreview: {
+    faces: DieFace[];
+    skin: string;
+    name: string;
+    distribution: Record<DieFace, number>;
+  } | null;
+  shardProgress: number;
+}
+// ─────────────────────────────────────────────────────
+// DREAM-CORE — Genre #15: SIMULATION (Acoustic Decorations)
+// Earned audio effects that change the sonic environment.
+// ─────────────────────────────────────────────────────
+
+import type { AcousticDecoration, AcousticDecorationId, AcousticState } from '../types';
+
+// ── Decoration Registry ───────────────────────────────────────────────────────
+
+export const ACOUSTIC_DECORATIONS: Record<AcousticDecorationId, AcousticDecoration> = {
+  CATHEDRAL_REVERB: {
+    id: 'CATHEDRAL_REVERB',
+    name: 'Cathedral Reverb',
+    description: 'Vast stone hall reverb. Everything echoes with sacred weight.',
+    audioParams: {
+      reverbDecay: 4.5,
+      wetMix: 0.45,
+    },
+    unlockedAt: 'Unseal 3 Metroidvania tiles in a single match',
+  },
+  VINYL_CRACKLE: {
+    id: 'VINYL_CRACKLE',
+    name: 'Vinyl Crackle',
+    description: 'Warm analog noise. Lo-fi warmth over every stem.',
+    audioParams: {
+      filterFreq: 4000,
+      wetMix: 0.3,
+    },
+    unlockedAt: 'Bank 10 times without a Farkle',
+  },
+  BIT_CRUSHER: {
+    id: 'BIT_CRUSHER',
+    name: 'Bit Crusher',
+    description: 'Retro 8-bit destruction. Every sound is crunchy.',
+    audioParams: {
+      bitDepth: 4,
+      wetMix: 0.5,
+    },
+    unlockedAt: 'Achieve a 6-chain with all dice showing the same face',
+  },
+  HALL_OF_MIRRORS: {
+    id: 'HALL_OF_MIRRORS',
+    name: 'Hall of Mirrors',
+    description: 'Cascading multi-tap delay. Sounds fold on themselves.',
+    audioParams: {
+      delayTaps: 5,
+      delayTimeMs: 180,
+      wetMix: 0.35,
+    },
+    unlockedAt: 'Trigger a 3-depth Phantasmagoric Chain',
+  },
+  UNDERWATER: {
+    id: 'UNDERWATER',
+    name: 'Underwater',
+    description: 'Muffled aquatic filter. Sound travels through dark water.',
+    audioParams: {
+      filterFreq: 800,
+      reverbDecay: 2.0,
+      wetMix: 0.6,
+    },
+    unlockedAt: 'Survive 3 Heartbeat Protocol activations',
+  },
+  VOID_ECHO: {
+    id: 'VOID_ECHO',
+    name: 'Void Echo',
+    description: 'Infinite space. No walls. Sound expands forever.',
+    audioParams: {
+      reverbDecay: 12.0,
+      delayTaps: 3,
+      delayTimeMs: 500,
+      wetMix: 0.7,
+    },
+    unlockedAt: 'Win a match with all 6 territories claimed',
+  },
+};
+
+// ── Factory ───────────────────────────────────────────────────────────────────
+export function createAcousticState(): AcousticState {
+  return {
+    equippedDecoration: null,
+    unlockedDecorations: [],
+  };
+}
+
+// ── Core Logic ────────────────────────────────────────────────────────────────
+
+/**
+ * Unlock a new acoustic decoration.
+ */
+export function unlockDecoration(
+  state: AcousticState,
+  decorationId: AcousticDecorationId,
+): AcousticState {
+  if (state.unlockedDecorations.includes(decorationId)) return state;
+
+  return {
+    ...state,
+    unlockedDecorations: [...state.unlockedDecorations, decorationId],
+  };
+}
+
+/**
+ * Equip an acoustic decoration (only unlocked ones).
+ */
+export function equipDecoration(
+  state: AcousticState,
+  decorationId: AcousticDecorationId | null,
+): AcousticState {
+  if (decorationId !== null && !state.unlockedDecorations.includes(decorationId)) {
+    return state;
+  }
+
+  return {
+    ...state,
+    equippedDecoration: decorationId,
+  };
+}
+
+/**
+ * Get Web Audio API parameters for the equipped decoration.
+ */
+export function getDecorationAudioParams(state: AcousticState): DecorationAudioConfig | null {
+  if (!state.equippedDecoration) return null;
+
+  const decoration = ACOUSTIC_DECORATIONS[state.equippedDecoration];
+  if (!decoration) return null;
+
+  return {
+    decorationId: decoration.id,
+    reverb: decoration.audioParams.reverbDecay
+      ? {
+          decay: decoration.audioParams.reverbDecay,
+          wetMix: decoration.audioParams.wetMix ?? 0.3,
+        }
+      : null,
+    filter: decoration.audioParams.filterFreq
+      ? {
+          frequency: decoration.audioParams.filterFreq,
+          type: 'lowpass' as BiquadFilterType,
+        }
+      : null,
+    bitCrush: decoration.audioParams.bitDepth
+      ? { depth: decoration.audioParams.bitDepth }
+      : null,
+    delay: decoration.audioParams.delayTaps
+      ? {
+          taps: decoration.audioParams.delayTaps,
+          timeMs: decoration.audioParams.delayTimeMs ?? 200,
+          feedback: 0.4,
+        }
+      : null,
+  };
+}
+
+/**
+ * Check if a milestone was reached for any locked decoration.
+ */
+export function checkDecorationMilestones(
+  state: AcousticState,
+  context: MilestoneContext,
+): AcousticDecorationId[] {
+  const newUnlocks: AcousticDecorationId[] = [];
+
+  if (!state.unlockedDecorations.includes('CATHEDRAL_REVERB') && context.tilesUnsealed >= 3) {
+    newUnlocks.push('CATHEDRAL_REVERB');
+  }
+  if (!state.unlockedDecorations.includes('VINYL_CRACKLE') && context.banksWithoutFarkle >= 10) {
+    newUnlocks.push('VINYL_CRACKLE');
+  }
+  if (!state.unlockedDecorations.includes('BIT_CRUSHER') && context.sixChainSameFace) {
+    newUnlocks.push('BIT_CRUSHER');
+  }
+  if (!state.unlockedDecorations.includes('HALL_OF_MIRRORS') && context.maxChainDepth >= 3) {
+    newUnlocks.push('HALL_OF_MIRRORS');
+  }
+  if (!state.unlockedDecorations.includes('UNDERWATER') && context.heartbeatSurvivals >= 3) {
+    newUnlocks.push('UNDERWATER');
+  }
+  if (!state.unlockedDecorations.includes('VOID_ECHO') && context.territoriesOwned >= 6) {
+    newUnlocks.push('VOID_ECHO');
+  }
+
+  return newUnlocks;
+}
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+export interface DecorationAudioConfig {
+  decorationId: AcousticDecorationId;
+  reverb: { decay: number; wetMix: number } | null;
+  filter: { frequency: number; type: BiquadFilterType } | null;
+  bitCrush: { depth: number } | null;
+  delay: { taps: number; timeMs: number; feedback: number } | null;
+}
+
+export interface MilestoneContext {
+  tilesUnsealed: number;
+  banksWithoutFarkle: number;
+  sixChainSameFace: boolean;
+  maxChainDepth: number;
+  heartbeatSurvivals: number;
+  territoriesOwned: number;
+}
+// ─────────────────────────────────────────────────────
+// DREAM-CORE — Genre #16: SPORTS (Trick Meter)
+// 3/5/8-streak thresholds trigger escalating visual/audio states.
+// ─────────────────────────────────────────────────────
+
+import type { TrickMeterState, TrickLevel } from '../types';
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+const WARM_THRESHOLD = 3;     // 3 consecutive banks
+const HOT_THRESHOLD = 5;      // 5 consecutive banks
+const FRENZY_THRESHOLD = 8;   // 8 consecutive banks
+
+const JUICE_MULTIPLIERS: Record<TrickLevel, number> = {
+  COLD: 1.0,
+  WARM: 1.25,
+  HOT: 1.5,
+  FRENZY: 2.0,
+};
+
+// ── Factory ───────────────────────────────────────────────────────────────────
+export function createTrickMeterState(): TrickMeterState {
+  return {
+    streak: 0,
+    level: 'COLD',
+    juiceMultiplier: 1.0,
+    facetDoubled: false,
+  };
+}
+
+// ── Core Logic ────────────────────────────────────────────────────────────────
+
+/**
+ * Record a successful bank (no Farkle).
+ */
+export function recordBank(state: TrickMeterState): TrickMeterState {
+  const streak = state.streak + 1;
+  const level = computeLevel(streak);
+
+  return {
+    streak,
+    level,
+    juiceMultiplier: JUICE_MULTIPLIERS[level],
+    facetDoubled: level === 'FRENZY',
+  };
+}
+
+/**
+ * Record a Farkle — resets the trick meter.
+ */
+export function recordFarkle(state: TrickMeterState): TrickMeterState {
+  return createTrickMeterState();
+}
+
+function computeLevel(streak: number): TrickLevel {
+  if (streak >= FRENZY_THRESHOLD) return 'FRENZY';
+  if (streak >= HOT_THRESHOLD) return 'HOT';
+  if (streak >= WARM_THRESHOLD) return 'WARM';
+  return 'COLD';
+}
+
+/**
+ * Get audio stem intensity based on trick meter level.
+ */
+export function getTrickAudioIntensity(state: TrickMeterState): TrickAudioParams {
+  switch (state.level) {
+    case 'COLD':
+      return {
+        percussionLayer: 0.3,
+        bassLayer: 0.4,
+        leadLayer: 0.0,
+        filterCutoff: 2000,
+        reverbMix: 0.3,
+      };
+    case 'WARM':
+      return {
+        percussionLayer: 0.5,
+        bassLayer: 0.6,
+        leadLayer: 0.2,
+        filterCutoff: 4000,
+        reverbMix: 0.25,
+      };
+    case 'HOT':
+      return {
+        percussionLayer: 0.8,
+        bassLayer: 0.8,
+        leadLayer: 0.5,
+        filterCutoff: 8000,
+        reverbMix: 0.15,
+      };
+    case 'FRENZY':
+      return {
+        percussionLayer: 1.0,
+        bassLayer: 1.0,
+        leadLayer: 1.0,
+        filterCutoff: 20000,
+        reverbMix: 0.05,
+      };
+  }
+}
+
+/**
+ * Get visual parameters for the trick meter UI.
+ */
+export function getTrickMeterVisuals(state: TrickMeterState): TrickMeterVisuals {
+  const progress = state.streak / FRENZY_THRESHOLD;
+
+  return {
+    level: state.level,
+    streak: state.streak,
+    progress: Math.min(1.0, progress),
+    fillColor: getLevelColor(state.level),
+    backgroundColor: getLevelBgColor(state.level),
+    glowIntensity: state.level === 'FRENZY' ? 1.0 : state.level === 'HOT' ? 0.6 : 0.2,
+    shakeIntensity: state.level === 'FRENZY' ? 0.3 : 0,
+    labelText: `${state.level} ×${state.juiceMultiplier.toFixed(2)}`,
+    particleEmitting: state.level === 'HOT' || state.level === 'FRENZY',
+  };
+}
+
+function getLevelColor(level: TrickLevel): string {
+  switch (level) {
+    case 'COLD': return '#4488aa';
+    case 'WARM': return '#ffaa33';
+    case 'HOT': return '#ff4400';
+    case 'FRENZY': return '#ff00ff';
+  }
+}
+
+function getLevelBgColor(level: TrickLevel): string {
+  switch (level) {
+    case 'COLD': return '#112233';
+    case 'WARM': return '#331a00';
+    case 'HOT': return '#330800';
+    case 'FRENZY': return '#330033';
+  }
+}
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+export interface TrickAudioParams {
+  percussionLayer: number;
+  bassLayer: number;
+  leadLayer: number;
+  filterCutoff: number;
+  reverbMix: number;
+}
+
+export interface TrickMeterVisuals {
+  level: TrickLevel;
+  streak: number;
+  progress: number;
+  fillColor: string;
+  backgroundColor: string;
+  glowIntensity: number;
+  shakeIntensity: number;
+  labelText: string;
+  particleEmitting: boolean;
+}
+// ─────────────────────────────────────────────────────
+// DREAM-CORE — Genre #11: STEALTH (Hidden Pocket)
+// Pocket 1 scoring die for future deployment.
+// ─────────────────────────────────────────────────────
+
+import type { HiddenPocketState, DieFace } from '../types';
+
+// ── Factory ───────────────────────────────────────────────────────────────────
+export function createHiddenPocketState(maxPockets: number = 1): HiddenPocketState {
+  return {
+    pocketedDie: null,
+    pocketUsed: false,
+    maxPockets,
+  };
+}
+
+// ── Core Logic ────────────────────────────────────────────────────────────────
+
+/**
+ * Pocket a scoring die. Can only pocket once per match (unless Rogue class).
+ * This die is removed from the current roll and stored for future use.
+ * IMPORTANT: The pocketed die is NOT counted in the current chain score.
+ * Sacred Core scoring sees 5 dice instead of 6.
+ */
+export function pocketDie(
+  state: HiddenPocketState,
+  face: DieFace,
+): { state: HiddenPocketState; success: boolean } {
+  if (state.pocketedDie !== null) {
+    return { state, success: false }; // already full
+  }
+
+  if (state.pocketUsed && state.maxPockets <= 1) {
+    return { state, success: false }; // already used this match
+  }
+
+  return {
+    state: {
+      ...state,
+      pocketedDie: face,
+    },
+    success: true,
+  };
+}
+
+/**
+ * Deploy the pocketed die into the current roll.
+ * Adds the stored face value to the current chain.
+ * This is a presentation-layer action — it feeds an extra die face
+ * into the Sacred Core scorer as if it was rolled.
+ */
+export function deployPocketedDie(
+  state: HiddenPocketState,
+): { state: HiddenPocketState; deployedFace: DieFace | null } {
+  if (state.pocketedDie === null) {
+    return { state, deployedFace: null };
+  }
+
+  const face = state.pocketedDie;
+  return {
+    state: {
+      ...state,
+      pocketedDie: null,
+      pocketUsed: true,
+    },
+    deployedFace: face,
+  };
+}
+
+/**
+ * Check if pocketing is available.
+ */
+export function canPocket(state: HiddenPocketState): boolean {
+  return state.pocketedDie === null && (!state.pocketUsed || state.maxPockets > 1);
+}
+
+/**
+ * Get visual state for the pocket UI element.
+ */
+export function getPocketVisuals(state: HiddenPocketState): PocketVisuals {
+  return {
+    hasDie: state.pocketedDie !== null,
+    dieValue: state.pocketedDie,
+    canPocket: canPocket(state),
+    canDeploy: state.pocketedDie !== null,
+    glowing: state.pocketedDie !== null,
+    tooltipText: state.pocketedDie !== null
+      ? `Hidden: ${state.pocketedDie} — Click to deploy`
+      : state.pocketUsed
+        ? 'Pocket used'
+        : 'Tap a scoring die to pocket it',
+  };
+}
+
+export interface PocketVisuals {
+  hasDie: boolean;
+  dieValue: DieFace | null;
+  canPocket: boolean;
+  canDeploy: boolean;
+  glowing: boolean;
+  tooltipText: string;
+}
+// ─────────────────────────────────────────────────────
+// DREAM-CORE — Genre #13: STRATEGY (Territory Control)
+// 6 territories, claimed by banking; passive +5% per territory.
+// ─────────────────────────────────────────────────────
+
+import type { Territory, TerritoryState } from '../types';
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+const TERRITORY_COUNT = 6;
+const TILES_PER_TERRITORY = 10;    // 60 / 6
+const BONUS_PER_TERRITORY = 0.05;  // +5% per claimed territory
+const DOMAIN_THRESHOLD = 3;        // 3+ adjacent territories = Domain bonus
+const DOMAIN_BONUS = 0.10;         // additional 10% for Domain
+
+// ── Factory ───────────────────────────────────────────────────────────────────
+
+export function createTerritoryState(): TerritoryState {
+  const territories: Territory[] = [];
+
+  for (let i = 0; i < TERRITORY_COUNT; i++) {
+    const tileIndices: number[] = [];
+    for (let j = 0; j < TILES_PER_TERRITORY; j++) {
+      tileIndices.push(i * TILES_PER_TERRITORY + j);
+    }
+    territories.push({
+      id: i,
+      tileIndices,
+      ownerId: null,
+      contested: false,
+      domainActive: false,
+    });
+  }
+
+  return {
+    territories,
+    playerBonusMultiplier: 1.0,
+  };
+}
+
+// ── Adjacency Map ─────────────────────────────────────────────────────────────
+// Territories are arranged in a 3×2 grid:
+//  [0] [1] [2]
+//  [3] [4] [5]
+const TERRITORY_ADJACENCY: Record<number, number[]> = {
+  0: [1, 3],
+  1: [0, 2, 3, 4],
+  2: [1, 4, 5],
+  3: [0, 1, 4],
+  4: [1, 2, 3, 5],
+  5: [2, 4],
+};
+
+// ── Core Logic ────────────────────────────────────────────────────────────────
+
+/**
+ * Claim a territory by banking while dice are on it.
+ * A territory is claimed if the player has the majority of active dice in it.
+ */
+export function claimTerritory(
+  state: TerritoryState,
+  territoryId: number,
+  playerId: string,
+): TerritoryState {
+  const territories = state.territories.map(t => {
+    if (t.id !== territoryId) return t;
+
+    if (t.ownerId === playerId) return t; // already owned
+
+    return {
+      ...t,
+      ownerId: playerId,
+      contested: t.ownerId !== null && t.ownerId !== playerId,
+    };
+  });
+
+  // Recalculate domain status and bonus multiplier
+  return recalculateBonuses(territories, playerId);
+}
+
+/**
+ * Contest a territory (opponent claims it).
+ */
+export function contestTerritory(
+  state: TerritoryState,
+  territoryId: number,
+  attackerId: string,
+): TerritoryState {
+  const territories = state.territories.map(t => {
+    if (t.id !== territoryId) return t;
+    if (t.ownerId === attackerId) return t;
+
+    return {
+      ...t,
+      ownerId: attackerId,
+      contested: true,
+    };
+  });
+
+  return recalculateBonuses(territories, attackerId);
+}
+
+/**
+ * Determine which territory a tile belongs to.
+ */
+export function getTerritoryForTile(tileIndex: number): number {
+  return Math.floor(tileIndex / TILES_PER_TERRITORY);
+}
+
+/**
+ * Count territories owned by a player.
+ */
+export function countOwnedTerritories(
+  state: TerritoryState,
+  playerId: string,
+): number {
+  return state.territories.filter(t => t.ownerId === playerId).length;
+}
+
+/**
+ * Check if a player has a Domain (3+ adjacent territories).
+ */
+function checkDomain(territories: Territory[], playerId: string): boolean {
+  const owned = new Set(
+    territories.filter(t => t.ownerId === playerId).map(t => t.id)
+  );
+
+  if (owned.size < DOMAIN_THRESHOLD) return false;
+
+  // BFS: find a connected cluster of owned territories
+  for (const startId of owned) {
+    const visited = new Set<number>();
+    const queue = [startId];
+
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      if (visited.has(current)) continue;
+      visited.add(current);
+
+      const neighbors = TERRITORY_ADJACENCY[current] ?? [];
+      for (const neighbor of neighbors) {
+        if (owned.has(neighbor) && !visited.has(neighbor)) {
+          queue.push(neighbor);
+        }
+      }
+    }
+
+    if (visited.size >= DOMAIN_THRESHOLD) return true;
+  }
+
+  return false;
+}
+
+function recalculateBonuses(
+  territories: Territory[],
+  playerId: string,
+): TerritoryState {
+  const ownedCount = territories.filter(t => t.ownerId === playerId).length;
+  const hasDomain = checkDomain(territories, playerId);
+
+  const updatedTerritories = territories.map(t => ({
+    ...t,
+    domainActive: t.ownerId === playerId && hasDomain,
+  }));
+
+  const bonus = 1.0 + ownedCount * BONUS_PER_TERRITORY + (hasDomain ? DOMAIN_BONUS : 0);
+
+  return {
+    territories: updatedTerritories,
+    playerBonusMultiplier: bonus,
+  };
+}
+
+/**
+ * Get visual state for the territory overlay.
+ */
+export function getTerritoryVisuals(
+  state: TerritoryState,
+  playerId: string,
+): TerritoryVisuals {
+  return {
+    territories: state.territories.map(t => ({
+      id: t.id,
+      tileIndices: t.tileIndices,
+      owned: t.ownerId === playerId,
+      contested: t.contested,
+      domainActive: t.domainActive,
+      color: t.ownerId === playerId
+        ? (t.domainActive ? '#00ffcc' : '#00aa88')
+        : t.ownerId !== null
+          ? '#ff4444'
+          : '#333333',
+      borderStyle: t.contested ? 'dashed' : 'solid',
+    })),
+    bonusLabel: `+${Math.round((state.playerBonusMultiplier - 1.0) * 100)}%`,
+    hasDomain: state.territories.some(t => t.domainActive),
+  };
+}
+
+export interface TerritoryVisuals {
+  territories: {
+    id: number;
+    tileIndices: number[];
+    owned: boolean;
+    contested: boolean;
+    domainActive: boolean;
+    color: string;
+    borderStyle: string;
+  }[];
+  bonusLabel: string;
+  hasDomain: boolean;
+}

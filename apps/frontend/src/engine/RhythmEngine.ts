@@ -89,6 +89,17 @@ class RhythmEngineImpl {
   private _setGain: ((g: number) => void) | null = null;
   private _active = false;
 
+  /* Deterministic RNG — xorshift32 seeded from crypto entropy at boot. */
+  private _rngSeed: number = (typeof crypto !== 'undefined' && crypto.getRandomValues
+    ? crypto.getRandomValues(new Uint32Array(1))[0] ?? 0xdeadbeef
+    : 0xdeadbeef);
+  private _rng(): number {
+    let s = this._rngSeed;
+    s ^= s << 13; s ^= s >>> 17; s ^= s << 5;
+    this._rngSeed = s >>> 0;
+    return this._rngSeed / 4294967296;
+  }
+
   /* Frequency modulation */
   currentFreq   = 440;
   targetFreq    = 440;
@@ -287,8 +298,8 @@ class RhythmEngineImpl {
 
     /* ── Tension state: erratic vibrato + microtonal dissonance ──────── */
     this.emotion      = 'tension';
-    this.lfoAmplitude = 15 + Math.random() * 5;  // 15–20 Hz (nervous)
-    this.lfoRate      = 8  + Math.random() * 4;  // 8–12 Hz (flutter)
+    this.lfoAmplitude = 15 + this._rng() * 5;  // 15–20 Hz (nervous)
+    this.lfoRate      = 8  + this._rng() * 4;  // 8–12 Hz (flutter)
     // +12 cents: subtle detuning that signals failure without being jarring
     this.targetFreq   = this.currentFreq * CENTS_12;
   }
@@ -298,7 +309,7 @@ class RhythmEngineImpl {
   private _spawnBlock(): FreqBlock {
     const logMin    = Math.log(MIN_FREQ);
     const logMax    = Math.log(MAX_FREQ);
-    const targetFreq = Math.exp(logMin + Math.random() * (logMax - logMin));
+    const targetFreq = Math.exp(logMin + this._rng() * (logMax - logMin));
     const t         = (Math.log(targetFreq) - logMin) / (logMax - logMin);
     const hue       = 200 + t * 120; // Deep blue → magenta (log-scaled)
 
@@ -306,9 +317,9 @@ class RhythmEngineImpl {
     const bandY = this.canvasH * (1 - t);
     return {
       id:          this.nextId++,
-      x:           44 + Math.random() * (this.canvasW - 88),
-      y:           Math.max(-40, bandY - 60 - Math.random() * 80),
-      vy:          this.blockSpeed + Math.random() * 25,
+      x:           44 + this._rng() * (this.canvasW - 88),
+      y:           Math.max(-40, bandY - 60 - this._rng() * 80),
+      vy:          this.blockSpeed + this._rng() * 25,
       targetFreq,
       hue,
       caught:      false,
