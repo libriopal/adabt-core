@@ -1,0 +1,12 @@
+{
+  "state": "Suspense",
+  "bpm": 80,
+  "spectralCentroid": 400,
+  "harmonicTension": 0.7,
+  "dissonance": 0.6,
+  "motifIntervals": [0, 2, 7, 10],
+  "onsetDensity": 0.4,
+  "chromaProfile": [0.15, 0.05, 0.1, 0.05, 0.1, 0.1, 0.1, 0.1, 0.1, 0.05, 0.1, 0.05],
+  "fftBands": [0.6, 0.5, 0.3, 0.1],
+  "transitionCurve": "sigmoid"
+}

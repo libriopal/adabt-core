@@ -6,6 +6,9 @@
 // are NEVER decoded at runtime. Features are extracted
 // offline (see scripts/extractGenome.ts — NOT YET RUN)
 // and stored as compact JSON in public/spectral-genome/*.json.
+// Baseline genome JSONs (from manual FAR_NZY training analysis) are now
+// served from public/spectral-genome/ — no fallback fetch needed in prod.
+// Replace with real extraction output when MP3s are available.
 //
 // Each genome file maps to one of the 8 ERK emotional states:
 //   Dread, Suspense, Escalation, CatastrophicRelease,

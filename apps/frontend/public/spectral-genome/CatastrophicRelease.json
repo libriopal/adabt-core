@@ -1,0 +1,12 @@
+{
+  "state": "CatastrophicRelease",
+  "bpm": 180,
+  "spectralCentroid": 1400,
+  "harmonicTension": 0.3,
+  "dissonance": 0.2,
+  "motifIntervals": [0, 5, 7, 12],
+  "onsetDensity": 1.0,
+  "chromaProfile": [0.2, 0.05, 0.1, 0.05, 0.15, 0.05, 0.1, 0.1, 0.05, 0.05, 0.05, 0.05],
+  "fftBands": [0.4, 0.6, 0.9, 0.8],
+  "transitionCurve": "linear"
+}
