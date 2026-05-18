@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────
-// Organic Vegas — 2-Player Lobby
+// Organic Vegas — Multiplayer Lobby (2–4 players)
 // Create or join a room before entering the 3D game.
 // Room codes are crypto-random (no Math.random).
 // ─────────────────────────────────────────────────────
@@ -87,7 +87,7 @@ export default function OrganicVegasLobby() {
                 onClick={handleCreate}
                 disabled={!playerName.trim()}
               >
-                CREATE ROOM (2-PLAYER)
+                CREATE ROOM (2–4 PLAYERS)
               </button>
 
               <div style={{ display: 'flex', gap: 8 }}>
@@ -124,7 +124,7 @@ export default function OrganicVegasLobby() {
         {(mode === 'CREATE' || mode === 'JOIN') && !hasError && (
           <>
             <div className="ov-lobby__title">
-              {isConnecting ? 'OPENING PORTAL…' : isWaiting ? 'AWAITING SECOND SOUL' : 'VAULT SEALED'}
+              {isConnecting ? 'OPENING PORTAL…' : isWaiting ? 'AWAITING PLAYERS' : 'VAULT SEALED'}
             </div>
             {state.roomCode && (
               <div style={{ textAlign: 'center', margin: '12px 0' }}>
@@ -139,19 +139,19 @@ export default function OrganicVegasLobby() {
                 }}>
                   {state.roomCode}
                 </div>
-                <div className="ov-lobby__subtitle">Share this code with your opponent</div>
+                <div className="ov-lobby__subtitle">Share this code with your players</div>
               </div>
             )}
 
             {/* Player slots */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
-              {[0, 1].map(i => {
+              {[0, 1, 2, 3].map(i => {
                 const p = state.players[i];
                 return (
                   <div key={i} className="ov-player-slot">
                     <div className={`ov-player-slot__dot${p ? ' ov-player-slot__dot--ready' : ''}`} />
                     <span className="ov-player-slot__name">
-                      {p ? p.name : `SLOT ${i + 1} — WAITING…`}
+                      {p ? p.name : i === 0 ? 'SLOT 1 — WAITING…' : `SLOT ${i + 1} — OPEN`}
                     </span>
                   </div>
                 );
@@ -159,8 +159,8 @@ export default function OrganicVegasLobby() {
             </div>
 
             <div className="ov-lobby__status">
-              {isWaiting && '⟳ Waiting for opponent to connect…'}
-              {isReady && '✓ Both players connected — ready to start'}
+              {isWaiting && '⟳ Waiting for players to connect…'}
+              {isReady && `✓ ${state.players.length} players connected — ready to start`}
               {isConnecting && 'Establishing connection…'}
             </div>
 
@@ -204,7 +204,7 @@ export default function OrganicVegasLobby() {
       </div>
 
       <div style={{ fontSize: 9, color: 'var(--ov-bone-shadow)', letterSpacing: '0.1em' }}>
-        4-PLAYER SUPPORT — NEXT SPRINT · TIER {HARDWARE.dspTier} HARDWARE DETECTED
+        2–4 PLAYERS SUPPORTED · TIER {HARDWARE.dspTier} HARDWARE DETECTED
       </div>
     </div>
   );

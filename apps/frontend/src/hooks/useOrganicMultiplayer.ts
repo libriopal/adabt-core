@@ -1,8 +1,7 @@
 // ─────────────────────────────────────────────────────
-// Organic Vegas — 2-Player WebSocket Multiplayer Hook
+// Organic Vegas — Multiplayer WebSocket Hook (2–4 players)
 // Connects to dream/apps/backend/src/gameRoom.ts via WebSocket.
 // Symbolic replication: only seeds/states transmitted, not full game frames.
-// Plan for 4-player: see shared/FOUR_PLAYER_PLAN.md (next sprint).
 //
 // Message protocol matches gameRoom.ts broadcast types exactly:
 //   ROOM_STATE, PLAYER_JOINED, PLAYER_LEFT, GAME_STARTED,
@@ -63,7 +62,11 @@ interface UseOrganicMultiplayerOptions {
   wsUrl?: string;
 }
 
-const DEFAULT_WS_URL = `ws://${window.location.hostname}:3001`;
+const DEFAULT_WS_URL = (() => {
+  const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  const port = window.location.hostname === 'localhost' ? ':3001' : '';
+  return `${proto}://${window.location.hostname}${port}`;
+})();
 
 export function useOrganicMultiplayer({
   playerName,

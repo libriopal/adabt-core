@@ -374,7 +374,7 @@ export default function OrganicVegas() {
         {/* ── Multiplayer status ── */}
         {isMulti && (
           <div style={{ fontSize: 11, color: isMyTurn ? '#c8d400' : '#3388ff', letterSpacing: '0.1em', fontFamily: 'monospace' }}>
-            {isMyTurn ? '▶ YOUR TURN' : "⟳ OPPONENT'S TURN"}
+            {isMyTurn ? '▶ YOUR TURN' : `⟳ ${mpState.players.find(p => p.id === mpState.activePlayerId)?.name ?? 'OPPONENT'}'S TURN`}
             {mpState.players.map(p => (
               <span key={p.id} style={{ marginLeft: 12, color: '#c9a84c' }}>
                 {p.name}: {p.banked.toLocaleString()}

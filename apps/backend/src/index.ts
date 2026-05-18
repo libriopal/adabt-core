@@ -74,11 +74,8 @@ if (process.env.ENABLE_WORKERS !== 'false') {
 const server = http.createServer(app);
 
 // ── Organic Vegas room registry ─────────────────────────────────────────────
-// Supports 2-player rooms today. Plan for 4-player: extend maxPlayers to 4,
-// shard the turn-order map, and add team/free-for-all settings flags.
-// See shared/FOUR_PLAYER_PLAN.md for the full next-sprint roadmap.
 const rooms = new Map<string, GameRoom>();
-const MAX_PLAYERS_PER_ROOM = 2;       // day-one cap; 4-player next sprint
+const MAX_PLAYERS_PER_ROOM = 4;
 
 const wss = new WebSocketServer({ server, path: '/ws' });
 
@@ -113,9 +110,8 @@ wss.on('connection', (ws: WebSocket, req) => {
 
   const room = rooms.get(roomCode)!;
 
-  // Enforce 2-player cap
   if ((room as any).players?.size >= MAX_PLAYERS_PER_ROOM) {
-    ws.close(1008, 'Room full (2 players max — 4-player support coming next sprint)');
+    ws.close(1008, 'Room full (4 players max)');
     return;
   }
 
