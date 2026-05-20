@@ -1,0 +1,79 @@
+protocol_id: choas12_pre_generation_directive
+version: 1.0.0
+status: PENDING_CODERABBIT_AUDIT
+intent:
+  destination:
+    - repo_scaffold
+    - generate_plus_optimize
+    - strict_pass_veto
+    - github_railway_openrouter_deployment_readiness
+  redirected_path:
+    - openrouter_python_proxy_bridge
+    - local_only_prompt_to_app_fallback
+    - claude_code_openrouter_correction
+    - phase_based_machine_readable_plans
+sovereign_authority:
+  final_arbiter: user
+  phase_authority: viktor_or_generation_architect
+  survivability_governor: coderabbit
+  rule: CodeRabbit PASS is required before phase completion, push promotion, deployment, or acceptance.
+states:
+  allowed:
+    - DRAFT
+    - PENDING_CODERABBIT_AUDIT
+    - VETO
+    - REPAIR_REQUIRED
+    - PASS
+    - GENERATE_AUTHORIZED
+  current: PENDING_CODERABBIT_AUDIT
+phase_contract:
+  phase_plan_required: true
+  machine_readable_plan_required: true
+  manifest_required: true
+  checksums_required: true
+  audit_record_required: true
+  memory_ledger_update_required: true
+  deployment_check_required: true
+  veto_repair_log_required: true
+forbidden_before_pass:
+  - deploy_to_railway
+  - push_to_protected_or_target_branch
+  - mark_generated_files_accepted
+  - persist_secret_values
+  - bypass_api_request_governance
+  - skip_uninformed_agent_review
+  - skip_coderabbit_review
+openrouter_bridge_contract:
+  route_type: python_proxy_bridge
+  auth_source: environment_only
+  secret_storage: forbidden
+  request_envelope_required: true
+  audit_log_required: true
+  model_allowlist_required: true
+  dry_run_supported: true
+  local_only_supported: true
+  railway_ready_but_not_deployed: true
+claude_code_contract:
+  route_type: anthropic_compatible_claude_code
+  base_url: https://openrouter.ai/api
+  separated_from_python_proxy: true
+  note: Do not use the Python proxy bridge docs as Claude Code configuration.
+review_handoff:
+  uninformed_agent_prompt: prompts/UNINFORMED_AGENT_REVIEW_PROMPT.md
+  claude_correction_prompt: prompts/CLAUDE_CORRECTION_PROMPT.md
+  machine_plan_schema: schemas/phase-plan.schema.json
+acceptance_gate:
+  verdict_format: PASS_OR_VETO
+  pass_requires:
+    - all_declared_files_exist
+    - all_api_requests_are_governance_wrapped
+    - local_cli_has_no_mutating_side_effects
+    - no_secrets_are_committed
+    - railway_and_github_are_contracts_only
+    - code_review_can_reconstruct_phase_context
+  veto_requires:
+    - blocking_issue_id
+    - affected_files
+    - deterministic_risk
+    - repair_instruction
+    - re_audit_conditions

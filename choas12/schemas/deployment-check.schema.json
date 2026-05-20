@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/choas12/deployment-check.schema.json",
+  "title": "Deployment Check",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["target", "status", "healthcheck_path", "secrets_source", "coderabbit_pass_required"],
+  "properties": {
+    "target": { "type": "string" },
+    "status": { "type": "string", "enum": ["readiness_only", "blocked", "approved"] },
+    "healthcheck_path": { "type": "string" },
+    "secrets_source": { "type": "string", "enum": ["environment_only"] },
+    "coderabbit_pass_required": { "type": "boolean" },
+    "blocking_notes": { "type": "array", "items": { "type": "string" } }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "status": "PENDING_CODERABBIT_AUDIT",
+  "root": "choas12",
+  "primary_protocol": "GENERATION_DIRECTIVE_PROTOCOL.yaml",
+  "correction_prompt": "prompts/CLAUDE_CORRECTION_PROMPT.md",
+  "uninformed_review_prompt": "prompts/UNINFORMED_AGENT_REVIEW_PROMPT.md",
+  "proxy_bridge": "services/openrouter_proxy/app.py",
+  "local_fallback": "cli/local_prompt_app.py",
+  "governance": [
+    "governance/SOVEREIGN_INTEGRITY.md",
+    "governance/PASS_VETO_POLICY.md",
+    "governance/API_REQUEST_AUDIT_POLICY.md",
+    "governance/PHASE_GATE_CONTRACT.yaml",
+    "governance/AGENT_ROLE_CONTRACT.yaml"
+  ],
+  "schemas": [
+    "schemas/api-request-envelope.schema.json",
+    "schemas/api-response-envelope.schema.json",
+    "schemas/audit-record.schema.json",
+    "schemas/phase-completion.schema.json",
+    "schemas/deployment-check.schema.json",
+    "schemas/phase-plan.schema.json"
+  ],
+  "audit": [
+    "audit/PRE_GENERATION_AUDIT.md",
+    "audit/PASS_VETO_CHECKLIST.md"
+  ]
+}

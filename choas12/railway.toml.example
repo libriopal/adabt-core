@@ -1,0 +1,14 @@
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "python choas12/services/openrouter_proxy/app.py"
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
+
+# Required Railway environment variables:
+# OPENROUTER_API_KEY=<set in Railway dashboard>
+# OPENROUTER_ALLOWED_MODELS=openrouter/auto
+# OPENROUTER_PROXY_DRY_RUN=false

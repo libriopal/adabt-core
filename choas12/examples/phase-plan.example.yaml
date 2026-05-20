@@ -1,0 +1,28 @@
+phase_id: phase-0
+status: PENDING_CODERABBIT_AUDIT
+objective: Produce and audit the pre-generation packet.
+required_outputs:
+  files:
+    - choas12/README.md
+    - choas12/GENERATION_DIRECTIVE_PROTOCOL.yaml
+  manifests:
+    - choas12/MANIFEST.json
+    - choas12/CHECKSUMS.sha256
+api_requests:
+  expected:
+    - dry_run_governed_chat
+  forbidden:
+    - ungoverned_openrouter_request
+    - deployment_request
+mutation_policy:
+  may_write_files: true
+  may_push_branch: true
+  may_deploy: false
+  may_mark_complete: false
+acceptance:
+  pass_conditions:
+    - CodeRabbit can reconstruct full phase context.
+    - API request governance is complete.
+  veto_conditions:
+    - Missing request envelope.
+    - Secret committed.

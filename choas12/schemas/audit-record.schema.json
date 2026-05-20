@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/choas12/audit-record.schema.json",
+  "title": "Audit Record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["audit_id", "timestamp", "phase_id", "verdict", "findings"],
+  "properties": {
+    "audit_id": { "type": "string" },
+    "timestamp": { "type": "string" },
+    "phase_id": { "type": "string" },
+    "verdict": { "type": "string", "enum": ["PASS", "VETO", "PENDING_AUDIT"] },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "severity", "summary"],
+        "properties": {
+          "id": { "type": "string" },
+          "severity": { "type": "string", "enum": ["info", "low", "medium", "high", "critical"] },
+          "summary": { "type": "string" },
+          "repair": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

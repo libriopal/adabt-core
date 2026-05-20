@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/choas12/phase-completion.schema.json",
+  "title": "Phase Completion",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["phase_id", "status", "coderabbit_verdict", "manifest_path", "checksum_path"],
+  "properties": {
+    "phase_id": { "type": "string" },
+    "status": { "type": "string", "enum": ["PENDING_AUDIT", "VETO", "PASS"] },
+    "coderabbit_verdict": { "type": "string", "enum": ["PENDING", "PASS", "VETO"] },
+    "manifest_path": { "type": "string" },
+    "checksum_path": { "type": "string" },
+    "deployment_allowed": { "type": "boolean" },
+    "notes": { "type": "string" }
+  }
+}

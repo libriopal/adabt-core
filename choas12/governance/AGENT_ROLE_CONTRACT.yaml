@@ -1,0 +1,60 @@
+contract_id: choas12_agent_roles
+version: 1.0.0
+roles:
+  constitutional_auditor:
+    class: governance
+    may_generate_code: false
+    may_veto: true
+    focus:
+      - sovereign_integrity
+      - phase_boundary
+      - deterministic_drift
+  api_request_auditor:
+    class: governance
+    may_generate_code: false
+    may_veto: true
+    focus:
+      - request_envelope
+      - model_policy
+      - prompt_hash
+      - secret_scrubbing
+  deployment_sentinel:
+    class: governance
+    may_generate_code: false
+    may_veto: true
+    focus:
+      - railway_healthcheck
+      - github_push_gate
+      - deployment_impact
+  memory_ledger_custodian:
+    class: governance
+    may_generate_code: false
+    may_veto: true
+    focus:
+      - phase_ledger
+      - context_index
+      - veto_repair_history
+  security_boundary_auditor:
+    class: governance
+    may_generate_code: false
+    may_veto: true
+    focus:
+      - secrets
+      - authorization_headers
+      - external_mutation
+  scaffold_generator:
+    class: generation
+    may_generate_code: true
+    may_veto: false
+    focus:
+      - repo_scaffold
+      - docs
+      - contracts
+  optimizer:
+    class: generation
+    may_generate_code: true
+    may_veto: false
+    focus:
+      - reduce_duplication
+      - improve_local_execution
+      - preserve_auditability

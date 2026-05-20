@@ -1,0 +1,36 @@
+{
+  "packet": "choas12",
+  "status": "PENDING_CODERABBIT_AUDIT",
+  "created_for": "pre-generation directive protocol",
+  "target_repo": "libriopal/adabt-core",
+  "requested_external_target": "STRUTHIO-SECOCOON/MESHv10",
+  "branch": "coderabbit/slack/order66",
+  "root_folder": "choas12",
+  "governance_mode": "STRICT_PASS_VETO",
+  "generation_mode": "REPO_SCAFFOLD_GENERATE_PLUS_OPTIMIZE",
+  "mutation_policy": {
+    "may_generate_files": true,
+    "may_prepare_branch": true,
+    "may_push_branch": true,
+    "may_open_pr_without_user_confirmation": false,
+    "may_deploy": false,
+    "may_mark_phase_complete_without_coderabbit_pass": false
+  },
+  "deliverables": [
+    "governance contracts",
+    "OpenRouter Python proxy bridge",
+    "local-only prompt-to-app fallback CLI",
+    "Claude Code OpenRouter correction documentation",
+    "Railway and GitHub deployment contracts",
+    "machine-readable schemas",
+    "phase-based directive protocol prompt",
+    "uninformed-agent review handoff prompt",
+    "memory ledger templates",
+    "pre-generation audit"
+  ],
+  "required_final_audit": {
+    "auditor": "CodeRabbit",
+    "allowed_verdicts": ["PASS", "VETO"],
+    "blocking_on_veto": true
+  }
+}

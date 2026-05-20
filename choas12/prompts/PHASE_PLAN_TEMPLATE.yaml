@@ -1,0 +1,25 @@
+phase_id: phase-0
+status: PENDING_CODERABBIT_AUDIT
+objective: "Define objective here."
+inputs:
+  prompts: []
+  repo_paths: []
+  external_docs: []
+required_outputs:
+  files: []
+  manifests: []
+  audit_records: []
+api_requests:
+  expected: []
+  forbidden: []
+mutation_policy:
+  may_write_files: true
+  may_push_branch: false
+  may_deploy: false
+  may_mark_complete: false
+acceptance:
+  pass_conditions: []
+  veto_conditions: []
+handoff:
+  next_agent: uninformed_review_agent
+  next_prompt: prompts/UNINFORMED_AGENT_REVIEW_PROMPT.md

@@ -1,0 +1,34 @@
+contract_id: choas12_phase_gate
+version: 1.0.0
+states:
+  draft:
+    may_generate: false
+    may_push: false
+    may_deploy: false
+  pending_audit:
+    may_generate: false
+    may_push_review_branch: true
+    may_deploy: false
+  pass:
+    may_generate: true
+    may_push_review_branch: true
+    may_deploy: false
+  generate_authorized:
+    may_generate: true
+    may_push_review_branch: true
+    may_deploy: false
+required_artifacts:
+  - manifest
+  - phase_plan
+  - audit_record
+  - file_checksum_list
+  - veto_repair_log
+  - deployment_impact_statement
+  - api_request_coverage_matrix
+veto_if_missing:
+  - manifest
+  - audit_record
+  - governance_envelope
+  - secret_scrubbing_policy
+  - model_allowlist
+  - code_review_handoff

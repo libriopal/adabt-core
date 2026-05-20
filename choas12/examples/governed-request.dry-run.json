@@ -1,0 +1,21 @@
+{
+  "dry_run": true,
+  "phase_id": "phase-0",
+  "task_id": "example-dry-run",
+  "agent_role": "scaffold_generator",
+  "model": "openrouter/auto",
+  "prompt_hash": "sha256:b0936c89aea0670891975096593fada44e194d7ce8142f2c38bd829e3aa8f60b",
+  "request_purpose": "local-only scaffold rehearsal",
+  "allowed_tool_scope": ["local_files"],
+  "mutation_intent": "local_files",
+  "deployment_impact": "none",
+  "memory_impact": "local_ledger_only",
+  "risk_level": "medium",
+  "approval_state": "PENDING_AUDIT",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Generate a machine-readable phase plan for audit."
+    }
+  ]
+}
